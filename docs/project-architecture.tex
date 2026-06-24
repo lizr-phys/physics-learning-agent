@@ -1,0 +1,752 @@
+\documentclass[UTF8,a4paper,11pt]{ctexart}
+
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyvrb}
+\usepackage{array}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=black,
+  citecolor=black
+}
+
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codeframe}{RGB}{220,220,220}
+\definecolor{textgray}{RGB}{90,90,90}
+
+\lstdefinestyle{plaincode}{
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\setlist[itemize]{leftmargin=2em}
+\setlist[enumerate]{leftmargin=2em}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.35em}
+
+\title{\textbf{Physics Learning Agent 项目架构与技术细节说明}}
+\author{Physics Learning Agent}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Physics Learning Agent 是一个面向国内大学物理专业本科生的 AI 学习工作台。项目基于 Next.js App Router、TypeScript、Tailwind CSS 和 DeepSeek Chat API 构建，目标不是简单包装通用大模型，而是在 DeepSeek 之前增加课程体系、任务模板、知识库上下文、轻量 RAG、会话管理、流式错误恢复和物理学习产品交互层，使模型回答更接近高校物理教师或习题课助教。
+
+本文档说明当前项目的系统架构、主要模块、数据结构、DeepSeek 调用链路、Prompt 构造策略、Markdown/LaTeX 渲染、会话与工具上下文机制、RAG 预留路线，并重点分析本项目相对于直接向 DeepSeek 提问的明显优势，以及这些优势在代码层面如何实现。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{项目定位}
+
+本项目的核心定位是：
+
+\begin{quote}
+一个面向国内大学物理专业学生的 ChatGPT 式物理学习 Agent 工作台。
+\end{quote}
+
+它覆盖的主要课程包括：
+
+\begin{itemize}
+  \item 数学物理方法；
+  \item 理论力学；
+  \item 电动力学；
+  \item 量子力学；
+  \item 热力学与统计物理。
+\end{itemize}
+
+项目重点不是构建一个普通聊天网页，而是把通用大模型封装成一个更适合物理专业学习的教师型 Agent。它需要能够处理概念解释、标准推导、题型梳理、练习题生成、解题指导和板块复习等任务，并且在回答中保持术语严谨、公式规范、推导清楚、边界条件明确。
+
+\section{技术栈}
+
+\begin{longtable}{p{4cm}p{10cm}}
+\toprule
+\textbf{类别} & \textbf{当前实现} \\
+\midrule
+前端框架 & Next.js 16 App Router，React 19，TypeScript \\
+样式系统 & Tailwind CSS 4，黑白灰极简风格 \\
+后端接口 & Next.js Route Handler，主要接口为 \texttt{/api/chat} 和 \texttt{/api/deepseek/test} \\
+大模型服务 & DeepSeek Chat Completions API，服务端转发，前端不接触 API Key \\
+流式输出 & DeepSeek SSE 上游流在服务端转换为纯文本流，前端通过 \texttt{ReadableStream} 逐步读取 \\
+Markdown 渲染 & \texttt{react-markdown} \\
+数学公式渲染 & \texttt{remark-math}、\texttt{rehype-katex}、\texttt{katex} \\
+图标 & \texttt{lucide-react} \\
+本地状态 & \texttt{localStorage} 保存会话、当前会话、浏览器侧模型选择 \\
+RAG 预留 & 本地 Markdown 样例文档、chunk、关键词检索，不引入向量数据库 \\
+\bottomrule
+\end{longtable}
+
+\section{目录结构}
+
+当前项目的核心目录如下：
+
+\begin{lstlisting}[style=plaincode]
+src/
+  app/
+    page.tsx
+    chat/page.tsx
+    map/page.tsx
+    practice/page.tsx
+    types/page.tsx
+    review/page.tsx
+    settings/api/page.tsx
+    api/chat/route.ts
+    api/deepseek/test/route.ts
+
+  components/
+    layout/
+      AppShell.tsx
+      Sidebar.tsx
+    chat/
+      ChatWorkspace.tsx
+      ChatWindow.tsx
+      ChatMessage.tsx
+      ChatInput.tsx
+      WelcomePrompts.tsx
+    forms/
+      AgentGenerator.tsx
+    common/
+      MarkdownRenderer.tsx
+    KnowledgeMapExplorer.tsx
+
+  data/
+    courses.ts
+    knowledge.ts
+    courseInstructions.ts
+    promptTemplates.ts
+    problemTypes.ts
+    recommendations.ts
+
+  lib/
+    deepseek.ts
+    prompt-builder.ts
+    knowledge-utils.ts
+    read-agent-stream.ts
+    recommendations.ts
+    routes.ts
+    storage.ts
+
+  rag/
+    types.ts
+    chunk.ts
+    retrieve.ts
+    sample-docs/
+      math-physics.md
+      electrodynamics.md
+\end{lstlisting}
+
+\section{页面与产品结构}
+
+\subsection{ChatGPT 式学习工作台}
+
+聊天页由左侧 Sidebar、中间消息区和底部固定输入框构成。当前布局目标接近 ChatGPT/Codex：
+
+\begin{lstlisting}[style=plaincode]
+┌──────────────────────────────────────────────────────────┐
+│ Sidebar                  │        Chat Workspace          │
+│ - 新建学习会话            │                                │
+│ - 功能入口                │   用户消息 / AI 回答            │
+│ - 会话历史                │                                │
+│                          │   底部固定输入框                 │
+└──────────────────────────────────────────────────────────┘
+\end{lstlisting}
+
+实现文件主要是：
+
+\begin{itemize}
+  \item \texttt{src/components/layout/AppShell.tsx}：页面壳层；
+  \item \texttt{src/components/layout/Sidebar.tsx}：导航入口和会话历史；
+  \item \texttt{src/components/chat/ChatWorkspace.tsx}：聊天状态、流式请求、滚动、错误恢复；
+  \item \texttt{src/components/chat/ChatInput.tsx}：底部输入框；
+  \item \texttt{src/components/chat/ChatWindow.tsx} 和 \texttt{ChatMessage.tsx}：消息列表与消息渲染。
+\end{itemize}
+
+\subsection{知识点导览}
+
+\texttt{/map} 页面采用“课程列表 + 知识点列表 + 详情面板”的目录式布局。知识点数据来自 \texttt{src/data/knowledge.ts}，每个知识点包含课程、标题、别名、教材式说明、前置知识、关联知识、常见题型、公式、易错点、学习顺序和难度。
+
+知识点详情中，含公式的字段统一交给 \texttt{MarkdownRenderer} 渲染；裸公式通过 \texttt{ensureBlockMath} 包装成块级数学公式，避免显示原始 LaTeX 字符串。
+
+\subsection{练习题、题型梳理和板块复习}
+
+\texttt{/practice}、\texttt{/types}、\texttt{/review} 复用 \texttt{AgentGenerator.tsx}。该组件按不同模式生成不同任务请求：
+
+\begin{itemize}
+  \item \texttt{practice}：课程、知识点、难度、数量、是否需要提示/答案/解析；
+  \item \texttt{types}：课程、知识点、题型目标；
+  \item \texttt{review}：课程、知识点、复习板块。
+\end{itemize}
+
+这些页面生成的结果可以通过工具上下文继续进入聊天页追问，避免“刚生成的内容丢失”。
+
+\section{DeepSeek 调用链路}
+
+\subsection{总体流程}
+
+本项目不允许前端直接调用 DeepSeek。API Key 只从服务端环境变量读取，前端只请求内部接口 \texttt{/api/chat}。
+
+\begin{lstlisting}[style=plaincode]
+用户输入
+  ↓
+ChatWorkspace / AgentGenerator
+  ↓ fetch('/api/chat')
+src/app/api/chat/route.ts
+  ↓ 构造 RAG 上下文与 AgentRequest
+src/lib/prompt-builder.ts
+  ↓ 构造 system prompt + user prompt
+src/lib/deepseek.ts
+  ↓ 服务端携带 DEEPSEEK_API_KEY 请求 DeepSeek
+DeepSeek Chat Completions API
+  ↓ SSE
+服务端转换为 text/plain 流
+  ↓
+前端 ReadableStream 逐步显示
+\end{lstlisting}
+
+\subsection{服务端安全边界}
+
+关键安全点如下：
+
+\begin{itemize}
+  \item \texttt{DEEPSEEK\_API\_KEY} 只在 \texttt{src/lib/deepseek.ts} 的服务端模块中读取；
+  \item 前端没有任何 \texttt{NEXT\_PUBLIC\_DEEPSEEK\_API\_KEY}；
+  \item \texttt{/settings/api} 只显示配置状态和模型信息，不显示 API Key；
+  \item 浏览器侧模型选择存入 \texttt{localStorage}，但真正请求仍由服务端转发。
+\end{itemize}
+
+\subsection{模型参数控制}
+
+\texttt{src/lib/deepseek.ts} 中的 \texttt{getModelConfig} 会按任务类型设置不同温度和输出长度：
+
+\begin{longtable}{p{4cm}p{4cm}p{4cm}}
+\toprule
+\textbf{任务} & \textbf{temperature} & \textbf{max\_tokens} \\
+\midrule
+普通问答 & 0.3 & 1200 \\
+知识点解释 & 0.3 & 1600 \\
+标准推导 & 0.25 & 2400 \\
+解题指导 & 0.25 & 2400 \\
+题型梳理 & 0.35 & 3000 \\
+板块复习 & 0.3 & 3200 \\
+练习题 3 道 & 0.45 & 2600 \\
+练习题 5 道 & 0.45 & 4200 \\
+练习题 10 道 & 0.45 & 7000 \\
+\bottomrule
+\end{longtable}
+
+这样做的目的并不是单纯让回答更长，而是根据任务复杂度控制模型的稳定性和输出空间：推导、解题类任务需要低温度，练习题生成需要稍高温度以产生原创变式，长任务则需要更高 token 上限减少截断。
+
+\section{Prompt 构造系统}
+
+\subsection{核心思想}
+
+项目并不把用户问题原样转发给 DeepSeek，而是先把问题转换为“大学物理教学任务”。这个转换在 \texttt{src/lib/prompt-builder.ts} 中完成。
+
+构造后的请求包含：
+
+\begin{enumerate}
+  \item 稳定的教师身份 system prompt；
+  \item 当前课程约束；
+  \item 当前任务类型模板；
+  \item 当前知识点上下文；
+  \item 轻量 RAG 检索片段；
+  \item 工具页继续追问上下文；
+  \item 输出长度和格式要求；
+  \item 禁止套话和公式规范。
+\end{enumerate}
+
+\subsection{System Prompt}
+
+系统提示词将模型设定为：
+
+\begin{quote}
+一名严谨的高校物理教师，主要面向物理专业本科生进行课程辅导，长期讲授数学物理方法、理论力学、电动力学、量子力学、热力学与统计物理。
+\end{quote}
+
+它明确要求回答不是闲聊，而是帮助学生理解概念、掌握推导、建立物理图像、形成规范解题步骤。它还禁止“当然可以”“这是一个好问题”“让我们一起探索”等通用 AI 套话。
+
+\subsection{课程约束}
+
+\texttt{src/data/courseInstructions.ts} 为不同课程提供不同约束。例如：
+
+\begin{itemize}
+  \item 数学物理方法：必须区分方程、定解条件、初始条件、边界条件、本征值问题、正交性、完备性和 Green 函数；
+  \item 理论力学：必须区分 Newton 表述、Lagrange 表述和 Hamilton 表述；
+  \item 电动力学：必须区分静态场与时变场，区分 $E,D,B,H$，区分自由电荷与束缚电荷；
+  \item 量子力学：必须区分波函数、态矢量、表象、算符、本征态和测量；
+  \item 热力学与统计物理：必须区分热力学描述和统计物理描述，区分微正则、正则和巨正则系综。
+\end{itemize}
+
+这些约束会进入最终 prompt，使模型在具体课程语境下回答，而不是泛泛科普。
+
+\subsection{任务模板}
+
+\texttt{src/data/promptTemplates.ts} 为不同任务定义输出结构。例如：
+
+\begin{itemize}
+  \item 普通问答：直接回答、解释原因、必要公式、适用条件、常见误区；
+  \item 知识点解释：定义、物理图像或数学背景、数学表达、典型应用、相近概念区别、易错点；
+  \item 标准推导：推导目标、前提条件、出发方程、推导步骤、关键等式理由、最终结果、结果检验；
+  \item 题型梳理：题型定位、常见给题方式、建模步骤、方程与条件、求解流程、检验方法、变式、易错点、原创例题；
+  \item 练习题生成：题目、题型来源风格、训练目标、涉及知识点、难度、提示、解析、答案。
+\end{itemize}
+
+这保证同一类任务的输出稳定，降低直接问大模型时常见的结构漂移。
+
+\section{知识库与课程体系}
+
+\subsection{静态知识库}
+
+\texttt{src/data/knowledge.ts} 是当前项目的核心静态知识库。它面向国内大学物理专业本科课程，覆盖五门主干课程。每个知识点包含：
+
+\begin{lstlisting}[style=plaincode]
+type KnowledgeItem = {
+  id: string
+  course: CourseId
+  title: string
+  alias?: string[]
+  description: string
+  textbookStyleSummary: string
+  prerequisites: string[]
+  related: string[]
+  typicalProblems: string[]
+  keyFormulas?: string[]
+  commonMisunderstandings?: string[]
+  studyOrder: number
+  difficulty: 'basic' | 'intermediate' | 'advanced'
+  tags: string[]
+}
+\end{lstlisting}
+
+知识库承担两类职责：
+
+\begin{enumerate}
+  \item 在 \texttt{/map} 页面直接展示稳定知识点信息，避免所有内容都依赖模型生成；
+  \item 在 prompt 构造时为当前选中的知识点提供局部上下文，包括前置知识、关联知识、常见题型和易错点。
+\end{enumerate}
+
+\subsection{为什么不把完整知识库全部塞进 Prompt}
+
+项目采用按需注入策略，而不是每次请求都发送完整知识库。原因是：
+
+\begin{itemize}
+  \item 完整知识库会占用大量上下文窗口；
+  \item 与当前问题无关的信息会稀释模型注意力；
+  \item prompt 过长会增加延迟和成本；
+  \item 局部上下文更容易保持回答聚焦。
+\end{itemize}
+
+因此 \texttt{buildKnowledgeContext} 只根据当前课程和知识点选择相关上下文。
+
+\section{轻量 RAG 预留}
+
+\subsection{当前实现}
+
+当前 RAG 目录位于 \texttt{src/rag}，包含：
+
+\begin{itemize}
+  \item \texttt{sample-docs/math-physics.md}；
+  \item \texttt{sample-docs/electrodynamics.md}；
+  \item \texttt{chunk.ts}；
+  \item \texttt{retrieve.ts}；
+  \item \texttt{types.ts}。
+\end{itemize}
+
+当前版本没有引入向量数据库，也没有假设 DeepSeek 提供 embedding。它采用本地 Markdown 文档和关键词检索：
+
+\begin{lstlisting}[style=plaincode]
+query → tokenize → scoreChunk → sort by score → top 2~4 snippets
+\end{lstlisting}
+
+检索结果会以 \texttt{ragContext.snippets} 的形式进入 prompt。模型被要求优先参考这些片段，但不能大段复制，也不能伪造页码。
+
+\subsection{后续扩展方向}
+
+后续可以逐步扩展为：
+
+\begin{enumerate}
+  \item 支持上传 Markdown、LaTeX 讲义和个人学习笔记；
+  \item 支持 PDF/PPT 文档解析；
+  \item 文本清洗、分块、元数据标注；
+  \item 接入中文效果较好的 embedding 模型；
+  \item 接入 LanceDB、Chroma、pgvector 或 Supabase Vector；
+  \item 回答中引用文档名、章节名和片段标题，不编造页码。
+\end{enumerate}
+
+\section{流式输出与错误恢复}
+
+\subsection{服务端流式转换}
+
+DeepSeek 返回的是 SSE 流。项目在 \texttt{src/lib/deepseek.ts} 中读取上游 SSE，并把其中的 \texttt{delta.content} 转换成纯文本流返回前端。接口响应头使用：
+
+\begin{lstlisting}[style=plaincode]
+Content-Type: text/plain; charset=utf-8
+Cache-Control: no-cache, no-transform
+Connection: keep-alive
+\end{lstlisting}
+
+这样前端只需要按纯文本流累加，不需要解析 SSE，降低前端复杂度。
+
+\subsection{前端读取与中断处理}
+
+\texttt{src/lib/read-agent-stream.ts} 封装了前端流式读取逻辑：
+
+\begin{itemize}
+  \item 使用 \texttt{response.body.getReader()}；
+  \item 使用 \texttt{TextDecoder} 处理 UTF-8；
+  \item 支持节流更新，避免每个 token 都触发昂贵渲染；
+  \item 支持 \texttt{AbortController} 停止生成；
+  \item 支持 idle timeout，长时间没有 chunk 时抛出明确错误；
+  \item 错误时保留 partial content。
+\end{itemize}
+
+\subsection{继续生成}
+
+如果模型中断、超时或用户手动停止，项目不会清空已生成内容，而是显示“继续生成”。继续生成时，前端构造新的请求：
+
+\begin{quote}
+上一段回答在以下位置中断。请不要重复已经写过的内容，从中断处继续完成回答，保持原来的结构、编号、符号和 LaTeX 格式。
+\end{quote}
+
+这比直接问 DeepSeek 更适合长推导和多题练习生成，因为用户不需要手动复制上下文。
+
+\section{Markdown 与 LaTeX 渲染}
+
+\subsection{统一渲染组件}
+
+全站统一使用 \texttt{src/components/common/MarkdownRenderer.tsx}。它支持：
+
+\begin{itemize}
+  \item Markdown 标题、列表、表格和代码块；
+  \item 行内公式 \verb|$...$|；
+  \item 块级公式 \verb|$$...$$|；
+  \item \verb|\(...\)| 和 \verb|\[...\]| 的规范化；
+  \item 含 \verb|\tag{}| 的裸公式自动包装为块级公式；
+  \item KaTeX 非严格模式，单个公式错误不导致整页崩溃；
+  \item 长公式、表格、代码块横向滚动。
+\end{itemize}
+
+\subsection{对学习产品的意义}
+
+大学物理学习中，公式不是装饰，而是推导和解题的主体。统一 Markdown/LaTeX 渲染能显著提升阅读体验，尤其适合：
+
+\begin{itemize}
+  \item Green 函数积分表达；
+  \item Sturm--Liouville 本征值问题；
+  \item Maxwell 方程组；
+  \item 量子力学算符和态矢量；
+  \item 系综分布函数和配分函数。
+\end{itemize}
+
+\section{会话、工具上下文与继续追问}
+
+\subsection{会话数据}
+
+会话保存在 \texttt{localStorage}，核心结构包括：
+
+\begin{lstlisting}[style=plaincode]
+type StoredChatSession = {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messages: ChatMessage[]
+  context: {
+    course: CourseId
+    taskType: TaskTypeId
+    knowledgePoint?: string
+    model?: string
+    useRag?: boolean
+  }
+  toolContext?: ToolContext
+}
+\end{lstlisting}
+
+Sidebar 支持：
+
+\begin{itemize}
+  \item 新建会话；
+  \item 点击切换会话；
+  \item 重命名；
+  \item 删除；
+  \item 按时间分组。
+\end{itemize}
+
+\subsection{工具上下文}
+
+工具页生成的练习题、题型梳理、板块复习可以继续进入聊天。此时不会创建一个完全空白对话，而是保存 \texttt{ToolContext}：
+
+\begin{lstlisting}[style=plaincode]
+type ToolContext = {
+  source: 'review' | 'practice' | 'types'
+  course?: CourseId
+  knowledgeId?: string
+  knowledgeTitle?: string
+  topic?: string
+  taskTitle?: string
+  userInput?: string
+  generatedContent: string
+  selectedItem?: {
+    type: 'section' | 'problem' | 'problemType' | 'summary'
+    title?: string
+    content?: string
+    index?: number
+  }
+  createdAt: number
+}
+\end{lstlisting}
+
+Prompt builder 会把工具上下文作为隐藏上下文传给模型。因此用户问“这里为什么这样做？”时，Agent 能知道“这里”指的是刚才那道题、那个题型总结或那个复习板块。
+
+\section{动态推荐与轻量个性化}
+
+\subsection{推荐数据}
+
+\texttt{src/data/recommendations.ts} 集中维护推荐项，覆盖五门课程和四类推荐：
+
+\begin{itemize}
+  \item chat；
+  \item practice；
+  \item problemType；
+  \item review。
+\end{itemize}
+
+推荐项包含课程、知识点标题、题目、prompt、标签和难度。
+
+\subsection{推荐算法}
+
+\texttt{src/lib/recommendations.ts} 实现两类推荐：
+
+\begin{itemize}
+  \item 随机推荐：从对应类型中随机抽取，不重复；
+  \item 个性化推荐：读取最近会话标题、用户问题、工具上下文和课程信息，根据课程、知识点和标签打分，再与随机探索项混合。
+\end{itemize}
+
+为避免 hydration mismatch，推荐内容不会在 SSR 首帧随机生成，而是在客户端挂载后生成。
+
+\section{相对于直接向 DeepSeek 提问的明显优点}
+
+本节是本文档的核心。当前项目与“直接打开 DeepSeek 并输入问题”的差别，不在于更换了底层模型，而在于为模型增加了一整套面向物理学习的 Agent 层。该层包括课程体系、教学提示词、任务模板、本地知识库、工具上下文、RAG 预留、渲染系统和错误恢复机制。
+
+\subsection{优点一：回答角色更稳定，更像高校物理教师}
+
+直接问 DeepSeek 时，模型通常会根据用户问题临时判断回答风格。如果用户没有明确写“请像大学物理教师一样回答”，模型可能输出偏科普、偏聊天或偏总结式的回答。
+
+本项目通过 \texttt{buildSystemPrompt()} 固定模型身份：
+
+\begin{itemize}
+  \item 严谨的高校物理教师；
+  \item 面向物理专业本科生；
+  \item 熟悉国内大学物理专业课程体系；
+  \item 回答目标是概念理解、推导掌握、物理图像建立和规范解题。
+\end{itemize}
+
+实现方式是：每次请求都在 DeepSeek messages 中加入稳定的 system prompt：
+
+\begin{lstlisting}[style=plaincode]
+[
+  { role: "system", content: PHYSICS_TUTOR_SYSTEM_PROMPT },
+  ...history,
+  { role: "user", content: buildUserPrompt(input) }
+]
+\end{lstlisting}
+
+因此，用户即使只输入“Green 函数是什么意思”，系统也会自动把它转化为大学物理课程中的教学任务，而不是普通聊天问题。
+
+\subsection{优点二：回答会自动带入课程约束}
+
+直接问 DeepSeek 时，用户需要自己说明课程语境。例如 Green 函数可以出现在数学物理方法、量子力学散射理论、电动力学边值问题中。如果不限定语境，回答可能过宽。
+
+本项目会根据 \texttt{course} 注入课程约束。例如数学物理方法要求区分：
+
+\begin{itemize}
+  \item 方程；
+  \item 定解条件；
+  \item 初始条件；
+  \item 边界条件；
+  \item 本征值问题；
+  \item 正交性与完备性；
+  \item Green 函数。
+\end{itemize}
+
+这通过 \texttt{buildCourseInstruction(course)} 实现。最终 prompt 中会出现课程约束段落，使模型在相应课程框架下回答。
+
+\subsection{优点三：不同学习任务有稳定输出模板}
+
+直接问 DeepSeek 时，同一个问题可能输出大纲、短答、长文或例子，结构不稳定。项目则按任务类型选择模板：
+
+\begin{itemize}
+  \item 概念解释必须包含定义、背景、数学表达、用途和易错点；
+  \item 推导必须包含目标、前提、出发方程、步骤、关键理由和检验；
+  \item 解题必须包含题型判断、已知条件、物理图像、方程、求解路线和易错点；
+  \item 题型梳理必须包含给题方式、建模步骤、方程条件、变式和原创例题；
+  \item 练习题必须包含训练目标、题目、提示、解析和答案。
+\end{itemize}
+
+实现方式是 \texttt{taskOutputTemplates[taskType]}。它使输出更接近习题课板书或助教讲义。
+
+\subsection{优点四：本地知识库使回答贴合国内教材体系}
+
+直接问 DeepSeek 时，模型知道很多物理知识，但不一定按国内物理专业本科课程组织。项目维护了本地知识点数据，术语和结构参考国内常见教材体系，例如数学物理方法中的复变函数、Fourier 级数、定解问题、Sturm--Liouville 理论和 Green 函数；电动力学中的静电边值问题、镜像法、多极展开、电磁势和规范变换。
+
+实现方式包括：
+
+\begin{itemize}
+  \item \texttt{/map} 页面直接展示知识点；
+  \item \texttt{buildKnowledgeContext(input)} 根据当前知识点注入上下文；
+  \item 工具页从知识点列表中选择课程和知识点；
+  \item 练习题和题型梳理使用知识库中的标题和相关信息。
+\end{itemize}
+
+因此，模型不只是回答一个孤立问题，而是在一个课程目录和知识网络中回答。
+
+\subsection{优点五：工具页结果可以继续进入聊天，不丢上下文}
+
+直接问 DeepSeek 时，如果用户先生成一组练习题，再打开新问题问“第 2 题为什么要这样做”，模型未必知道“第 2 题”是什么。用户通常需要手动复制题目和解析。
+
+本项目实现了 \texttt{ToolContext}。从 \texttt{/practice}、\texttt{/types}、\texttt{/review} 继续进入聊天时，系统保存：
+
+\begin{itemize}
+  \item 来源页面；
+  \item 课程；
+  \item 知识点；
+  \item 用户原始输入；
+  \item 已生成内容；
+  \item 当前选中的题目、题型或板块。
+\end{itemize}
+
+Prompt builder 会把这些内容作为隐藏上下文注入。这样用户追问“这里为什么要先确定边界条件？”时，Agent 能知道“这里”指向刚才的具体练习题，而不是重新猜测。
+
+\subsection{优点六：练习题生成更像国内课后习题的原创变式}
+
+直接问 DeepSeek“给我出几道题”时，模型可能生成概念题、条件不完整的题，或者题目风格不够像真实课程训练。
+
+项目在练习题 prompt 中明确要求：
+
+\begin{itemize}
+  \item 题目应参考国内物理专业课程训练风格；
+  \item 不能复制教材原题；
+  \item 不能声称来自某教材某页某题；
+  \item 每题必须有训练目标；
+  \item 边值问题、本征值问题、规范条件、归一化条件、系综条件等必须给出必要条件。
+\end{itemize}
+
+这使生成结果更适合实际训练，而不是泛泛的 AI 题目。
+
+\subsection{优点七：数学公式和长推导阅读体验更好}
+
+直接在普通聊天窗口中阅读物理推导，常见问题是公式格式不稳定、LaTeX 裸露、长公式撑破页面、表格和代码块排版混乱。
+
+项目统一使用 \texttt{MarkdownRenderer}：
+
+\begin{itemize}
+  \item 支持行内和块级公式；
+  \item 自动规范 \verb|\(...\)| 和 \verb|\[...\]|；
+  \item 自动处理含 \verb|\tag{}| 的裸公式；
+  \item KaTeX 非严格模式避免单个公式错误导致整页崩溃；
+  \item 长公式、表格和代码块支持横向滚动。
+\end{itemize}
+
+这对物理专业学生阅读推导非常关键。
+
+\subsection{优点八：流式中断有错误提示和继续生成}
+
+直接问 DeepSeek 时，如果回答中途停止，用户往往只能重新问或手动要求继续。上下文不一定连续，模型可能重复之前内容。
+
+项目在前端和后端都加入了恢复机制：
+
+\begin{itemize}
+  \item 服务端处理 DeepSeek 流式返回；
+  \item 前端读取文本流并保留 partial content；
+  \item idle timeout 后显示明确错误；
+  \item Abort 后不清空内容；
+  \item 显示“继续生成”；
+  \item 继续生成请求要求模型从中断处继续，不重复已写内容。
+\end{itemize}
+
+这让长推导、板块复习和 10 道练习题这类长输出更加可用。
+
+\subsection{优点九：学习过程有会话历史和本地持久化}
+
+直接问 DeepSeek 虽然也可能有历史，但本项目的会话历史与学习任务绑定，支持：
+
+\begin{itemize}
+  \item 新建学习会话；
+  \item 自动用第一条问题生成标题；
+  \item 重命名；
+  \item 删除；
+  \item 工具上下文关联会话；
+  \item 按最近更新时间保存。
+\end{itemize}
+
+这使项目更像一个学习工作台，而不是一次性问答页。
+
+\subsection{优点十：为后续教材 RAG 做好了架构预留}
+
+直接问 DeepSeek 只能依赖模型已有知识，无法保证贴合用户自己的教材、讲义和笔记。
+
+当前项目虽然还不是生产级 RAG，但已经预留了清晰路径：
+
+\begin{itemize}
+  \item 本地 Markdown 文档；
+  \item chunk；
+  \item retrieve；
+  \item prompt 中的 RAG context；
+  \item 引用文档名和片段标题；
+  \item 不伪造页码。
+\end{itemize}
+
+后续只需要把关键词检索替换或增强为 embedding + vector database，就可以升级为教材知识库问答。
+
+\section{当前限制}
+
+当前版本仍然是 MVP，主要限制包括：
+
+\begin{itemize}
+  \item 没有用户登录和云端数据库；
+  \item 会话只保存在当前浏览器；
+  \item RAG 仍是本地 Markdown + 关键词检索；
+  \item 没有生产级请求限流和用量统计；
+  \item 练习题质量仍取决于模型能力和 prompt 约束；
+  \item 未接入真实教材 PDF/PPT 的解析和版权控制流程。
+\end{itemize}
+
+\section{上线与小范围测试建议}
+
+如果要上线测试，建议采用受控内测：
+
+\begin{enumerate}
+  \item 部署到 Vercel 或类似支持 Next.js 的平台；
+  \item 在线上环境变量中配置 \texttt{DEEPSEEK\_API\_KEY}、\texttt{DEEPSEEK\_BASE\_URL} 和 \texttt{DEEPSEEK\_MODEL}；
+  \item 先使用 Preview URL，不立即公开正式域名；
+  \item 增加访问码或简单白名单；
+  \item 找 5 到 10 位物理专业学生测试；
+  \item 重点测试 Green 函数、分离变量法、静电边值问题、一维定态问题、正则系综等典型主题；
+  \item 记录回答质量、公式渲染、流式稳定性、继续生成、题目训练价值等反馈；
+  \item 扩大测试前再增加限流、错误日志和用量统计。
+\end{enumerate}
+
+\section{结论}
+
+Physics Learning Agent 当前的核心价值是：在 DeepSeek 之上构建了一个面向大学物理学习的 Agent 产品层。它通过课程体系、任务模板、知识库上下文、RAG 预留、工具上下文、流式恢复和 LaTeX 阅读体验，把通用模型转化为更接近高校物理教师的学习辅助系统。
+
+因此，它相对直接问 DeepSeek 的优势并不是“模型更强”，而是“提问前的上下文组织更专业、回答时的结构约束更稳定、输出后的学习工作流更完整”。这也是 AI 学习产品区别于普通聊天壳的关键。
+
+\end{document}
