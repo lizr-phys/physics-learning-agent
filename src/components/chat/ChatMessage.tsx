@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { memo } from "react";
 
 import { ContentOutline } from "@/components/common/ContentOutline";
-import { StudyActions } from "@/components/common/StudyActions";
 import type { ChatMessage as ChatMessageType } from "@/types/learning";
 
 const MarkdownRenderer = dynamic(
@@ -17,13 +16,11 @@ const MarkdownRenderer = dynamic(
 
 type ChatMessageProps = {
   message: ChatMessageType;
-  sessionId?: string;
   showOutline?: boolean;
 };
 
 export const ChatMessage = memo(function ChatMessage({
   message,
-  sessionId,
   showOutline = false,
 }: ChatMessageProps) {
   if (message.role === "user") {
@@ -52,18 +49,6 @@ export const ChatMessage = memo(function ChatMessage({
               <ContentOutline content={message.content} />
             ) : null}
             <MarkdownRenderer content={message.content} />
-            {message.status === "complete" ? (
-              <div className="flex justify-end">
-                <StudyActions
-                  title={message.content.split(/\r?\n/).find(Boolean)?.replace(/^#+\s*/, "").slice(0, 60) || "聊天回答"}
-                  content={message.content}
-                  source="chat"
-                  type="answer"
-                  sessionId={sessionId}
-                  compact
-                />
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="text-sm text-zinc-500">正在等待模型返回...</div>

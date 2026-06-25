@@ -16,7 +16,6 @@ import { CourseSelector } from "@/components/CourseSelector";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { ContentOutline } from "@/components/common/ContentOutline";
 import { GenerationStatus } from "@/components/common/GenerationStatus";
-import { StudyActions } from "@/components/common/StudyActions";
 import { PracticeResultList } from "@/components/practice/PracticeResultList";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
@@ -725,21 +724,11 @@ ${existingContent}`,
               <PracticeResultList
                 content={content}
                 onAsk={askPracticeProblem}
-                course={course ? getCourseLabel(course) : undefined}
-                knowledgeTitle={selectedKnowledgeTitle || topic}
               />
             ) : (
               <div className="space-y-4" data-testid="generator-result">
                 <ContentOutline content={content} />
                 <MarkdownRenderer content={content} />
-                <StudyActions
-                  title={`${config.title}：${topic}`}
-                  content={content}
-                  source={mode}
-                  type={mode === "review" ? "review" : "answer"}
-                  course={course ? getCourseLabel(course) : undefined}
-                  knowledgeTitle={selectedKnowledgeTitle || undefined}
-                />
               </div>
             )}
 

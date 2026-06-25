@@ -9,7 +9,6 @@ import { courseOptions } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeItem } from "@/data/knowledge";
 import { buildChatHref } from "@/lib/routes";
 import { ensureBlockMath } from "@/components/common/MarkdownRenderer";
-import { StudyActions } from "@/components/common/StudyActions";
 import type { CourseId } from "@/types/learning";
 
 const MarkdownRenderer = dynamic(
@@ -201,7 +200,7 @@ export function KnowledgeMapExplorer() {
               ))}
             </div>
 
-            <div className="grid gap-2 border-t border-zinc-200 pt-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 border-t border-zinc-200 pt-5 sm:grid-cols-3">
               <Link
                 href={buildChatHref({
                   course: selectedItem.course,
@@ -238,20 +237,6 @@ export function KnowledgeMapExplorer() {
                 <ListChecks size={15} />
                 梳理题型
               </Link>
-              <div className="flex items-center justify-center rounded-md border border-zinc-300 px-3 py-2">
-                <StudyActions
-                  title={selectedItem.title}
-                  content={[
-                    selectedItem.description,
-                    selectedItem.textbookStyleSummary,
-                    ...selectedItem.typicalProblems.map((problem) => `- ${problem}`),
-                  ].join("\n\n")}
-                  source="map"
-                  type="knowledge"
-                  course={selectedCourse?.label}
-                  knowledgeTitle={selectedItem.title}
-                />
-              </div>
             </div>
           </div>
         </section>

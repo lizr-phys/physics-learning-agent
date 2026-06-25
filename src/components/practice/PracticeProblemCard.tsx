@@ -4,14 +4,11 @@ import { ChevronDown, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
-import { StudyActions } from "@/components/common/StudyActions";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
 
 type PracticeProblemCardProps = {
   problem: ParsedPracticeProblem;
   onAsk: (problem: ParsedPracticeProblem) => void;
-  course?: string;
-  knowledgeTitle?: string;
   headingId?: string;
 };
 
@@ -36,8 +33,6 @@ function FoldSection({ title, content }: { title: string; content?: string }) {
 export function PracticeProblemCard({
   problem,
   onAsk,
-  course,
-  knowledgeTitle,
   headingId,
 }: PracticeProblemCardProps) {
   const [problemOpen, setProblemOpen] = useState(true);
@@ -89,14 +84,6 @@ export function PracticeProblemCard({
               <MessageSquare size={13} />
               追问本题
             </button>
-            <StudyActions
-              title={problem.title}
-              content={problem.rawContent}
-              source="practice"
-              type="problem"
-              course={course}
-              knowledgeTitle={knowledgeTitle}
-            />
           </div>
         </div>
       ) : null}

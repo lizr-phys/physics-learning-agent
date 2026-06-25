@@ -954,7 +954,6 @@ export function ChatWorkspace() {
         ) : null}
         {!messages.length ? <FirstUseGuide /> : null}
         <ChatWindow
-          sessionId={sessionId}
           messages={messages}
           onPickPrompt={setInput}
         />

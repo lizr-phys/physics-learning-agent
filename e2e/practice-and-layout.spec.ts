@@ -70,16 +70,7 @@ test("practice output mode is explicit and the answer stays folded", async ({ pa
   ).toBeVisible();
 });
 
-test("a practice problem carries context into chat and can be added to review", async ({ page }) => {
-  await page.goto("/practice");
-  await page.getByTestId("generator-prompt").fill("生成 3 道量子力学一维定态问题练习题");
-  await page.getByTestId("generator-submit").click();
-
-  await page.getByLabel("学习状态").click();
-  await page.getByRole("button", { name: "加入复习" }).click();
-  await page.goto("/review-list");
-  await expect(page.getByRole("heading", { name: "题目 1" })).toBeVisible();
-
+test("a practice problem carries context into chat", async ({ page }) => {
   await page.goto("/practice");
   await page.getByTestId("generator-prompt").fill("生成 3 道量子力学一维定态问题练习题");
   await page.getByTestId("generator-submit").click();

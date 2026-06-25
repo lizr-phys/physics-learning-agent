@@ -13,7 +13,7 @@ Physics Learning Agent 是一个面向大学物理学习的对话式工具，主
 - 题型梳理与板块复习
 - 长回答结构目录
 - Markdown、LaTeX、表格和代码块渲染
-- 本地会话历史、学习记录和轻量个性化推荐
+- 本地会话历史和轻量个性化推荐
 - 回答深度控制：简洁、标准、详细、推导优先、题型优先
 - DeepSeek 服务端流式调用与中断恢复
 - 本地 Markdown 资料的轻量 RAG 检索
@@ -67,7 +67,6 @@ npm run build
 - `/practice`：练习题生成
 - `/types`：题型梳理
 - `/review`：板块复习
-- `/review-list`：保存在当前浏览器中的复习内容
 - `/settings/api`：DeepSeek 配置状态和连接测试
 
 ## Testing
@@ -89,7 +88,7 @@ npm run test:all
 
 DeepSeek API Key 只由 Next.js 服务端读取。浏览器仅调用项目内部的 `/api/chat` 和 `/api/deepseek/test` 接口，不会获得 API Key。
 
-会话历史、回答深度偏好、收藏和复习标记保存在当前浏览器的 localStorage 中。项目没有账号系统，因此这些数据不会自动同步到其他设备或浏览器。
+会话历史和回答深度偏好保存在当前浏览器的 localStorage 中。项目没有账号系统，因此这些数据不会自动同步到其他设备或浏览器。
 
 ## RAG
 

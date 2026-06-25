@@ -9,13 +9,11 @@ import type { ChatMessage as ChatMessageType } from "@/types/learning";
 type ChatWindowProps = {
   messages: ChatMessageType[];
   onPickPrompt: (prompt: string) => void;
-  sessionId?: string;
 };
 
 export const ChatWindow = memo(function ChatWindow({
   messages,
   onPickPrompt,
-  sessionId,
 }: ChatWindowProps) {
   if (!messages.length) {
     return <WelcomePrompts onPick={onPickPrompt} />;
@@ -29,7 +27,6 @@ export const ChatWindow = memo(function ChatWindow({
         <ChatMessage
           key={message.id ?? `${message.role}-${index}`}
           message={message}
-          sessionId={sessionId}
           showOutline={index === lastAssistantIndex}
         />
       ))}

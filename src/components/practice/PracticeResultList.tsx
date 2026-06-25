@@ -11,15 +11,11 @@ import { parsePracticeProblems, type ParsedPracticeProblem } from "@/lib/practic
 type PracticeResultListProps = {
   content: string;
   onAsk: (problem: ParsedPracticeProblem) => void;
-  course?: string;
-  knowledgeTitle?: string;
 };
 
 export function PracticeResultList({
   content,
   onAsk,
-  course,
-  knowledgeTitle,
 }: PracticeResultListProps) {
   const problems = useMemo(() => parsePracticeProblems(content), [content]);
   const headingScope = useMemo(() => createContentScope(content), [content]);
@@ -41,8 +37,6 @@ export function PracticeResultList({
           key={`${problem.index}-${problem.title}`}
           problem={problem}
           onAsk={onAsk}
-          course={course}
-          knowledgeTitle={knowledgeTitle}
           headingId={createHeadingId(problem.title, problem.index - 1, headingScope)}
         />
       ))}
