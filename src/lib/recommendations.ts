@@ -57,7 +57,7 @@ function scoreRecommendation(
     score += 3;
   }
 
-  score += Math.min(profile?.courseFrequency[item.course] ?? 0, 4);
+  score += Math.min(profile?.courseFrequency?.[item.course] ?? 0, 4);
 
   for (const topic of profile?.recentTopics ?? []) {
     if (
@@ -87,7 +87,7 @@ export function getPersonalizedRecommendations(input: RecommendationInput) {
 
   if (
     !sessions.length &&
-    !input.profile?.recentTopics.length &&
+    !(input.profile?.recentTopics ?? []).length &&
     !Object.keys(input.profile?.courseFrequency ?? {}).length
   ) {
     return getRandomRecommendations(input);

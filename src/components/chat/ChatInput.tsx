@@ -3,10 +3,14 @@
 import { KeyboardEvent, memo, useCallback, useEffect, useRef } from "react";
 import { Loader2, Send, Square } from "lucide-react";
 
+import { answerDepthOptions, type AnswerDepth } from "@/types/learning";
+
 type ChatInputProps = {
   value: string;
   isLoading: boolean;
+  answerDepth: AnswerDepth;
   onChange: (value: string) => void;
+  onAnswerDepthChange: (value: AnswerDepth) => void;
   onSubmit: () => void;
   onStop: () => void;
 };
@@ -14,7 +18,9 @@ type ChatInputProps = {
 export const ChatInput = memo(function ChatInput({
   value,
   isLoading,
+  answerDepth,
   onChange,
+  onAnswerDepthChange,
   onSubmit,
   onStop,
 }: ChatInputProps) {
@@ -61,9 +67,24 @@ export const ChatInput = memo(function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder="输入物理概念、题型或推导问题..."
         rows={1}
-        className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent pr-12 text-sm leading-6 text-zinc-950 outline-none md:max-h-[180px]"
+        className="max-h-36 min-h-16 w-full resize-none overflow-y-auto bg-transparent pb-7 pr-12 text-sm leading-6 text-zinc-950 outline-none md:max-h-[180px]"
         data-testid="chat-input"
       />
+      <label className="absolute bottom-3 left-4 flex items-center gap-2 text-xs text-zinc-500">
+        <span className="hidden sm:inline">回答深度</span>
+        <select
+          value={answerDepth}
+          onChange={(event) => onAnswerDepthChange(event.target.value as AnswerDepth)}
+          className="rounded-md border-0 bg-transparent py-1 pr-1 text-xs text-zinc-600 outline-none hover:text-zinc-950"
+          aria-label="回答深度"
+        >
+          {answerDepthOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         disabled={!isLoading && !value.trim()}

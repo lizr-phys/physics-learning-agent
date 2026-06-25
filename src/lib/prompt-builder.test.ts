@@ -27,4 +27,18 @@ describe("prompt builder", () => {
     expect(prompt).toContain("直接给可用代码");
     expect(prompt).not.toContain("输出模板");
   });
+
+  it("applies answer depth and practice output mode instructions", () => {
+    const prompt = buildUserPrompt({
+      message: "生成 3 道 Green 函数练习题",
+      course: "math-physics",
+      taskType: "practice",
+      exerciseCount: 3,
+      answerDepth: "derivation-first",
+      practiceOutputMode: "questions-hints",
+    });
+
+    expect(prompt).toContain("优先组织推导");
+    expect(prompt).toContain("不要给出详细解析和最终答案");
+  });
 });

@@ -7,6 +7,9 @@ import { useSearchParams } from "next/navigation";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ContextBanner } from "@/components/chat/ContextBanner";
+import { FirstUseGuide } from "@/components/chat/FirstUseGuide";
+import { GenerationStatus } from "@/components/common/GenerationStatus";
 import { buildConversationSummary } from "@/agent/context-manager";
 import { matchesGeneration, type ActiveGenerationDescriptor } from "@/agent/generation-guard";
 import { classifyAgentIntent } from "@/agent/intent-classifier";
@@ -17,6 +20,11 @@ import {
 } from "@/agent/memory-manager";
 import { courseOptions } from "@/data/courses";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
+import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import {
+  getStoredAnswerDepth,
+  saveStoredAnswerDepth,
+} from "@/lib/preferences";
 import {
   buildSessionTitle,
   createSessionId,
@@ -32,6 +40,7 @@ import {
 import {
   taskTypeOptions,
   type AgentRequest,
+  type AnswerDepth,
   type ChatMessage,
   type CourseId,
   type LearningMemory,
@@ -73,12 +82,6 @@ function debugStream(event: string, detail: Record<string, unknown>) {
   }
 }
 
-const toolContextLabels: Record<ToolContext["source"], string> = {
-  review: "板块复习",
-  practice: "练习题生成",
-  types: "题型梳理",
-};
-
 type ActiveGeneration = ActiveGenerationDescriptor & {
   abortController: AbortController;
   startedAt: number;
@@ -94,37 +97,6 @@ type PendingContinuation = {
 };
 
 type SessionContextSnapshot = StoredChatSession["context"];
-
-function ToolContextCard({ toolContext }: { toolContext: ToolContext }) {
-  const title =
-    toolContext.selectedItem?.title ||
-    toolContext.topic ||
-    toolContext.knowledgeTitle ||
-    toolContext.taskTitle ||
-    "来源内容";
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 pt-5">
-      <details className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-        <summary className="cursor-pointer list-none font-medium text-zinc-950">
-          已接入上下文：{toolContextLabels[toolContext.source]} · {title}
-        </summary>
-        <div className="mt-3 space-y-2 border-t border-zinc-200 pt-3 text-xs leading-5 text-zinc-600">
-          {toolContext.userInput ? <p>原始要求：{toolContext.userInput}</p> : null}
-          {toolContext.selectedItem?.content ? (
-            <p className="line-clamp-4 whitespace-pre-wrap">
-              当前追问对象：{toolContext.selectedItem.content}
-            </p>
-          ) : (
-            <p className="line-clamp-4 whitespace-pre-wrap">
-              来源内容：{toolContext.generatedContent}
-            </p>
-          )}
-        </div>
-      </details>
-    </div>
-  );
-}
 
 function buildContinuationMessage(originalMessage: string, partialContent: string) {
   return `上一段回答在以下位置中断。请不要重复已经写过的内容，从中断处继续完成回答，保持原来的结构、编号、符号和 LaTeX 格式。
@@ -189,6 +161,9 @@ export function ChatWorkspace() {
   );
   const [useRag, setUseRag] = useState(false);
   const [model, setModel] = useState(() => getStoredModel());
+  const [answerDepth, setAnswerDepth] = useState<AnswerDepth>(() =>
+    getStoredAnswerDepth(),
+  );
   const [input, setInput] = useState(
     searchParams.get("prompt") ?? searchParams.get("initialPrompt") ?? "",
   );
@@ -365,6 +340,7 @@ export function ChatWorkspace() {
       setToolContext(session.toolContext);
       setMemory(session.memory ?? createLearningMemory());
       setModel(session.context.model ?? getStoredModel());
+      setAnswerDepth(session.context.answerDepth ?? getStoredAnswerDepth());
       setInput("");
       setError("");
       setPendingContinuation((current) => (current?.sessionId === session.id ? current : null));
@@ -475,6 +451,7 @@ export function ChatWorkspace() {
       memorySnapshot: LearningMemory;
       appendToExistingAssistant?: boolean;
       existingAssistantContent?: string;
+      originalRequest?: AgentRequest;
     }) => {
       const abortController = new AbortController();
       const active: ActiveGeneration = {
@@ -589,6 +566,7 @@ export function ChatWorkspace() {
           setMessages(finalMessages);
           setMemory(finalMemory);
         }
+        clearLastApiError();
       } catch (requestError) {
         if (
           !isRequestStillActive(
@@ -640,7 +618,7 @@ export function ChatWorkspace() {
           setPendingContinuation({
             sessionId: options.targetSessionId,
             assistantMessageId: options.assistantMessageId,
-            request: options.request,
+            request: options.originalRequest ?? options.request,
             messagesBeforeAssistant: options.messagesBeforeAssistant,
             firstMessage: options.firstMessage,
             partialContent,
@@ -648,11 +626,15 @@ export function ChatWorkspace() {
         }
 
         if (currentSessionIdRef.current === options.targetSessionId) {
-          setError(
-            isAbortLikeError(streamError)
-              ? "已停止生成。当前内容已保留，可继续生成。"
-              : streamError.message || "请求失败。",
-          );
+          const message = isAbortLikeError(streamError)
+            ? "已停止生成。当前内容已保留，可继续生成。"
+            : streamError.message || "请求失败。";
+          setError(message);
+          saveLastApiError({
+            message,
+            status: streamError.reason,
+            occurredAt: Date.now(),
+          });
         }
       } finally {
         if (
@@ -724,6 +706,7 @@ export function ChatWorkspace() {
       knowledgePoint: knowledgePoint || undefined,
       model: model || undefined,
       useRag,
+      answerDepth,
     };
     const toolContextSnapshot = toolContext;
     const intent = classifyAgentIntent({
@@ -759,6 +742,7 @@ export function ChatWorkspace() {
       toolContext,
       model: model || undefined,
       memory: memorySnapshot,
+      answerDepth,
       conversationId: targetSessionId,
       assistantMessageId,
       requestId,
@@ -792,6 +776,7 @@ export function ChatWorkspace() {
     });
   }, [
     cancelActiveGeneration,
+    answerDepth,
     course,
     input,
     isCurrentSessionGenerating,
@@ -837,6 +822,7 @@ export function ChatWorkspace() {
       assistantMessageId: currentPendingContinuation.assistantMessageId,
       requestId: createMessageId("request"),
       memory,
+      answerDepth,
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,
@@ -844,6 +830,7 @@ export function ChatWorkspace() {
       knowledgePoint: knowledgePoint || undefined,
       model: model || undefined,
       useRag,
+      answerDepth,
     };
 
     await runAssistantRequest({
@@ -858,8 +845,65 @@ export function ChatWorkspace() {
       memorySnapshot: memory,
       appendToExistingAssistant: true,
       existingAssistantContent: currentPendingContinuation.partialContent,
+      originalRequest: currentPendingContinuation.request,
     });
   }, [
+    cancelActiveGeneration,
+    answerDepth,
+    course,
+    currentPendingContinuation,
+    isCurrentSessionGenerating,
+    knowledgePoint,
+    memory,
+    model,
+    runAssistantRequest,
+    taskType,
+    toolContext,
+    useRag,
+  ]);
+
+  const retryGeneration = useCallback(async () => {
+    if (!currentPendingContinuation || isCurrentSessionGenerating) {
+      return;
+    }
+
+    if (activeGenerationRef.current) {
+      cancelActiveGeneration("retry-submit");
+    }
+
+    const retryRequestId = createMessageId("request");
+    const retryRequest: AgentRequest = {
+      ...currentPendingContinuation.request,
+      history: currentPendingContinuation.request.history ?? [],
+      conversationId: currentPendingContinuation.sessionId,
+      assistantMessageId: currentPendingContinuation.assistantMessageId,
+      requestId: retryRequestId,
+      memory,
+      answerDepth,
+    };
+    const contextSnapshot: SessionContextSnapshot = {
+      course,
+      taskType,
+      knowledgePoint: knowledgePoint || undefined,
+      model: model || undefined,
+      useRag,
+      answerDepth,
+    };
+
+    await runAssistantRequest({
+      targetSessionId: currentPendingContinuation.sessionId,
+      assistantMessageId: currentPendingContinuation.assistantMessageId,
+      requestId: retryRequestId,
+      request: retryRequest,
+      messagesBeforeAssistant: currentPendingContinuation.messagesBeforeAssistant,
+      firstMessage: currentPendingContinuation.firstMessage,
+      context: contextSnapshot,
+      toolContextSnapshot: toolContext,
+      memorySnapshot: memory,
+      originalRequest: currentPendingContinuation.request,
+    });
+  }, [
+    answerDepth,
     cancelActiveGeneration,
     course,
     currentPendingContinuation,
@@ -872,6 +916,25 @@ export function ChatWorkspace() {
     toolContext,
     useRag,
   ]);
+
+  const clearToolContext = useCallback(() => {
+    setToolContext(undefined);
+
+    if (!sessionId) {
+      return;
+    }
+
+    const current = getStoredSessions().find((item) => item.id === sessionId);
+
+    if (current) {
+      upsertStoredSession({
+        ...current,
+        source: "manual",
+        toolContext: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+  }, [sessionId]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -886,19 +949,43 @@ export function ChatWorkspace() {
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-white"
         data-testid="chat-scroll-area"
       >
-        {toolContext ? <ToolContextCard toolContext={toolContext} /> : null}
-        <ChatWindow messages={messages} onPickPrompt={setInput} />
+        {toolContext ? (
+          <ContextBanner context={toolContext} onClear={clearToolContext} />
+        ) : null}
+        {!messages.length ? <FirstUseGuide /> : null}
+        <ChatWindow
+          sessionId={sessionId}
+          messages={messages}
+          onPickPrompt={setInput}
+        />
         <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pb-6">
+          {isCurrentSessionGenerating ? (
+            <GenerationStatus
+              module="chat"
+              taskType={taskType}
+              hasContent={Boolean(messages.at(-1)?.content)}
+            />
+          ) : null}
           <ErrorMessage message={error} />
           {currentPendingContinuation ? (
-            <button
-              type="button"
-              onClick={() => void continueGeneration()}
-              disabled={isCurrentSessionGenerating}
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
-            >
-              继续生成
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void continueGeneration()}
+                disabled={isCurrentSessionGenerating}
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
+              >
+                继续生成
+              </button>
+              <button
+                type="button"
+                onClick={() => void retryGeneration()}
+                disabled={isCurrentSessionGenerating}
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
+              >
+                重新生成
+              </button>
+            </div>
           ) : null}
         </div>
       </section>
@@ -924,6 +1011,11 @@ export function ChatWorkspace() {
             onChange={setInput}
             onSubmit={submitMessage}
             onStop={stopGeneration}
+            answerDepth={answerDepth}
+            onAnswerDepthChange={(nextDepth) => {
+              setAnswerDepth(nextDepth);
+              saveStoredAnswerDepth(nextDepth);
+            }}
           />
           <p className="mt-2 text-center text-xs text-zinc-500">
             回答由 DeepSeek 生成，公式与推导请结合教材核对。

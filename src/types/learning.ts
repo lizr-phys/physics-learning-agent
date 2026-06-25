@@ -68,6 +68,25 @@ export type AgentIntent =
 
 export type AgentModule = "chat" | "practice" | "review" | "types";
 
+export const answerDepthOptions = [
+  { id: "concise", label: "简洁" },
+  { id: "standard", label: "标准" },
+  { id: "detailed", label: "详细" },
+  { id: "derivation-first", label: "推导优先" },
+  { id: "problem-type-first", label: "题型优先" },
+] as const;
+
+export type AnswerDepth = (typeof answerDepthOptions)[number]["id"];
+
+export const practiceOutputModeOptions = [
+  { id: "questions-only", label: "只生成题目" },
+  { id: "questions-hints", label: "题目 + 提示" },
+  { id: "full-solution", label: "题目 + 详细解析" },
+  { id: "hidden-answer", label: "题目 + 提示，答案默认隐藏" },
+] as const;
+
+export type PracticeOutputMode = (typeof practiceOutputModeOptions)[number]["id"];
+
 export type LearningMemory = {
   currentCourse?: CourseId;
   currentKnowledgePoint?: string;
@@ -142,6 +161,8 @@ export type AgentRequest = {
   model?: string;
   history?: ChatMessage[];
   memory?: LearningMemory;
+  answerDepth?: AnswerDepth;
+  practiceOutputMode?: PracticeOutputMode;
   conversationId?: string;
   assistantMessageId?: string;
   requestId?: string;

@@ -2,13 +2,14 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Bot, ListChecks, PenLine, Plus, Route } from "lucide-react";
+import { Bot, ListChecks, PenLine, Route } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { courseOptions } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeItem } from "@/data/knowledge";
 import { buildChatHref } from "@/lib/routes";
 import { ensureBlockMath } from "@/components/common/MarkdownRenderer";
+import { StudyActions } from "@/components/common/StudyActions";
 import type { CourseId } from "@/types/learning";
 
 const MarkdownRenderer = dynamic(
@@ -237,18 +238,20 @@ export function KnowledgeMapExplorer() {
                 <ListChecks size={15} />
                 梳理题型
               </Link>
-              <Link
-                href={buildChatHref({
-                  course: selectedItem.course,
-                  taskType: "review-plan",
-                  knowledgePoint: selectedItem.id,
-                  prompt: `请把「${selectedItem.title}」加入一份阶段复习安排，并给出学习顺序、题型训练和自测方式。`,
-                })}
-                className="flex items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-800 hover:border-zinc-950"
-              >
-                <Plus size={15} />
-                加入复习
-              </Link>
+              <div className="flex items-center justify-center rounded-md border border-zinc-300 px-3 py-2">
+                <StudyActions
+                  title={selectedItem.title}
+                  content={[
+                    selectedItem.description,
+                    selectedItem.textbookStyleSummary,
+                    ...selectedItem.typicalProblems.map((problem) => `- ${problem}`),
+                  ].join("\n\n")}
+                  source="map"
+                  type="knowledge"
+                  course={selectedCourse?.label}
+                  knowledgeTitle={selectedItem.title}
+                />
+              </div>
             </div>
           </div>
         </section>

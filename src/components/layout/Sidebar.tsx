@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  BookmarkCheck,
   Database,
   FileText,
   Layers,
@@ -40,6 +41,7 @@ const navItems = [
   { href: "/practice", label: "练习题生成", icon: PenLine },
   { href: "/types", label: "题型梳理", icon: Shapes },
   { href: "/review", label: "板块复习", icon: Layers },
+  { href: "/review-list", label: "我的复习", icon: BookmarkCheck },
   { href: "/settings/api", label: "API 设置", icon: Settings },
   { href: "/settings/api#rag", label: "RAG 知识库", icon: Database, muted: true },
 ];

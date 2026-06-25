@@ -5,6 +5,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 
+import { createContentScope, createHeadingId } from "@/lib/content-outline";
+
 type MarkdownRendererProps = {
   content: string;
 };
@@ -94,6 +96,24 @@ function normalizeMathDelimitersOutsideCode(content: string) {
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const normalizedContent = normalizeMathDelimitersOutsideCode(content);
+  const headingScope = createContentScope(content);
+  let headingIndex = 0;
+
+  function headingText(children: ReactNode): string {
+    if (typeof children === "string" || typeof children === "number") {
+      return String(children);
+    }
+
+    if (Array.isArray(children)) {
+      return children.map(headingText).join("");
+    }
+
+    if (children && typeof children === "object" && "props" in children) {
+      return headingText((children as { props: { children?: ReactNode } }).props.children);
+    }
+
+    return "";
+  }
 
   return (
     <MarkdownBoundary content={content}>
@@ -102,6 +122,16 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           remarkPlugins={[remarkMath]}
           rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
           components={{
+            h2: ({ children }) => {
+              const id = createHeadingId(headingText(children), headingIndex, headingScope);
+              headingIndex += 1;
+              return <h2 id={id} className="scroll-mt-6">{children}</h2>;
+            },
+            h3: ({ children }) => {
+              const id = createHeadingId(headingText(children), headingIndex, headingScope);
+              headingIndex += 1;
+              return <h3 id={id} className="scroll-mt-6">{children}</h3>;
+            },
             table: ({ children }) => (
               <div className="w-full overflow-x-auto">
                 <table>{children}</table>

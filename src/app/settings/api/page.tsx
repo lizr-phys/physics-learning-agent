@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Settings, XCircle } from "lucide-react";
+import {
+  clearLastApiError,
+  getLastApiError,
+  saveLastApiError,
+  type StoredApiError,
+} from "@/lib/api-diagnostics";
+import { resetOnboarding } from "@/lib/preferences";
 
 type ApiStatus = {
   ok: boolean;
@@ -35,10 +42,12 @@ export default function ApiSettingsPage() {
   const [status, setStatus] = useState<ApiStatus | null>(null);
   const [selectedModel, setSelectedModel] = useState("deepseek-v4-flash");
   const [isTesting, setIsTesting] = useState(false);
+  const [lastError, setLastError] = useState<StoredApiError | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSelectedModel(window.localStorage.getItem("pla.deepseek.model") ?? "deepseek-v4-flash");
+      setLastError(getLastApiError());
     }, 0);
 
     fetchApiStatus("status").then(setStatus).catch(() => {
@@ -69,12 +78,34 @@ export default function ApiSettingsPage() {
     setIsTesting(true);
 
     try {
-      setStatus(await fetchApiStatus("test"));
-    } catch {
+      const nextStatus = await fetchApiStatus("test");
+      setStatus(nextStatus);
+
+      if (nextStatus.ok) {
+        clearLastApiError();
+        setLastError(null);
+      } else {
+        const nextError = {
+          message: nextStatus.message,
+          status: nextStatus.status,
+          occurredAt: Date.now(),
+        };
+        saveLastApiError(nextError);
+        setLastError(nextError);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "测试请求失败。";
+      const nextError = {
+        message,
+        status: "request-failed",
+        occurredAt: Date.now(),
+      };
+      saveLastApiError(nextError);
+      setLastError(nextError);
       setStatus((current) => ({
         ok: false,
         status: "request-failed",
-        message: "测试请求失败。",
+        message,
         config:
           current?.config ?? {
             configured: false,
@@ -121,10 +152,25 @@ export default function ApiSettingsPage() {
             <p className="text-zinc-600">当前浏览器选择：{selectedModel}</p>
             <p className="text-zinc-600">Base URL：{status?.config.baseUrl ?? "读取中..."}</p>
             <p className="text-zinc-600">
-              Streaming：{status?.config.streaming ? "已启用" : "未启用"}
+              响应模式：{status?.config.streaming ? "流式" : "非流式"}
             </p>
             <p className="text-zinc-600">Thinking：{status?.config.thinkingMode ?? "读取中..."}</p>
             <p className="text-zinc-600">Timeout：{status?.config.timeoutMs ?? 120000} ms</p>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-zinc-200 p-4 text-sm">
+            <p className="font-medium text-zinc-950">最近一次 API 错误</p>
+            {lastError ? (
+              <>
+                <p className="mt-2 leading-6 text-zinc-700">{lastError.message}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {lastError.status ?? "unknown"} ·{" "}
+                  {new Date(lastError.occurredAt).toLocaleString("zh-CN")}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-zinc-500">当前浏览器没有记录到 API 错误。</p>
+            )}
           </div>
 
           <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
@@ -168,10 +214,31 @@ export default function ApiSettingsPage() {
             <pre className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs leading-6 text-zinc-700">
 {`DEEPSEEK_API_KEY=你的 API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
-DEEPSEEK_THINKING=disabled
+DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_TIMEOUT_MS=120000`}
             </pre>
+            {!status?.config.configured ? (
+              <p className="mt-3 text-xs leading-5 text-zinc-600">
+                请在项目根目录的 .env.local 中配置 DEEPSEEK_API_KEY，然后重新启动开发服务器。
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-xl border border-zinc-200 bg-white p-5">
+            <h2 className="text-sm font-semibold text-zinc-950">使用引导</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">
+              可重新显示首次使用时的简短说明。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                resetOnboarding();
+                window.location.assign("/chat");
+              }}
+              className="mt-3 rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50"
+            >
+              重新查看引导
+            </button>
           </section>
 
           <section id="rag" className="rounded-xl border border-zinc-200 bg-white p-5">

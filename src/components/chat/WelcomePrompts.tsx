@@ -24,11 +24,11 @@ export function WelcomePrompts({ onPick }: WelcomePromptsProps) {
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const frame = window.requestAnimationFrame(() => {
       setRecommendations(buildRecommendations());
-    }, 0);
+    });
 
-    return () => window.clearTimeout(timer);
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   return (

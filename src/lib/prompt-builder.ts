@@ -13,6 +13,7 @@ import { buildKnowledgeContext } from "@/lib/knowledge-utils";
 import { classifyQuery } from "@/lib/query-classifier";
 import {
   difficultyOptions,
+  type AnswerDepth,
   type AgentIntent,
   type AgentRequest,
   type QueryType,
@@ -58,6 +59,33 @@ const toolSourceLabels = {
 
 function labelById<T extends readonly { id: string; label: string }[]>(items: T, id?: string) {
   return items.find((item) => item.id === id)?.label ?? "未指定";
+}
+
+const depthInstructions: Record<AnswerDepth, string> = {
+  concise: "回答应简洁，先给结论，只保留理解问题所必需的定义、公式和限制条件。",
+  standard: "采用标准教学深度：定义、必要公式、解释、适用条件和易错点保持完整。",
+  detailed: "回答应较详细，补充推导理由、例子、章节联系和结果检查，但避免无关展开。",
+  "derivation-first": "优先组织推导：明确前提、出发方程、逐步变换、关键理由和结果检验。",
+  "problem-type-first": "优先从题型角度组织：识别条件、建模步骤、常用方程、变式和易错点。",
+};
+
+export function buildAnswerDepthInstruction(depth?: AnswerDepth) {
+  return depthInstructions[depth ?? "standard"];
+}
+
+function buildPracticeOutputInstruction(mode?: AgentRequest["practiceOutputMode"]) {
+  switch (mode) {
+    case "questions-only":
+      return "只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。";
+    case "questions-hints":
+      return "输出题目和提示，不要给出详细解析和最终答案。";
+    case "full-solution":
+      return "输出题目、提示、详细解析和最终答案。";
+    case "hidden-answer":
+      return "输出题目、提示、详细解析和最终答案；前端会默认折叠解析和答案。";
+    default:
+      return "按当前任务参数输出必要的题目、提示、解析和答案。";
+  }
 }
 
 export function buildTaskTemplate(taskType?: TaskTypeId) {
@@ -187,6 +215,7 @@ ${buildAgentRoleInstruction(intent, input.taskType)}
 - 禁止出现这些套话：${forbiddenAnswerStyle.join("、")}。
 - 主体回答必须围绕用户问题本身。
 - 如果是关于本助手能力或使用方式的问题，只解释功能、边界和使用方法，不追加物理学习提醒。
+- 回答深度：${buildAnswerDepthInstruction(input.answerDepth)}
 
 七、用户问题
 ${input.message}`;
@@ -255,6 +284,8 @@ ${taskLengthHints[taskType]}
 - 回答前在内部判断问题类型和所需假设，不要展示冗长内部判断过程。
 - 结论必须与边界条件、初始条件、规范条件、本征条件、归一化条件等限制一致。
 - 输出前由严谨审稿角色检查：符号是否前后一致、条件是否完整、量纲或极限是否合理、练习题数量和结构是否满足要求。只修正最终答案，不展示角色讨论。
+- 回答深度：${buildAnswerDepthInstruction(input.answerDepth)}
+- 练习输出方式：${buildPracticeOutputInstruction(input.practiceOutputMode)}
 
 十三、用户问题
 ${input.message}`;

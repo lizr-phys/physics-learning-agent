@@ -36,4 +36,26 @@ describe("model config", () => {
 
     expect(derivation.temperature).toBeLessThan(exercise.temperature);
   });
+
+  it("adjusts output length for answer depth and practice mode", () => {
+    const concise = getModelConfig({
+      message: "解释 Green 函数",
+      taskType: "explain",
+      answerDepth: "concise",
+    });
+    const detailed = getModelConfig({
+      message: "解释 Green 函数",
+      taskType: "explain",
+      answerDepth: "detailed",
+    });
+    const questionsOnly = getModelConfig({
+      message: "生成 5 道题",
+      taskType: "practice",
+      exerciseCount: 5,
+      practiceOutputMode: "questions-only",
+    });
+
+    expect(concise.max_tokens).toBeLessThan(detailed.max_tokens);
+    expect(questionsOnly.max_tokens).toBeLessThan(5200);
+  });
 });

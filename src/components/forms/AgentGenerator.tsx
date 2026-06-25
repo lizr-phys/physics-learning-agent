@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, RefreshCw, Send } from "lucide-react";
+import { RefreshCw, Send } from "lucide-react";
 
 import { parseExerciseRequest } from "@/agent/exercise-parser";
 import { classifyAgentIntent } from "@/agent/intent-classifier";
@@ -14,10 +14,19 @@ import {
 } from "@/agent/memory-manager";
 import { CourseSelector } from "@/components/CourseSelector";
 import { ErrorMessage } from "@/components/ErrorMessage";
-import { LoadingAnswer } from "@/components/LoadingAnswer";
+import { ContentOutline } from "@/components/common/ContentOutline";
+import { GenerationStatus } from "@/components/common/GenerationStatus";
+import { StudyActions } from "@/components/common/StudyActions";
+import { PracticeResultList } from "@/components/practice/PracticeResultList";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
+import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import {
+  getStoredAnswerDepth,
+  saveStoredAnswerDepth,
+} from "@/lib/preferences";
+import type { ParsedPracticeProblem } from "@/lib/practice-parser";
 import {
   getStoredLearningProfile,
   getStoredSessions,
@@ -28,9 +37,13 @@ import { getPersonalizedRecommendations } from "@/lib/recommendations";
 import type { RecommendationItem, RecommendationType } from "@/data/recommendations";
 import {
   difficultyOptions,
+  answerDepthOptions,
+  practiceOutputModeOptions,
+  type AnswerDepth,
   type CourseId,
   type DifficultyId,
   type AgentRequest,
+  type PracticeOutputMode,
   type TaskTypeId,
   type ToolContext,
 } from "@/types/learning";
@@ -47,12 +60,6 @@ type GeneratorMode = "practice" | "types" | "review";
 
 type AgentGeneratorProps = {
   mode: GeneratorMode;
-};
-
-type ExtractedSection = {
-  title: string;
-  content: string;
-  index: number;
 };
 
 const modeConfig: Record<
@@ -108,26 +115,6 @@ const recommendationTypeByMode: Record<GeneratorMode, RecommendationType> = {
   review: "review",
 };
 
-function extractPracticeSections(content: string): ExtractedSection[] {
-  const matches = Array.from(content.matchAll(/^###\s*题目\s*([0-9一二三四五六七八九十]+).*$/gim));
-
-  if (!matches.length) {
-    return [];
-  }
-
-  return matches.map((match, arrayIndex) => {
-    const start = match.index ?? 0;
-    const end = matches[arrayIndex + 1]?.index ?? content.length;
-    const title = match[0].replace(/^###\s*/, "").trim();
-
-    return {
-      title,
-      index: arrayIndex + 1,
-      content: content.slice(start, end).trim(),
-    };
-  });
-}
-
 export function AgentGenerator({ mode }: AgentGeneratorProps) {
   const config = modeConfig[mode];
   const router = useRouter();
@@ -135,9 +122,11 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
   const [knowledgePoint, setKnowledgePoint] = useState("");
   const [difficulty, setDifficulty] = useState<DifficultyId>("medium");
   const [exerciseCount, setExerciseCount] = useState<3 | 5 | 10>(5);
-  const [includeHint, setIncludeHint] = useState(true);
-  const [includeAnswer, setIncludeAnswer] = useState(true);
-  const [includeSolution, setIncludeSolution] = useState(true);
+  const [practiceOutputMode, setPracticeOutputMode] =
+    useState<PracticeOutputMode>("hidden-answer");
+  const [answerDepth, setAnswerDepth] = useState<AnswerDepth>(() =>
+    getStoredAnswerDepth(),
+  );
   const [extraInput, setExtraInput] = useState("");
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
@@ -150,14 +139,15 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
 
   const knowledgeOptions = useMemo(() => (course ? getKnowledgeByCourse(course) : []), [course]);
   const selectedKnowledgeTitle = getKnowledgeTitle(knowledgePoint);
-  const practiceSections = useMemo(
-    () => (mode === "practice" ? extractPracticeSections(content) : []),
-    [content, mode],
-  );
+  const includeHint = practiceOutputMode !== "questions-only";
+  const includeAnswer =
+    practiceOutputMode === "full-solution" || practiceOutputMode === "hidden-answer";
+  const includeSolution =
+    practiceOutputMode === "full-solution" || practiceOutputMode === "hidden-answer";
   const topic = extraInput.trim() || selectedKnowledgeTitle || (course ? getCourseLabel(course) : "");
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const frame = window.requestAnimationFrame(() => {
       setRecommendations(
         getPersonalizedRecommendations({
           type: recommendationTypeByMode[mode],
@@ -166,9 +156,9 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
           profile: getStoredLearningProfile(),
         }),
       );
-    }, 0);
+    });
 
-    return () => window.clearTimeout(timer);
+    return () => window.cancelAnimationFrame(frame);
   }, [mode]);
 
   useEffect(
@@ -215,15 +205,21 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
     const requestedCount = options?.resolvedCount ?? exerciseCount;
 
     if (mode === "practice") {
+      const outputInstruction: Record<PracticeOutputMode, string> = {
+        "questions-only": "每道题只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。",
+        "questions-hints": "每道题输出题目与解题提示，不要输出详细解析或最终答案。",
+        "full-solution": "每道题输出提示、详细解析和最终答案。",
+        "hidden-answer":
+          "每道题输出提示、详细解析和最终答案；前端会默认折叠解析和答案。",
+      };
+
       return [
         `请生成 ${requestedCount} 道关于「${targetTitle}」的原创练习题。`,
         `难度要求：${difficultyOptions.find((item) => item.id === requestedDifficulty)?.label ?? "中等"}。`,
         "题目风格：仿国内物理专业教材课后习题风格的原创变式题，不能照搬或声称来自具体教材。",
         "每道题要有明确训练目标，条件完整，符号清楚；涉及边值、本征值、规范、归一化、系综等问题时必须给出必要条件。",
         "公式统一使用 $...$ 或 $$...$$，不要用代码块包裹公式。",
-        includeAnswer ? "需要最终答案。" : "暂时不需要最终答案。",
-        includeHint ? "需要解题提示。" : "不需要解题提示。",
-        includeSolution ? "需要详细解析。" : "只需要题目和提示，不需要详细解析。",
+        outputInstruction[practiceOutputMode],
         extraInput && selectedKnowledgeTitle ? `补充要求：${extraInput}` : "",
       ]
         .filter(Boolean)
@@ -308,6 +304,8 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
         includeAnswer,
         includeHint,
         includeSolution,
+        practiceOutputMode: mode === "practice" ? practiceOutputMode : undefined,
+        answerDepth,
       };
       const intent = classifyAgentIntent(baseRequest);
       const memory = updateLearningMemory(createLearningMemory(), baseRequest, intent);
@@ -329,6 +327,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
           idleTimeoutMs: resolvedCount === 10 ? 180000 : 120000,
         },
       );
+      clearLastApiError();
     } catch (requestError) {
       const streamError =
         requestError instanceof AgentStreamError
@@ -354,8 +353,16 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
         includeAnswer,
         includeHint,
         includeSolution,
+        practiceOutputMode: mode === "practice" ? practiceOutputMode : undefined,
+        answerDepth,
       });
-      setError(streamError.message);
+      const message = streamError.message || "生成中断，已保留当前内容。";
+      setError(message);
+      saveLastApiError({
+        message,
+        status: streamError.reason,
+        occurredAt: Date.now(),
+      });
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -398,6 +405,7 @@ ${existingContent}`,
 
       setContent(`${existingContent}${continuation}`);
       setPendingRequest(null);
+      clearLastApiError();
     } catch (requestError) {
       const streamError =
         requestError instanceof AgentStreamError
@@ -408,7 +416,60 @@ ${existingContent}`,
         setContent(`${existingContent}${streamError.partialContent}`);
       }
 
-      setError(streamError.message);
+      const message = streamError.message || "生成中断，已保留当前内容。";
+      setError(message);
+      saveLastApiError({
+        message,
+        status: streamError.reason,
+        occurredAt: Date.now(),
+      });
+    } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+    }
+  }
+
+  async function retryGeneration() {
+    if (!pendingRequest || isLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+    setContent("");
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      const result = await requestAgentStream(pendingRequest, setContent, {
+        signal: abortController.signal,
+        throttleMs: 80,
+        idleTimeoutMs: pendingRequest.exerciseCount === 10 ? 180000 : 120000,
+      });
+      setContent(result);
+      setPendingRequest(null);
+      clearLastApiError();
+    } catch (requestError) {
+      const streamError =
+        requestError instanceof AgentStreamError
+          ? requestError
+          : new AgentStreamError(
+              requestError instanceof Error ? requestError.message : "请求失败。",
+            );
+
+      if (streamError.partialContent) {
+        setContent(streamError.partialContent);
+      }
+
+      const message = streamError.message || "生成中断，已保留当前内容。";
+      setError(message);
+      saveLastApiError({
+        message,
+        status: streamError.reason,
+        occurredAt: Date.now(),
+      });
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -446,11 +507,21 @@ ${existingContent}`,
         taskType: selectedItem?.type === "problem" ? "solution-guide" : "qa",
         knowledgePoint: knowledgePoint || undefined,
         useRag: false,
+        answerDepth,
       },
     });
 
     setLinkedSessionId(session.id);
     router.push(`/chat?sessionId=${encodeURIComponent(session.id)}`);
+  }
+
+  function askPracticeProblem(problem: ParsedPracticeProblem) {
+    continueInChat({
+      type: "problem",
+      title: problem.title,
+      content: problem.rawContent,
+      index: problem.index,
+    });
   }
 
   return (
@@ -491,7 +562,7 @@ ${existingContent}`,
           </label>
 
           {mode === "practice" ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2 text-sm font-medium text-zinc-800">
                 <span>难度</span>
                 <select
@@ -521,6 +592,25 @@ ${existingContent}`,
               </label>
             </div>
           ) : null}
+
+          <label className="block space-y-2 text-sm font-medium text-zinc-800">
+            <span>回答深度</span>
+            <select
+              value={answerDepth}
+              onChange={(event) => {
+                const nextDepth = event.target.value as AnswerDepth;
+                setAnswerDepth(nextDepth);
+                saveStoredAnswerDepth(nextDepth);
+              }}
+              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+            >
+              {answerDepthOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
             <span>{config.inputLabel}</span>
@@ -561,35 +651,23 @@ ${existingContent}`,
           </div>
 
           {mode === "practice" ? (
-            <div className="space-y-3 rounded-md border border-zinc-200 p-3 text-sm text-zinc-700">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeHint}
-                  onChange={(event) => setIncludeHint(event.target.checked)}
-                  className="size-4 accent-zinc-950"
-                />
-                需要提示
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeAnswer}
-                  onChange={(event) => setIncludeAnswer(event.target.checked)}
-                  className="size-4 accent-zinc-950"
-                />
-                需要最终答案
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeSolution}
-                  onChange={(event) => setIncludeSolution(event.target.checked)}
-                  className="size-4 accent-zinc-950"
-                />
-                需要详细解析
-              </label>
-            </div>
+            <label className="block space-y-2 text-sm font-medium text-zinc-800">
+              <span>输出方式</span>
+              <select
+                value={practiceOutputMode}
+                onChange={(event) =>
+                  setPracticeOutputMode(event.target.value as PracticeOutputMode)
+                }
+                className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+                data-testid="practice-output-mode"
+              >
+                {practiceOutputModeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           ) : null}
 
           <button
@@ -607,18 +685,35 @@ ${existingContent}`,
       <section className="min-h-[520px] min-w-0 overflow-x-hidden rounded-md border border-zinc-200 bg-white p-5 pb-12">
         <ErrorMessage message={error} />
         {pendingRequest ? (
-          <button
-            type="button"
-            onClick={() => void continueGeneration()}
-            disabled={isLoading}
-            className="mb-4 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
-          >
-            继续生成
-          </button>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void continueGeneration()}
+              disabled={isLoading}
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
+            >
+              继续生成
+            </button>
+            <button
+              type="button"
+              onClick={() => void retryGeneration()}
+              disabled={isLoading}
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
+            >
+              重新生成
+            </button>
+          </div>
         ) : null}
 
         {content ? (
           <div className="space-y-5">
+            {isLoading ? (
+              <GenerationStatus
+                module={mode}
+                taskType={config.taskType}
+                hasContent
+              />
+            ) : null}
             {isLoading ? (
               <pre
                 className="whitespace-pre-wrap break-words font-sans text-[0.95rem] leading-7 text-zinc-800"
@@ -626,37 +721,27 @@ ${existingContent}`,
               >
                 {content}
               </pre>
+            ) : mode === "practice" ? (
+              <PracticeResultList
+                content={content}
+                onAsk={askPracticeProblem}
+                course={course ? getCourseLabel(course) : undefined}
+                knowledgeTitle={selectedKnowledgeTitle || topic}
+              />
             ) : (
-              <div data-testid="generator-result">
+              <div className="space-y-4" data-testid="generator-result">
+                <ContentOutline content={content} />
                 <MarkdownRenderer content={content} />
+                <StudyActions
+                  title={`${config.title}：${topic}`}
+                  content={content}
+                  source={mode}
+                  type={mode === "review" ? "review" : "answer"}
+                  course={course ? getCourseLabel(course) : undefined}
+                  knowledgeTitle={selectedKnowledgeTitle || undefined}
+                />
               </div>
             )}
-
-            {practiceSections.length ? (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm font-medium text-zinc-950">按题继续追问</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {practiceSections.map((section) => (
-                    <button
-                      key={`${section.index}-${section.title}`}
-                      type="button"
-                      onClick={() =>
-                        continueInChat({
-                          type: "problem",
-                          title: section.title,
-                          content: section.content,
-                          index: section.index,
-                        })
-                      }
-                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950"
-                    >
-                      <MessageSquare size={14} />
-                      继续追问{section.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
             <button
               type="button"
@@ -674,7 +759,7 @@ ${existingContent}`,
           </div>
         ) : isLoading ? (
           <div className="flex min-h-[440px] items-center justify-center">
-            <LoadingAnswer label="等待模型返回首段内容..." />
+            <GenerationStatus module={mode} taskType={config.taskType} />
           </div>
         ) : (
           <div className="flex min-h-[440px] items-center justify-center text-center text-sm leading-6 text-zinc-500">

@@ -6,6 +6,7 @@ import {
 } from "@/agent/memory-manager";
 import type {
   ChatMessage,
+  AnswerDepth,
   CourseId,
   LearningMemory,
   LearningProfile,
@@ -26,6 +27,7 @@ export type StoredChatSession = {
     knowledgePoint?: string;
     model?: string;
     useRag?: boolean;
+    answerDepth?: AnswerDepth;
   };
   toolContext?: ToolContext;
   memory: LearningMemory;
@@ -69,6 +71,7 @@ export function createEmptySession(
       knowledgePoint: context.knowledgePoint,
       model: context.model,
       useRag: context.useRag,
+      answerDepth: context.answerDepth,
     },
     memory: createLearningMemory(),
   };

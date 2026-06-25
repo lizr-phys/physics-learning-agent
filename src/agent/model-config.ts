@@ -6,6 +6,18 @@ export type AgentModelConfig = {
   max_tokens: number;
 };
 
+function applyAnswerDepth(config: AgentModelConfig, input: AgentRequest) {
+  if (input.answerDepth === "concise") {
+    return { ...config, max_tokens: Math.max(800, Math.round(config.max_tokens * 0.65)) };
+  }
+
+  if (input.answerDepth === "detailed" || input.answerDepth === "derivation-first") {
+    return { ...config, max_tokens: Math.round(config.max_tokens * 1.2) };
+  }
+
+  return config;
+}
+
 export function getModelConfig(input: AgentRequest): AgentModelConfig {
   const intent = input.intent;
   const queryType = input.queryType ?? classifyQuery(input);
@@ -30,10 +42,16 @@ export function getModelConfig(input: AgentRequest): AgentModelConfig {
 
   if (taskType === "practice") {
     const count = input.exerciseCount ?? 5;
-    return {
+    const base = {
       temperature: 0.45,
       max_tokens: count === 10 ? 8000 : count === 5 ? 5200 : 3000,
     };
+    const outputAdjusted = input.practiceOutputMode === "questions-only"
+      ? { ...base, max_tokens: Math.max(1400, Math.round(base.max_tokens * 0.45)) }
+      : input.practiceOutputMode === "questions-hints"
+        ? { ...base, max_tokens: Math.max(1800, Math.round(base.max_tokens * 0.65)) }
+        : base;
+    return applyAnswerDepth(outputAdjusted, input);
   }
 
   const configMap: Record<TaskTypeId, AgentModelConfig> = {
@@ -48,5 +66,5 @@ export function getModelConfig(input: AgentRequest): AgentModelConfig {
     misconceptions: { temperature: 0.3, max_tokens: 1600 },
   };
 
-  return configMap[taskType];
+  return applyAnswerDepth(configMap[taskType], input);
 }

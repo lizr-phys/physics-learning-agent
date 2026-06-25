@@ -7,10 +7,12 @@ import {
   taskTypeOptions,
   type AgentIntent,
   type AgentRequest,
+  type AnswerDepth,
   type ChatMessage,
   type CourseId,
   type DifficultyId,
   type LearningMemory,
+  type PracticeOutputMode,
   type TaskTypeId,
   type ToolContext,
 } from "@/types/learning";
@@ -29,6 +31,19 @@ const agentIntents = new Set<AgentIntent>([
   "study_planning",
   "general_question",
   "meta_question",
+]);
+const answerDepths = new Set<AnswerDepth>([
+  "concise",
+  "standard",
+  "detailed",
+  "derivation-first",
+  "problem-type-first",
+]);
+const practiceOutputModes = new Set<PracticeOutputMode>([
+  "questions-only",
+  "questions-hints",
+  "full-solution",
+  "hidden-answer",
 ]);
 const modelIds = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
 
@@ -169,6 +184,8 @@ function sanitizeRequest(body: unknown): AgentRequest {
   const difficulty = asString(record.difficulty);
   const model = asString(record.model);
   const intent = asString(record.intent);
+  const answerDepth = asString(record.answerDepth);
+  const practiceOutputMode = asString(record.practiceOutputMode);
   const parsedCount = Number(record.exerciseCount);
 
   return {
@@ -196,6 +213,12 @@ function sanitizeRequest(body: unknown): AgentRequest {
     model: modelIds.has(model) ? model : undefined,
     history: sanitizeHistory(record.history),
     memory: sanitizeLearningMemory(record.memory),
+    answerDepth: answerDepths.has(answerDepth as AnswerDepth)
+      ? (answerDepth as AnswerDepth)
+      : undefined,
+    practiceOutputMode: practiceOutputModes.has(practiceOutputMode as PracticeOutputMode)
+      ? (practiceOutputMode as PracticeOutputMode)
+      : undefined,
     conversationId: trimToLength(asString(record.conversationId), 160) || undefined,
     assistantMessageId: trimToLength(asString(record.assistantMessageId), 160) || undefined,
     requestId: trimToLength(asString(record.requestId), 160) || undefined,
