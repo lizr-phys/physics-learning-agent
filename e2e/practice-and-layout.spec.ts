@@ -18,6 +18,9 @@ function installCompleteResponseMock() {
       "### 题目 1\n",
       "求一维势阱中的允许能级。\n\n",
       "$$E_n=\\frac{n^2\\pi^2\\hbar^2}{2ma^2}$$\n\n",
+      "动量满足 \\(p=mv\\)。\n\n",
+      "\\[\n\\nabla^2\\varphi=0\n\\]\n\n",
+      "u_x=v_y=e^x\\cos y\\tag{1}\n\n",
       "**答案**：由边界条件与归一化条件确定。\n",
       longExplanation,
       "\n**完整输出结束**\n",
@@ -50,7 +53,9 @@ test("practice infers course and knowledge from a natural-language request", asy
   await expect(page.getByTestId("course-selector")).toHaveValue("quantum-mechanics");
   await expect(page.getByTestId("practice-result-list")).toContainText("题目 1");
   await expect(page.getByTestId("practice-result-list")).toContainText("完整输出结束");
-  await expect(page.locator(".katex")).toHaveCount(1);
+  await expect(page.locator(".katex")).toHaveCount(4);
+  await expect(page.getByTestId("practice-result-list")).not.toContainText("\\(");
+  await expect(page.getByTestId("practice-result-list")).not.toContainText("\\[");
   await expect(page.getByText("显示答案")).toBeVisible();
   await expect(
     page.getByText("由边界条件与归一化条件确定。", { exact: true }),
@@ -91,4 +96,17 @@ test("chat and tool pages do not overflow horizontally", async ({ page }) => {
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(mapOverflow).toBe(false);
+});
+
+test("knowledge formulas use KaTeX and removed tool routes return 404", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/map");
+  await expect(page.locator(".katex").first()).toBeVisible();
+  await expect(page.getByText("题型梳理", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("板块复习", { exact: true })).toHaveCount(0);
+
+  expect((await request.get("/types")).status()).toBe(404);
+  expect((await request.get("/review")).status()).toBe(404);
 });

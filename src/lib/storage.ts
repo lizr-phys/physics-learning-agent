@@ -13,6 +13,7 @@ import type {
   TaskTypeId,
   ToolContext,
 } from "@/types/learning";
+import { taskTypeOptions } from "@/types/learning";
 
 export type StoredChatSession = {
   id: string;
@@ -40,10 +41,9 @@ const learningProfileKey = "pla.learning.profile.v1";
 export const defaultSessionTitle = "新学习会话";
 
 const toolSourceLabels: Record<ToolContext["source"], string> = {
-  review: "板块复习",
   practice: "练习题",
-  types: "题型梳理",
 };
+const validTaskTypes = new Set<string>(taskTypeOptions.map((item) => item.id));
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -91,11 +91,25 @@ export function getStoredSessions(): StoredChatSession[] {
     const parsed = raw ? (JSON.parse(raw) as StoredChatSession[]) : [];
     return parsed
       .filter((session) => session.id && session.title)
-      .map((session) => ({
-        ...session,
-        source: session.source ?? (session.toolContext ? "tool" : "manual"),
-        memory: session.memory ?? createLearningMemory(),
-      }));
+      .map((session) => {
+        const toolContext =
+          session.toolContext?.source === "practice" ? session.toolContext : undefined;
+        const context = session.context ?? { course: "general", taskType: "qa" };
+
+        return {
+          ...session,
+          source: toolContext ? "tool" : "manual",
+          context: {
+            ...context,
+            course: context.course ?? "general",
+            taskType: validTaskTypes.has(context.taskType)
+              ? context.taskType
+              : "qa",
+          },
+          toolContext,
+          memory: session.memory ?? createLearningMemory(),
+        };
+      });
   } catch {
     return [];
   }

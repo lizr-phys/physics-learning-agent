@@ -6,7 +6,7 @@ export type StoredApiError = {
   message: string;
   status?: string;
   occurredAt: number;
-  source?: "chat" | "practice" | "types" | "review" | "settings";
+  source?: "chat" | "practice" | "settings";
 };
 
 export function saveLastApiError(error: StoredApiError) {

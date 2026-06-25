@@ -17,7 +17,6 @@ const planningTerms = [
   "复习计划",
   "复习路线",
   "知识点梳理",
-  "板块复习",
   "学习路径",
   "怎么学",
   "备考",
@@ -51,7 +50,6 @@ export function classifyAgentIntent(input: AgentRequest): AgentIntent {
 
   if (
     input.taskType === "review-plan" ||
-    input.taskType === "section-review" ||
     includesAny(text, planningTerms)
   ) {
     return "study_planning";

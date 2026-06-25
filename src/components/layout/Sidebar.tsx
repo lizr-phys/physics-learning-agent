@@ -6,13 +6,11 @@ import {
   BookOpen,
   Database,
   FileText,
-  Layers,
   MoreHorizontal,
   PenLine,
   Plus,
   Route,
   Settings,
-  Shapes,
   Trash2,
   Pencil,
 } from "lucide-react";
@@ -38,8 +36,6 @@ type SidebarProps = {
 const navItems = [
   { href: "/map", label: "知识点导览", icon: Route },
   { href: "/practice", label: "练习题生成", icon: PenLine },
-  { href: "/types", label: "题型梳理", icon: Shapes },
-  { href: "/review", label: "板块复习", icon: Layers },
   { href: "/settings/api", label: "API 设置", icon: Settings },
   { href: "/settings/api#rag", label: "RAG 知识库", icon: Database, muted: true },
 ];

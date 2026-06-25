@@ -5,9 +5,7 @@ import { Link2, X } from "lucide-react";
 import type { ToolContext } from "@/types/learning";
 
 const labels: Record<ToolContext["source"], string> = {
-  review: "板块复习",
   practice: "练习题",
-  types: "题型梳理",
 };
 
 type ContextBannerProps = {

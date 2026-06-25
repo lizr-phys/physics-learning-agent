@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Send } from "lucide-react";
@@ -14,8 +13,8 @@ import {
 } from "@/agent/memory-manager";
 import { CourseSelector } from "@/components/CourseSelector";
 import { ErrorMessage } from "@/components/ErrorMessage";
-import { ContentOutline } from "@/components/common/ContentOutline";
 import { GenerationStatus } from "@/components/common/GenerationStatus";
+import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import { PracticeResultList } from "@/components/practice/PracticeResultList";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
@@ -33,7 +32,7 @@ import {
   upsertToolContextSession,
 } from "@/lib/storage";
 import { getPersonalizedRecommendations } from "@/lib/recommendations";
-import type { RecommendationItem, RecommendationType } from "@/data/recommendations";
+import type { RecommendationItem } from "@/data/recommendations";
 import {
   difficultyOptions,
   answerDepthOptions,
@@ -43,79 +42,22 @@ import {
   type DifficultyId,
   type AgentRequest,
   type PracticeOutputMode,
-  type TaskTypeId,
   type ToolContext,
 } from "@/types/learning";
 
-const MarkdownRenderer = dynamic(
-  () => import("@/components/common/MarkdownRenderer").then((module) => module.MarkdownRenderer),
-  {
-    ssr: false,
-    loading: () => <div className="text-sm text-zinc-500">正在排版公式...</div>,
-  },
-);
-
-type GeneratorMode = "practice" | "types" | "review";
-
-type AgentGeneratorProps = {
-  mode: GeneratorMode;
+const config = {
+  taskType: "practice" as const,
+  source: "practice" as const,
+  title: "练习题生成",
+  description:
+    "选择课程、知识点、难度和数量，生成贴近国内物理专业课后习题风格的原创变式题。",
+  submitLabel: "生成练习题",
+  inputLabel: "补充要求",
+  placeholder: "例如：偏重边界条件分析，题目从基础到综合递进。",
+  emptyOutput: "生成结果会显示在这里，支持 Markdown 和 LaTeX 公式。",
 };
 
-const modeConfig: Record<
-  GeneratorMode,
-  {
-    taskType: TaskTypeId;
-    source: ToolContext["source"];
-    title: string;
-    description: string;
-    submitLabel: string;
-    inputLabel: string;
-    placeholder: string;
-    emptyOutput: string;
-  }
-> = {
-  practice: {
-    taskType: "practice",
-    source: "practice",
-    title: "练习题生成",
-    description:
-      "选择课程、知识点、难度和数量，生成贴近国内物理专业课后习题风格的原创变式题。",
-    submitLabel: "生成练习题",
-    inputLabel: "补充要求",
-    placeholder: "例如：偏重边界条件分析，题目从基础到综合递进。",
-    emptyOutput: "生成结果会显示在这里，支持 Markdown 和 LaTeX 公式。",
-  },
-  types: {
-    taskType: "problem-types",
-    source: "types",
-    title: "题型梳理",
-    description:
-      "选择知识点或输入具体题型，像习题课一样梳理常见给题方式、建模步骤和原创例题。",
-    submitLabel: "梳理题型",
-    inputLabel: "题型目标",
-    placeholder: "例如：球坐标下 Laplace 方程边值问题",
-    emptyOutput: "题型特征、建模步骤、原创例题和解析会显示在这里。",
-  },
-  review: {
-    taskType: "section-review",
-    source: "review",
-    title: "板块复习",
-    description: "输入章节或板块名称，生成知识结构、主要公式、题型和复习路线。",
-    submitLabel: "生成复习提纲",
-    inputLabel: "复习板块",
-    placeholder: "例如：Green 函数、Hamilton 力学、Maxwell 方程组、角动量",
-    emptyOutput: "板块复习提纲会显示在这里。",
-  },
-};
-
-const recommendationTypeByMode: Record<GeneratorMode, RecommendationType> = {
-  practice: "practice",
-  types: "problemType",
-  review: "review",
-};
-
-export function AgentGenerator({ mode }: AgentGeneratorProps) {
-  const config = modeConfig[mode];
+export function AgentGenerator() {
   const router = useRouter();
   const [course, setCourse] = useState<CourseId | "">("");
   const [knowledgePoint, setKnowledgePoint] = useState("");
@@ -149,7 +91,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
     const frame = window.requestAnimationFrame(() => {
       setRecommendations(
         getPersonalizedRecommendations({
-          type: recommendationTypeByMode[mode],
+          type: "practice",
           count: 3,
           sessions: getStoredSessions(),
           profile: getStoredLearningProfile(),
@@ -158,7 +100,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [mode]);
+  }, []);
 
   useEffect(
     () => () => {
@@ -170,7 +112,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
   function refreshRecommendations() {
     setRecommendations(
       getPersonalizedRecommendations({
-        type: recommendationTypeByMode[mode],
+        type: "practice",
         count: 3,
         sessions: getStoredSessions(),
         profile: getStoredLearningProfile(),
@@ -203,42 +145,25 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
     const requestedDifficulty = options?.resolvedDifficulty ?? difficulty;
     const requestedCount = options?.resolvedCount ?? exerciseCount;
 
-    if (mode === "practice") {
-      const outputInstruction: Record<PracticeOutputMode, string> = {
-        "questions-only": "每道题只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。",
-        "questions-hints": "每道题输出题目与解题提示，不要输出详细解析或最终答案。",
-        "full-solution": "每道题输出提示、详细解析和最终答案。",
-        "hidden-answer":
-          "每道题输出提示、详细解析和最终答案；前端会默认折叠解析和答案。",
-      };
-
-      return [
-        `请生成 ${requestedCount} 道关于「${targetTitle}」的原创练习题。`,
-        `难度要求：${difficultyOptions.find((item) => item.id === requestedDifficulty)?.label ?? "中等"}。`,
-        "题目风格：仿国内物理专业教材课后习题风格的原创变式题，不能照搬或声称来自具体教材。",
-        "每道题要有明确训练目标，条件完整，符号清楚；涉及边值、本征值、规范、归一化、系综等问题时必须给出必要条件。",
-        "公式统一使用 $...$ 或 $$...$$，不要用代码块包裹公式。",
-        outputInstruction[practiceOutputMode],
-        extraInput && selectedKnowledgeTitle ? `补充要求：${extraInput}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    }
-
-    if (mode === "types") {
-      return [
-        `请梳理题型目标：「${targetTitle}」。`,
-        "请像高校物理习题课教师一样讲解：这类题在课后习题中通常如何出现，已知条件怎样给出，标准解法是什么，容易错在哪里。",
-        "必须给出仿国内教材课后习题风格的原创变式例题和解析，不能复制任何教材原题，不能声称来自某本教材。",
-        "公式统一使用 $...$ 或 $$...$$，不要用代码块包裹公式。",
-      ].join("\n");
-    }
+    const outputInstruction: Record<PracticeOutputMode, string> = {
+      "questions-only": "每道题只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。",
+      "questions-hints": "每道题输出题目与解题提示，不要输出详细解析或最终答案。",
+      "full-solution": "每道题输出提示、详细解析和最终答案。",
+      "hidden-answer":
+        "每道题输出提示、详细解析和最终答案；前端会默认折叠解析和答案。",
+    };
 
     return [
-      `请把「${targetTitle}」整理成板块复习提纲。`,
-      "必须包含：板块定位、知识结构、学习顺序、核心公式、典型题型、章节联系、常见误区和复习建议。",
+      `请生成 ${requestedCount} 道关于「${targetTitle}」的原创练习题。`,
+      `难度要求：${difficultyOptions.find((item) => item.id === requestedDifficulty)?.label ?? "中等"}。`,
+      "题目风格：仿国内物理专业教材课后习题风格的原创变式题，不能照搬或声称来自具体教材。",
+      "每道题要有明确训练目标，条件完整，符号清楚；涉及边值、本征值、规范、归一化、系综等问题时必须给出必要条件。",
       "公式统一使用 $...$ 或 $$...$$，不要用代码块包裹公式。",
-    ].join("\n");
+      outputInstruction[practiceOutputMode],
+      extraInput && selectedKnowledgeTitle ? `补充要求：${extraInput}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -294,7 +219,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
       });
       const baseRequest: AgentRequest = {
         message,
-        module: mode,
+        module: "practice",
         course: resolvedCourse,
         taskType: config.taskType,
         knowledgePoint: resolvedKnowledgePoint || undefined,
@@ -303,7 +228,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
         includeAnswer,
         includeHint,
         includeSolution,
-        practiceOutputMode: mode === "practice" ? practiceOutputMode : undefined,
+        practiceOutputMode,
         answerDepth,
       };
       const intent = classifyAgentIntent(baseRequest);
@@ -343,7 +268,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
           resolvedDifficulty,
           resolvedCount,
         }),
-        module: mode,
+        module: "practice",
         course: resolvedCourse,
         taskType: config.taskType,
         knowledgePoint: resolvedKnowledgePoint || undefined,
@@ -352,7 +277,7 @@ export function AgentGenerator({ mode }: AgentGeneratorProps) {
         includeAnswer,
         includeHint,
         includeSolution,
-        practiceOutputMode: mode === "practice" ? practiceOutputMode : undefined,
+        practiceOutputMode,
         answerDepth,
       });
       const message = streamError.message || "生成中断，已保留当前内容。";
@@ -560,37 +485,35 @@ ${existingContent}`,
             </select>
           </label>
 
-          {mode === "practice" ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block space-y-2 text-sm font-medium text-zinc-800">
-                <span>难度</span>
-                <select
-                  value={difficulty}
-                  onChange={(event) => setDifficulty(event.target.value as DifficultyId)}
-                  className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
-                >
-                  {difficultyOptions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-2 text-sm font-medium text-zinc-800">
+              <span>难度</span>
+              <select
+                value={difficulty}
+                onChange={(event) => setDifficulty(event.target.value as DifficultyId)}
+                className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+              >
+                {difficultyOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              <label className="block space-y-2 text-sm font-medium text-zinc-800">
-                <span>数量</span>
-                <select
-                  value={exerciseCount}
-                  onChange={(event) => setExerciseCount(Number(event.target.value) as 3 | 5 | 10)}
-                  className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
-                >
-                  <option value={3}>3</option>
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                </select>
-              </label>
-            </div>
-          ) : null}
+            <label className="block space-y-2 text-sm font-medium text-zinc-800">
+              <span>数量</span>
+              <select
+                value={exerciseCount}
+                onChange={(event) => setExerciseCount(Number(event.target.value) as 3 | 5 | 10)}
+                className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+              >
+                <option value={3}>3</option>
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+              </select>
+            </label>
+          </div>
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
             <span>回答深度</span>
@@ -617,7 +540,7 @@ ${existingContent}`,
               value={extraInput}
               onChange={(event) => setExtraInput(event.target.value)}
               placeholder={config.placeholder}
-              rows={mode === "practice" ? 4 : 5}
+              rows={4}
               className="w-full resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-zinc-950"
               data-testid="generator-prompt"
             />
@@ -649,25 +572,23 @@ ${existingContent}`,
             </div>
           </div>
 
-          {mode === "practice" ? (
-            <label className="block space-y-2 text-sm font-medium text-zinc-800">
-              <span>输出方式</span>
-              <select
-                value={practiceOutputMode}
-                onChange={(event) =>
-                  setPracticeOutputMode(event.target.value as PracticeOutputMode)
-                }
-                className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
-                data-testid="practice-output-mode"
-              >
-                {practiceOutputModeOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          <label className="block space-y-2 text-sm font-medium text-zinc-800">
+            <span>输出方式</span>
+            <select
+              value={practiceOutputMode}
+              onChange={(event) =>
+                setPracticeOutputMode(event.target.value as PracticeOutputMode)
+              }
+              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+              data-testid="practice-output-mode"
+            >
+              {practiceOutputModeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <button
             type={isLoading ? "button" : "submit"}
@@ -708,35 +629,27 @@ ${existingContent}`,
           <div className="space-y-5">
             {isLoading ? (
               <GenerationStatus
-                module={mode}
+                module="practice"
                 taskType={config.taskType}
                 hasContent
               />
             ) : null}
             {isLoading ? (
-              <pre
-                className="whitespace-pre-wrap break-words font-sans text-[0.95rem] leading-7 text-zinc-800"
-                data-testid="generator-streaming-content"
-              >
-                {content}
-              </pre>
-            ) : mode === "practice" ? (
+              <div data-testid="generator-streaming-content">
+                <MarkdownRenderer content={content} streaming />
+              </div>
+            ) : (
               <PracticeResultList
                 content={content}
                 onAsk={askPracticeProblem}
               />
-            ) : (
-              <div className="space-y-4" data-testid="generator-result">
-                <ContentOutline content={content} />
-                <MarkdownRenderer content={content} />
-              </div>
             )}
 
             <button
               type="button"
               onClick={() =>
                 continueInChat({
-                  type: mode === "types" ? "problemType" : mode === "practice" ? "summary" : "section",
+                  type: "summary",
                   title: topic,
                   content,
                 })
@@ -748,7 +661,7 @@ ${existingContent}`,
           </div>
         ) : isLoading ? (
           <div className="flex min-h-[440px] items-center justify-center">
-            <GenerationStatus module={mode} taskType={config.taskType} />
+            <GenerationStatus module="practice" taskType={config.taskType} />
           </div>
         ) : (
           <div className="flex min-h-[440px] items-center justify-center text-center text-sm leading-6 text-zinc-500">

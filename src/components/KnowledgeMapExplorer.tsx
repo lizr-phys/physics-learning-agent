@@ -1,23 +1,17 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Bot, ListChecks, PenLine, Route } from "lucide-react";
+import { Bot, PenLine, Route } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { courseOptions } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeItem } from "@/data/knowledge";
 import { buildChatHref } from "@/lib/routes";
-import { ensureBlockMath } from "@/components/common/MarkdownRenderer";
+import {
+  ensureBlockMath,
+  MarkdownRenderer,
+} from "@/components/common/MarkdownRenderer";
 import type { CourseId } from "@/types/learning";
-
-const MarkdownRenderer = dynamic(
-  () => import("@/components/common/MarkdownRenderer").then((module) => module.MarkdownRenderer),
-  {
-    ssr: false,
-    loading: () => <div className="text-sm text-zinc-500">正在排版公式...</div>,
-  },
-);
 
 function listText(items: string[]) {
   return items.length ? items.join(" / ") : "无";
@@ -200,7 +194,7 @@ export function KnowledgeMapExplorer() {
               ))}
             </div>
 
-            <div className="grid gap-2 border-t border-zinc-200 pt-5 sm:grid-cols-3">
+            <div className="grid gap-2 border-t border-zinc-200 pt-5 sm:grid-cols-2">
               <Link
                 href={buildChatHref({
                   course: selectedItem.course,
@@ -224,18 +218,6 @@ export function KnowledgeMapExplorer() {
               >
                 <PenLine size={15} />
                 生成练习题
-              </Link>
-              <Link
-                href={buildChatHref({
-                  course: selectedItem.course,
-                  taskType: "problem-types",
-                  knowledgePoint: selectedItem.id,
-                  prompt: `请梳理「${selectedItem.title}」的题型特征、建模步骤、方程建立、求解流程、检验方法和变式训练。`,
-                })}
-                className="flex items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-800 hover:border-zinc-950"
-              >
-                <ListChecks size={15} />
-                梳理题型
               </Link>
             </div>
           </div>

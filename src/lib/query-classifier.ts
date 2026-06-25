@@ -3,8 +3,6 @@ import type { AgentRequest, QueryType, TaskTypeId } from "@/types/learning";
 const physicsTaskTypes = new Set<TaskTypeId>([
   "explain",
   "derivation",
-  "section-review",
-  "problem-types",
   "practice",
   "solution-guide",
   "misconceptions",

@@ -11,8 +11,6 @@ export const taskTypeOptions = [
   { id: "qa", label: "普通问答" },
   { id: "explain", label: "知识点解释" },
   { id: "derivation", label: "标准推导" },
-  { id: "section-review", label: "板块复习" },
-  { id: "problem-types", label: "题型梳理" },
   { id: "practice", label: "练习题生成" },
   { id: "solution-guide", label: "解题指导" },
   { id: "misconceptions", label: "易错点分析" },
@@ -66,7 +64,7 @@ export type AgentIntent =
   | "general_question"
   | "meta_question";
 
-export type AgentModule = "chat" | "practice" | "review" | "types";
+export type AgentModule = "chat" | "practice";
 
 export const answerDepthOptions = [
   { id: "concise", label: "简洁" },
@@ -116,7 +114,7 @@ export type ChatMessage = {
 };
 
 export type ToolContext = {
-  source: "review" | "practice" | "types";
+  source: "practice";
   course?: CourseId;
   knowledgeId?: string;
   knowledgeTitle?: string;
@@ -125,7 +123,7 @@ export type ToolContext = {
   userInput?: string;
   generatedContent: string;
   selectedItem?: {
-    type: "section" | "problem" | "problemType" | "summary";
+    type: "problem" | "summary";
     title?: string;
     content?: string;
     index?: number;

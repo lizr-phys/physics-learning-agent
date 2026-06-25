@@ -1,18 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { memo } from "react";
 
 import { ContentOutline } from "@/components/common/ContentOutline";
+import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import type { ChatMessage as ChatMessageType } from "@/types/learning";
-
-const MarkdownRenderer = dynamic(
-  () => import("@/components/common/MarkdownRenderer").then((module) => module.MarkdownRenderer),
-  {
-    ssr: false,
-    loading: () => <div className="text-sm text-zinc-500">正在排版公式...</div>,
-  },
-);
 
 type ChatMessageProps = {
   message: ChatMessageType;
@@ -39,16 +31,15 @@ export const ChatMessage = memo(function ChatMessage({
         P
       </div>
       <div className="min-w-0 flex-1">
-        {message.content && message.status === "streaming" ? (
-          <pre className="whitespace-pre-wrap break-words font-sans text-[0.95rem] leading-7 text-zinc-800">
-            {message.content}
-          </pre>
-        ) : message.content ? (
+        {message.content ? (
           <div className="space-y-3">
             {showOutline && message.status === "complete" && message.content.length > 700 ? (
               <ContentOutline content={message.content} />
             ) : null}
-            <MarkdownRenderer content={message.content} />
+            <MarkdownRenderer
+              content={message.content}
+              streaming={message.status === "streaming"}
+            />
           </div>
         ) : (
           <div className="text-sm text-zinc-500">正在等待模型返回...</div>

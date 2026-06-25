@@ -27,7 +27,7 @@ function installStreamingMock() {
     }
 
     const parts = [
-      `${marker}片段 1\n`,
+      `${marker}片段 1，行内公式 \\(E=mc^2\\)\n`,
       `${marker}片段 2\n`,
       `${marker}片段 3\n`,
       "[[PLA_STREAM_EVENT:done]]\n",
@@ -91,6 +91,7 @@ test("new session aborts and isolates the previous stream", async ({ page }, tes
   await page.getByTestId("chat-input").fill(question);
   await page.getByTestId("send-message").click();
   await expect(page.getByTestId("assistant-message")).toContainText("旧会话片段 1");
+  await expect(page.locator(".katex").first()).toBeVisible();
 
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(

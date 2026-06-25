@@ -24,8 +24,7 @@ export function buildAgentRoleInstruction(intent: AgentIntent, taskType?: TaskTy
 
   if (
     intent === "study_planning" ||
-    taskType === "review-plan" ||
-    taskType === "section-review"
+    taskType === "review-plan"
   ) {
     roles.push(coachRole);
   }

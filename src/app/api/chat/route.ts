@@ -68,7 +68,7 @@ function sanitizeToolContext(value: unknown): ToolContext | undefined {
   const source = asString(record.source);
   const generatedContent = asString(record.generatedContent);
 
-  if (!["review", "practice", "types"].includes(source) || !generatedContent) {
+  if (source !== "practice" || !generatedContent) {
     return undefined;
   }
 
@@ -78,7 +78,7 @@ function sanitizeToolContext(value: unknown): ToolContext | undefined {
       : undefined;
   const selectedType = asString(selectedRecord?.type);
   const selectedItem =
-    selectedRecord && ["section", "problem", "problemType", "summary"].includes(selectedType)
+    selectedRecord && ["problem", "summary"].includes(selectedType)
       ? {
           type: selectedType as NonNullable<ToolContext["selectedItem"]>["type"],
           title: trimToLength(asString(selectedRecord.title), 200) || undefined,
@@ -193,8 +193,6 @@ function sanitizeRequest(body: unknown): AgentRequest {
     intent: agentIntents.has(intent as AgentIntent) ? (intent as AgentIntent) : undefined,
     module:
       record.module === "practice" ||
-      record.module === "review" ||
-      record.module === "types" ||
       record.module === "chat"
         ? record.module
         : undefined,

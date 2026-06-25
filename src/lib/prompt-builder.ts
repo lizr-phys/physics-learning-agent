@@ -26,8 +26,6 @@ const taskLabels: Record<TaskTypeId, string> = {
   qa: "普通问答",
   explain: "知识点解释",
   derivation: "标准推导",
-  "section-review": "板块复习",
-  "problem-types": "题型梳理",
   practice: "练习题生成",
   "solution-guide": "解题指导",
   misconceptions: "易错点分析",
@@ -52,9 +50,7 @@ const intentLabels: Record<AgentIntent, string> = {
 };
 
 const toolSourceLabels = {
-  review: "板块复习",
   practice: "练习题生成",
-  types: "题型梳理",
 } as const;
 
 function labelById<T extends readonly { id: string; label: string }[]>(items: T, id?: string) {

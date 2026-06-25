@@ -59,9 +59,7 @@ export function getModelConfig(input: AgentRequest): AgentModelConfig {
     explain: { temperature: 0.3, max_tokens: 1600 },
     derivation: { temperature: 0.25, max_tokens: 2600 },
     "solution-guide": { temperature: 0.25, max_tokens: 2600 },
-    "problem-types": { temperature: 0.35, max_tokens: 3600 },
     practice: { temperature: 0.45, max_tokens: 3000 },
-    "section-review": { temperature: 0.3, max_tokens: 4000 },
     "review-plan": { temperature: 0.3, max_tokens: 2200 },
     misconceptions: { temperature: 0.3, max_tokens: 1600 },
   };

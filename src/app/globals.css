@@ -136,10 +136,22 @@ input {
 }
 
 .markdown .katex-display {
+  display: block;
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.5rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown .katex {
+  max-width: 100%;
+}
+
+.markdown .katex-display > .katex {
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .markdown a,
