@@ -1,5 +1,5 @@
-import { getKnowledgeItem, knowledgeItems } from "@/data/knowledge";
 import { detectPracticeStyleFromText } from "@/agent/exercise-parser";
+import { getKnowledgeItem, knowledgeItems } from "@/data/knowledge";
 import { resolveReferenceProfile } from "@/data/referenceProfiles";
 import { detectLanguage } from "@/lib/language";
 import type {
@@ -69,6 +69,7 @@ function inferPreferredStyle(message: string, current: LearningMemory["preferred
 
 function inferMentionedConcepts(message: string) {
   const normalized = message.toLowerCase();
+
   return knowledgeItems
     .filter(
       (item) =>
@@ -175,24 +176,17 @@ export function formatLearningMemory(memory?: LearningMemory) {
   }
 
   const course = memory.currentCourse as CourseId | undefined;
+
   return [
     course ? `Ongoing course: ${course}` : "",
     memory.currentKnowledgePoint ? `Ongoing topic: ${memory.currentKnowledgePoint}` : "",
     memory.currentGoal ? `Current learning goal: ${memory.currentGoal}` : "",
-    memory.recentLanguage ? `Recent language: ${memory.recentLanguage}` : "",
-    memory.practiceStyle ? `Recent practice style: ${memory.practiceStyle}` : "",
     memory.referenceProfile ? `Reference profile: ${memory.referenceProfile}` : "",
-    memory.recentConfusions.length
-      ? `Recent confusions: ${memory.recentConfusions.slice(-3).join(" | ")}`
-      : "",
-    memory.coveredConcepts.length
-      ? `Covered concepts: ${memory.coveredConcepts.slice(-6).join(" | ")}`
-      : "",
-    memory.exerciseTopics.length
-      ? `Recent practice directions: ${memory.exerciseTopics.slice(-4).join(" | ")}`
-      : "",
-    `Preferred explanation style: ${memory.preferredStyle}`,
-    memory.conversationSummary ? `Long conversation summary: ${memory.conversationSummary}` : "",
+    memory.practiceStyle ? `Practice style: ${memory.practiceStyle}` : "",
+    memory.preferredStyle ? `Preferred explanation style: ${memory.preferredStyle}` : "",
+    memory.coveredConcepts.length ? `Covered concepts: ${memory.coveredConcepts.join("; ")}` : "",
+    memory.recentConfusions.length ? `Recent confusions: ${memory.recentConfusions.join("; ")}` : "",
+    memory.exerciseTopics.length ? `Recent exercise topics: ${memory.exerciseTopics.join("; ")}` : "",
   ]
     .filter(Boolean)
     .join("\n");

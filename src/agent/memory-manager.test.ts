@@ -19,7 +19,7 @@ describe("learning memory", () => {
     );
 
     expect(memory.currentCourse).toBe("math-physics");
-    expect(memory.currentKnowledgePoint).toBe("Green 函数");
+    expect(memory.currentKnowledgePoint).toBe("Green's Functions");
     expect(memory.recentConfusions).toHaveLength(1);
     expect(memory.preferredStyle).toBe("step-by-step");
   });
@@ -28,12 +28,12 @@ describe("learning memory", () => {
     const memory = {
       ...createLearningMemory(),
       currentCourse: "electrodynamics" as const,
-      currentKnowledgePoint: "Maxwell 方程组",
+      currentKnowledgePoint: "Maxwell Equations",
     };
     const profile = updateLearningProfile(undefined, memory);
 
     expect(profile.courseFrequency.electrodynamics).toBe(1);
-    expect(profile.recentTopics).toContain("Maxwell 方程组");
+    expect(profile.recentTopics).toContain("Maxwell Equations");
     expect(JSON.stringify(profile)).not.toContain("messages");
   });
 });

@@ -79,20 +79,28 @@ export type ParsedExerciseRequest = {
   };
 };
 
+function normalizeSearchText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[‐‑‒–—-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function allCourseAliases() {
   return courseOptions
     .flatMap((course) =>
       [course.label, course.shortLabel, ...courseAliases[course.id]].map((alias) => ({
         course: course.id,
-        alias: alias.toLowerCase(),
+        alias: normalizeSearchText(alias),
       })),
     )
-    .filter((item) => item.alias.length >= 3)
+    .filter((item) => item.alias.length >= 2)
     .sort((a, b) => b.alias.length - a.alias.length);
 }
 
 export function detectCourseFromText(text: string) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeSearchText(text);
   const direct = allCourseAliases().find((item) => normalized.includes(item.alias));
 
   if (direct) {
@@ -102,25 +110,27 @@ export function detectCourseFromText(text: string) {
   return knowledgeItems.find(
     (item) =>
       normalized.includes(item.title.toLowerCase()) ||
-      item.alias?.some((alias) => normalized.includes(alias.toLowerCase())),
+      item.alias?.some((alias) => normalized.includes(normalizeSearchText(alias))),
   )?.course as Exclude<CourseId, "general"> | undefined;
 }
 
 export function detectKnowledgeFromText(text: string, course?: CourseId) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeSearchText(text);
 
   return knowledgeItems.find(
     (item) =>
       (!course || course === "general" || item.course === course) &&
-      (normalized.includes(item.title.toLowerCase()) ||
-        item.alias?.some((alias) => normalized.includes(alias.toLowerCase()))),
+      (normalized.includes(normalizeSearchText(item.title)) ||
+        item.alias?.some((alias) => normalized.includes(normalizeSearchText(alias)))),
   )?.id;
 }
 
 function detectCount(text: string) {
   const match =
     text.match(/(?:生成|出|给我)?\s*(3|5|10)\s*道/) ??
-    text.match(/\b(3|5|10)\s+(?:practice\s+)?(?:problem|problems|exercises)\b/i);
+    text.match(/\b(3|5|10)\s+(?:practice\s+)?(?:problem|problems|exercises)\b/i) ??
+    text.match(/\b(3|5|10)\b(?=.{0,100}\b(?:problem|problems|exercises)\b)/i);
+
   return match ? (Number(match[1]) as 3 | 5 | 10) : undefined;
 }
 
@@ -148,15 +158,19 @@ export function detectPracticeStyleFromText(text: string): PracticeStyleId | und
   if (/考研|postgraduate entrance exam/i.test(text)) {
     return "chinese-postgraduate-exam";
   }
+
   if (/期末|final exam/i.test(text)) {
     return "chinese-final-exam";
   }
+
   if (/mit|ocw|open[-\s]?course|problem[-\s]?set|assignment/i.test(text)) {
     return "open-course";
   }
+
   if (/english textbook|griffiths|sakurai|shankar|goldstein|jackson|schroeder/i.test(text)) {
     return "english-textbook";
   }
+
   if (/中文教材|课后题|教材课后|chinese textbook/i.test(text)) {
     return "chinese-textbook";
   }

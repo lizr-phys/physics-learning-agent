@@ -13,8 +13,16 @@ import {
 } from "@/components/common/MarkdownRenderer";
 import type { CourseId } from "@/types/learning";
 
+const hanTextPattern = /[\u3400-\u9fff]/u;
+
+function getVisibleEnglishItems(items: string[] = []) {
+  return items.filter((item) => !hanTextPattern.test(item));
+}
+
 function listText(items: string[]) {
-  return items.length ? items.join(" / ") : "None";
+  const visibleItems = getVisibleEnglishItems(items);
+
+  return visibleItems.length ? visibleItems.join(" / ") : "None";
 }
 
 export function KnowledgeMapExplorer() {
@@ -23,6 +31,10 @@ export function KnowledgeMapExplorer() {
   const [selectedId, setSelectedId] = useState(courseItems[0]?.id ?? "");
   const selectedItem = getKnowledgeItem(selectedId) ?? courseItems[0];
   const selectedCourse = courseOptions.find((item) => item.id === course);
+  const visibleAliases = getVisibleEnglishItems(selectedItem?.alias);
+  const visibleTypicalProblems = getVisibleEnglishItems(selectedItem?.typicalProblems);
+  const visibleMisunderstandings = getVisibleEnglishItems(selectedItem?.commonMisunderstandings);
+  const visibleTags = getVisibleEnglishItems(selectedItem?.tags);
 
   function selectCourse(nextCourse: CourseId) {
     const nextItems = getKnowledgeByCourse(nextCourse);
@@ -112,9 +124,9 @@ export function KnowledgeMapExplorer() {
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
                 {selectedItem.title}
               </h2>
-              {selectedItem.alias?.length ? (
+              {visibleAliases.length ? (
                 <p className="mt-2 text-xs leading-5 text-zinc-500">
-                  Aliases: {selectedItem.alias.join(" / ")}
+                  Aliases: {visibleAliases.join(" / ")}
                 </p>
               ) : null}
             </div>
@@ -160,7 +172,7 @@ export function KnowledgeMapExplorer() {
             <section>
               <h3 className="text-sm font-semibold text-zinc-950">Typical Problems</h3>
               <div className="mt-2 text-sm leading-6 text-zinc-600">
-                <MarkdownRenderer content={selectedItem.typicalProblems.map((problem) => `- ${problem}`).join("\n")} />
+                <MarkdownRenderer content={visibleTypicalProblems.map((problem) => `- ${problem}`).join("\n")} />
               </div>
             </section>
 
@@ -175,19 +187,19 @@ export function KnowledgeMapExplorer() {
               </section>
             ) : null}
 
-            {selectedItem.commonMisunderstandings?.length ? (
+            {visibleMisunderstandings.length ? (
               <section>
                 <h3 className="text-sm font-semibold text-zinc-950">Common Pitfalls</h3>
                 <div className="mt-2 text-sm leading-6 text-zinc-600">
                   <MarkdownRenderer
-                    content={selectedItem.commonMisunderstandings.map((item) => `- ${item}`).join("\n")}
+                    content={visibleMisunderstandings.map((item) => `- ${item}`).join("\n")}
                   />
                 </div>
               </section>
             ) : null}
 
             <div className="flex flex-wrap gap-2">
-              {selectedItem.tags.map((tag) => (
+              {visibleTags.map((tag) => (
                 <span key={tag} className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600">
                   {tag}
                 </span>

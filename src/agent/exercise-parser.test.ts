@@ -4,9 +4,7 @@ import { parseExerciseRequest } from "@/agent/exercise-parser";
 
 describe("exercise request parser", () => {
   it("infers course, knowledge, count and difficulty from natural language", () => {
-    const parsed = parseExerciseRequest(
-      "生成 10 道量子力学一维定态问题的提高练习题",
-    );
+    const parsed = parseExerciseRequest("生成 10 道量子力学一维定态问题的提高练习题");
 
     expect(parsed.detectedCourse).toBe("quantum-mechanics");
     expect(parsed.detectedKnowledgeId).toBe("one-dimensional-stationary");
@@ -24,5 +22,16 @@ describe("exercise request parser", () => {
       selectedCourse: "quantum-mechanics",
       detectedCourse: "electrodynamics",
     });
+  });
+
+  it("infers course and topic from English natural language", () => {
+    const parsed = parseExerciseRequest(
+      "Generate 3 basic quantum mechanics one-dimensional stationary-state practice problems.",
+    );
+
+    expect(parsed.detectedCourse).toBe("quantum-mechanics");
+    expect(parsed.detectedKnowledgeId).toBe("one-dimensional-stationary");
+    expect(parsed.count).toBe(3);
+    expect(parsed.difficulty).toBe("basic");
   });
 });
