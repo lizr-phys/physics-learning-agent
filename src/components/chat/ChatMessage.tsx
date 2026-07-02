@@ -42,7 +42,7 @@ export const ChatMessage = memo(function ChatMessage({
             />
           </div>
         ) : (
-          <div className="text-sm text-zinc-500">正在等待模型返回...</div>
+          <div className="text-sm text-zinc-500">Waiting for the model...</div>
         )}
       </div>
     </div>

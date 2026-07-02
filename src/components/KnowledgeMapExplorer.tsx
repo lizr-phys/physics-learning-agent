@@ -14,7 +14,7 @@ import {
 import type { CourseId } from "@/types/learning";
 
 function listText(items: string[]) {
-  return items.length ? items.join(" / ") : "无";
+  return items.length ? items.join(" / ") : "None";
 }
 
 export function KnowledgeMapExplorer() {
@@ -37,9 +37,9 @@ export function KnowledgeMapExplorer() {
   return (
     <div className="space-y-6 px-4 py-8 md:px-6">
       <section className="border-b border-zinc-200 pb-6">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">课程知识目录</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">Knowledge Map</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
-          知识库按国内大学物理专业本科课程组织。左侧选择课程，中间查看学习顺序，右侧展示定义、前置关系、题型、公式和易错点。
+          Browse the undergraduate physics knowledge structure. Select a course, inspect the topic sequence, and use the details panel for definitions, prerequisites, formulas, typical problems, and pitfalls.
         </p>
       </section>
 
@@ -47,7 +47,7 @@ export function KnowledgeMapExplorer() {
         <aside className="rounded-md border border-zinc-200 bg-white p-3">
           <div className="mb-2 flex items-center gap-2 px-2 py-1 text-sm font-semibold text-zinc-950">
             <Route size={15} />
-            课程
+            Course
           </div>
           <div className="space-y-1">
             {courseOptions.map((item) => {
@@ -66,7 +66,7 @@ export function KnowledgeMapExplorer() {
                 >
                   <span className="block font-medium">{item.label}</span>
                   <span className={active ? "text-xs text-zinc-300" : "text-xs text-zinc-500"}>
-                    {getKnowledgeByCourse(item.id).length} 个条目
+                    {getKnowledgeByCourse(item.id).length} topics
                   </span>
                 </button>
               );
@@ -114,29 +114,29 @@ export function KnowledgeMapExplorer() {
               </h2>
               {selectedItem.alias?.length ? (
                 <p className="mt-2 text-xs leading-5 text-zinc-500">
-                  别名：{selectedItem.alias.join(" / ")}
+                  Aliases: {selectedItem.alias.join(" / ")}
                 </p>
               ) : null}
             </div>
             <span className="w-fit rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600">
               {selectedItem.difficulty === "basic"
-                ? "基础"
+                ? "Basic"
                 : selectedItem.difficulty === "intermediate"
-                  ? "中等"
-                  : "提高"}
+                  ? "Intermediate"
+                  : "Advanced"}
             </span>
           </div>
 
           <div className="mt-5 grid gap-5">
             <section>
-              <h3 className="text-sm font-semibold text-zinc-950">简要定义</h3>
+              <h3 className="text-sm font-semibold text-zinc-950">Brief Definition</h3>
               <div className="mt-2 text-sm leading-6 text-zinc-600">
                 <MarkdownRenderer content={selectedItem.description} />
               </div>
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold text-zinc-950">教材式说明</h3>
+              <h3 className="text-sm font-semibold text-zinc-950">Textbook-Style Note</h3>
               <div className="mt-2 text-sm leading-6 text-zinc-600">
                 <MarkdownRenderer content={selectedItem.textbookStyleSummary} />
               </div>
@@ -144,13 +144,13 @@ export function KnowledgeMapExplorer() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-md border border-zinc-200 p-4">
-                <h3 className="text-sm font-semibold text-zinc-950">前置知识</h3>
+                <h3 className="text-sm font-semibold text-zinc-950">Prerequisites</h3>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   {listText(selectedItem.prerequisites)}
                 </p>
               </section>
               <section className="rounded-md border border-zinc-200 p-4">
-                <h3 className="text-sm font-semibold text-zinc-950">后续关联</h3>
+                <h3 className="text-sm font-semibold text-zinc-950">Related Topics</h3>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                   {listText(selectedItem.related)}
                 </p>
@@ -158,7 +158,7 @@ export function KnowledgeMapExplorer() {
             </div>
 
             <section>
-              <h3 className="text-sm font-semibold text-zinc-950">常见题型</h3>
+              <h3 className="text-sm font-semibold text-zinc-950">Typical Problems</h3>
               <div className="mt-2 text-sm leading-6 text-zinc-600">
                 <MarkdownRenderer content={selectedItem.typicalProblems.map((problem) => `- ${problem}`).join("\n")} />
               </div>
@@ -166,7 +166,7 @@ export function KnowledgeMapExplorer() {
 
             {selectedItem.keyFormulas?.length ? (
               <section>
-                <h3 className="text-sm font-semibold text-zinc-950">常用公式</h3>
+                <h3 className="text-sm font-semibold text-zinc-950">Key Formulas</h3>
                 <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 p-4">
                   <MarkdownRenderer
                     content={selectedItem.keyFormulas.map((formula) => ensureBlockMath(formula)).join("\n\n")}
@@ -177,7 +177,7 @@ export function KnowledgeMapExplorer() {
 
             {selectedItem.commonMisunderstandings?.length ? (
               <section>
-                <h3 className="text-sm font-semibold text-zinc-950">易错点</h3>
+                <h3 className="text-sm font-semibold text-zinc-950">Common Pitfalls</h3>
                 <div className="mt-2 text-sm leading-6 text-zinc-600">
                   <MarkdownRenderer
                     content={selectedItem.commonMisunderstandings.map((item) => `- ${item}`).join("\n")}
@@ -200,24 +200,24 @@ export function KnowledgeMapExplorer() {
                   course: selectedItem.course,
                   taskType: "explain",
                   knowledgePoint: selectedItem.id,
-                  prompt: `请解释「${selectedItem.title}」的定义、直观理解、数学表达、典型用途和易错点。`,
+                  prompt: `Explain the definition, intuition, mathematical expression, typical uses, and common pitfalls of ${selectedItem.title}.`,
                 })}
                 className="flex items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
               >
                 <Bot size={15} />
-                向 Agent 提问
+                Ask in Chat
               </Link>
               <Link
                 href={buildChatHref({
                   course: selectedItem.course,
                   taskType: "practice",
                   knowledgePoint: selectedItem.id,
-                  prompt: `请生成 5 道关于「${selectedItem.title}」的练习题，需要提示、详细解析和最终答案。`,
+                  prompt: `Generate 5 original practice problems on ${selectedItem.title}. Include hints, detailed solutions, and final answers.`,
                 })}
                 className="flex items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-800 hover:border-zinc-950"
               >
                 <PenLine size={15} />
-                生成练习题
+                Generate Practice
               </Link>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Settings, XCircle } from "lucide-react";
+
 import {
   clearLastApiError,
   getLastApiError,
@@ -27,8 +28,8 @@ type ApiStatus = {
 const modelOptions = [
   { id: "deepseek-v4-flash", label: "deepseek-v4-flash" },
   { id: "deepseek-v4-pro", label: "deepseek-v4-pro" },
-  { id: "deepseek-chat", label: "deepseek-chat（兼容名）" },
-  { id: "deepseek-reasoner", label: "deepseek-reasoner（兼容名）" },
+  { id: "deepseek-chat", label: "deepseek-chat (compatible alias)" },
+  { id: "deepseek-reasoner", label: "deepseek-reasoner (compatible alias)" },
 ];
 
 async function fetchApiStatus(mode: "status" | "test") {
@@ -54,7 +55,7 @@ export default function ApiSettingsPage() {
       setStatus({
         ok: false,
         status: "request-failed",
-        message: "无法读取 API 配置状态。",
+        message: "Unable to read API configuration status.",
         config: {
           configured: false,
           baseUrl: "https://api.deepseek.com",
@@ -94,7 +95,7 @@ export default function ApiSettingsPage() {
         setLastError(nextError);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "测试请求失败。";
+      const message = error instanceof Error ? error.message : "Connection test failed.";
       const nextError = {
         message,
         status: "request-failed",
@@ -126,19 +127,19 @@ export default function ApiSettingsPage() {
       <section className="border-b border-zinc-200 pb-6">
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
           <Settings size={16} />
-          API 设置
+          API Settings
         </div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950">
-          DeepSeek API 配置与测试
+          DeepSeek API Status
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">
-          API Key 只从服务端环境变量读取。这里可以查看配置状态、选择当前浏览器会话使用的模型，并测试服务端连接。
+          The API key is read only from server-side environment variables. This page shows configuration status, local model preference, and a server-side connection test.
         </p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="rounded-xl border border-zinc-200 bg-white p-5">
-          <h2 className="text-lg font-semibold text-zinc-950">当前状态</h2>
+          <h2 className="text-lg font-semibold text-zinc-950">Current Status</h2>
           <div className="mt-4 space-y-3 text-sm">
             <div className="flex items-center gap-2">
               {status?.ok ? (
@@ -146,37 +147,37 @@ export default function ApiSettingsPage() {
               ) : (
                 <XCircle size={16} className="text-zinc-500" />
               )}
-              <span>DeepSeek API：{status?.config.configured ? "已配置" : "未配置"}</span>
+              <span>DeepSeek API: {status?.config.configured ? "configured" : "not configured"}</span>
             </div>
-            <p className="text-zinc-600">当前服务端模型：{status?.config.model ?? "读取中..."}</p>
-            <p className="text-zinc-600">当前浏览器选择：{selectedModel}</p>
-            <p className="text-zinc-600">Base URL：{status?.config.baseUrl ?? "读取中..."}</p>
+            <p className="text-zinc-600">Server model: {status?.config.model ?? "Loading..."}</p>
+            <p className="text-zinc-600">Browser model preference: {selectedModel}</p>
+            <p className="text-zinc-600">Base URL: {status?.config.baseUrl ?? "Loading..."}</p>
             <p className="text-zinc-600">
-              响应模式：{status?.config.streaming ? "流式" : "非流式"}
+              Response mode: {status?.config.streaming ? "streaming" : "non-streaming"}
             </p>
-            <p className="text-zinc-600">Thinking：{status?.config.thinkingMode ?? "读取中..."}</p>
-            <p className="text-zinc-600">Timeout：{status?.config.timeoutMs ?? 120000} ms</p>
+            <p className="text-zinc-600">Thinking: {status?.config.thinkingMode ?? "Loading..."}</p>
+            <p className="text-zinc-600">Timeout: {status?.config.timeoutMs ?? 120000} ms</p>
           </div>
 
           <div className="mt-4 rounded-lg border border-zinc-200 p-4 text-sm">
-            <p className="font-medium text-zinc-950">最近一次 API 错误</p>
+            <p className="font-medium text-zinc-950">Last API Error</p>
             {lastError ? (
               <>
                 <p className="mt-2 leading-6 text-zinc-700">{lastError.message}</p>
                 <p className="mt-1 text-xs text-zinc-500">
                   {lastError.status ?? "unknown"} ·{" "}
-                  {new Date(lastError.occurredAt).toLocaleString("zh-CN")}
+                  {new Date(lastError.occurredAt).toLocaleString("en-US")}
                 </p>
               </>
             ) : (
-              <p className="mt-2 text-zinc-500">当前浏览器没有记录到 API 错误。</p>
+              <p className="mt-2 text-zinc-500">No API error is stored in this browser.</p>
             )}
           </div>
 
           <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
-            <p className="font-medium text-zinc-950">测试结果</p>
-            <p className="mt-2 leading-6">{status?.message ?? "正在读取配置状态..."}</p>
-            <p className="mt-1 text-xs text-zinc-500">状态码：{status?.status ?? "loading"}</p>
+            <p className="font-medium text-zinc-950">Connection Test Result</p>
+            <p className="mt-2 leading-6">{status?.message ?? "Reading configuration status..."}</p>
+            <p className="mt-1 text-xs text-zinc-500">Status: {status?.status ?? "loading"}</p>
           </div>
 
           <button
@@ -186,15 +187,15 @@ export default function ApiSettingsPage() {
             className="mt-5 flex h-10 items-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-medium text-white disabled:bg-zinc-400"
           >
             {isTesting ? <Loader2 size={16} className="animate-spin" /> : null}
-            {isTesting ? "测试中" : "测试连接"}
+            {isTesting ? "Testing..." : "Test connection"}
           </button>
         </section>
 
         <aside className="space-y-4">
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-zinc-950">模型选择</h2>
+            <h2 className="text-sm font-semibold text-zinc-950">Model Preference</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
-              选择结果保存在当前浏览器 localStorage。请求仍由服务端转发，不暴露 API Key。
+              The selection is stored in this browser&apos;s localStorage. Requests still go through the server and never expose the API key.
             </p>
             <select
               value={selectedModel}
@@ -210,24 +211,24 @@ export default function ApiSettingsPage() {
           </section>
 
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-zinc-950">.env.local 配置</h2>
+            <h2 className="text-sm font-semibold text-zinc-950">.env.local</h2>
             <pre className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs leading-6 text-zinc-700">
-{`DEEPSEEK_API_KEY=你的 API Key
+{`DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_TIMEOUT_MS=120000`}
             </pre>
             {!status?.config.configured ? (
               <p className="mt-3 text-xs leading-5 text-zinc-600">
-                请在项目根目录的 .env.local 中配置 DEEPSEEK_API_KEY，然后重新启动开发服务器。
+                Configure DEEPSEEK_API_KEY in `.env.local`, then restart the development server.
               </p>
             ) : null}
           </section>
 
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-zinc-950">使用引导</h2>
+            <h2 className="text-sm font-semibold text-zinc-950">First-Use Guide</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
-              可重新显示首次使用时的简短说明。
+              Reopen the short onboarding note shown on first use.
             </p>
             <button
               type="button"
@@ -237,14 +238,14 @@ DEEPSEEK_TIMEOUT_MS=120000`}
               }}
               className="mt-3 rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50"
             >
-              重新查看引导
+              Show guide again
             </button>
           </section>
 
           <section id="rag" className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-zinc-950">RAG 知识库</h2>
+            <h2 className="text-sm font-semibold text-zinc-950">RAG Notes</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
-              当前版本使用 `src/rag/sample-docs` 中的 Markdown 样例和关键词检索。后续可扩展为 PDF/讲义上传、embedding 和向量库。
+              The current prototype uses local Markdown samples in `src/rag/sample-docs` with simple keyword retrieval. It can later be extended to user-owned PDFs, lecture notes, embeddings, and a vector store.
             </p>
           </section>
         </aside>

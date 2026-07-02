@@ -65,18 +65,18 @@ export const ChatInput = memo(function ChatInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="输入物理概念、题型或推导问题..."
+        placeholder="Ask a physics concept, derivation, or practice question..."
         rows={1}
         className="max-h-36 min-h-16 w-full resize-none overflow-y-auto bg-transparent pb-7 pr-12 text-sm leading-6 text-zinc-950 outline-none md:max-h-[180px]"
         data-testid="chat-input"
       />
       <label className="absolute bottom-3 left-4 flex items-center gap-2 text-xs text-zinc-500">
-        <span className="hidden sm:inline">回答深度</span>
+        <span className="hidden sm:inline">Depth</span>
         <select
           value={answerDepth}
           onChange={(event) => onAnswerDepthChange(event.target.value as AnswerDepth)}
           className="rounded-md border-0 bg-transparent py-1 pr-1 text-xs text-zinc-600 outline-none hover:text-zinc-950"
-          aria-label="回答深度"
+          aria-label="Answer depth"
         >
           {answerDepthOptions.map((option) => (
             <option key={option.id} value={option.id}>
@@ -90,7 +90,7 @@ export const ChatInput = memo(function ChatInput({
         disabled={!isLoading && !value.trim()}
         onClick={isLoading ? onStop : onSubmit}
         className="absolute bottom-3 right-3 flex size-9 items-center justify-center rounded-full bg-[#111111] text-white disabled:bg-zinc-300"
-        aria-label={isLoading ? "停止生成" : "发送"}
+        aria-label={isLoading ? "Stop generation" : "Send"}
         data-testid={isLoading ? "stop-generation" : "send-message"}
       >
         {isLoading ? (

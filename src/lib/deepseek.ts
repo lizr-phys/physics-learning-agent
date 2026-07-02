@@ -3,7 +3,7 @@ import "server-only";
 import { getModelConfig } from "@/agent/model-config";
 import { getResponseSuffix } from "@/agent/response-post-processor";
 import { buildUserPrompt, PHYSICS_TUTOR_SYSTEM_PROMPT } from "@/lib/prompt-builder";
-import type { AgentIntent, AgentRequest, ChatMessage } from "@/types/learning";
+import type { AgentIntent, AgentRequest, ChatMessage, DetectedLanguage } from "@/types/learning";
 
 type DeepSeekRole = "system" | "user" | "assistant";
 
@@ -46,7 +46,12 @@ const allowedModels = new Set([
 export class DeepSeekError extends Error {
   constructor(
     message: string,
-    public code: "missing-key" | "request-failed" | "empty-response" | "network-error" | "timeout",
+    public code:
+      | "missing-key"
+      | "request-failed"
+      | "empty-response"
+      | "network-error"
+      | "timeout",
     public status = 500,
   ) {
     super(message);
@@ -82,7 +87,7 @@ function getConfig() {
 
   if (!apiKey) {
     throw new DeepSeekError(
-      "DeepSeek API Key 未配置。请在 .env.local 中设置 DEEPSEEK_API_KEY。",
+      "DeepSeek API key is not configured. Please set DEEPSEEK_API_KEY in .env.local.",
       "missing-key",
       500,
     );
@@ -169,6 +174,7 @@ function transformDeepSeekStream(
   body: ReadableStream<Uint8Array>,
   onClose: () => void,
   intent: AgentIntent,
+  language: DetectedLanguage,
 ) {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -222,11 +228,14 @@ function transformDeepSeekStream(
         } else if (!reachedTerminalSignal && emittedContent.trim()) {
           controller.enqueue(
             encoder.encode(
-              encodeStreamEvent("error", "上游连接在返回完成标记前结束。"),
+              encodeStreamEvent(
+                "error",
+                "The upstream connection ended before a completion marker was received.",
+              ),
             ),
           );
         } else {
-          const suffix = getResponseSuffix(intent);
+          const suffix = getResponseSuffix(intent, language);
 
           if (suffix && !emittedContent.trimEnd().endsWith(suffix)) {
             controller.enqueue(encoder.encode(`\n\n${suffix}`));
@@ -271,7 +280,7 @@ async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: Abo
   if (!response.ok) {
     const errorText = await response.text();
     throw new DeepSeekError(
-      `DeepSeek 请求失败：${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+      `DeepSeek request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
       "request-failed",
       response.status,
     );
@@ -289,7 +298,7 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
 
     if (!response.body) {
       abort.clear();
-      throw new DeepSeekError("DeepSeek 返回内容为空。", "empty-response", 502);
+      throw new DeepSeekError("DeepSeek returned an empty response.", "empty-response", 502);
     }
 
     // The timeout only protects connection establishment. Once streaming starts,
@@ -299,6 +308,7 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
       response.body,
       abort.clear,
       input.intent ?? "general_question",
+      input.detectedLanguage ?? "en",
     );
   } catch (error) {
     abort.clear();
@@ -308,11 +318,17 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new DeepSeekError("DeepSeek 请求超时，请缩短问题或稍后重试。", "timeout", 504);
+      throw new DeepSeekError(
+        "DeepSeek request timed out. Please shorten the request or try again later.",
+        "timeout",
+        504,
+      );
     }
 
     throw new DeepSeekError(
-      error instanceof Error ? `网络错误：${error.message}` : "网络错误：DeepSeek 请求未完成。",
+      error instanceof Error
+        ? `Network error: ${error.message}`
+        : "Network error: the DeepSeek request did not complete.",
       "network-error",
       502,
     );
@@ -329,7 +345,7 @@ export async function askDeepSeek(input: AgentRequest) {
     const content = data.choices?.[0]?.message?.content?.trim();
 
     if (!content) {
-      throw new DeepSeekError("DeepSeek 返回内容为空。", "empty-response", 502);
+      throw new DeepSeekError("DeepSeek returned an empty response.", "empty-response", 502);
     }
 
     return content;
@@ -339,11 +355,17 @@ export async function askDeepSeek(input: AgentRequest) {
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new DeepSeekError("DeepSeek 请求超时，请缩短问题或稍后重试。", "timeout", 504);
+      throw new DeepSeekError(
+        "DeepSeek request timed out. Please shorten the request or try again later.",
+        "timeout",
+        504,
+      );
     }
 
     throw new DeepSeekError(
-      error instanceof Error ? `网络错误：${error.message}` : "网络错误：DeepSeek 请求未完成。",
+      error instanceof Error
+        ? `Network error: ${error.message}`
+        : "Network error: the DeepSeek request did not complete.",
       "network-error",
       502,
     );

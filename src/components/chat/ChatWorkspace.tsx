@@ -21,6 +21,7 @@ import {
 import { courseOptions } from "@/data/courses";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import { detectLanguage } from "@/lib/language";
 import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
@@ -99,12 +100,12 @@ type PendingContinuation = {
 type SessionContextSnapshot = StoredChatSession["context"];
 
 function buildContinuationMessage(originalMessage: string, partialContent: string) {
-  return `上一段回答在以下位置中断。请不要重复已经写过的内容，从中断处继续完成回答，保持原来的结构、编号、符号和 LaTeX 格式。
+  return `The previous answer stopped at the following point. Do not repeat existing content. Continue from the interruption point while preserving the structure, numbering, notation, language, and LaTeX format.
 
-用户原始问题：
+Original user request:
 ${originalMessage}
 
-已生成内容：
+Generated content:
 ${partialContent}`;
 }
 
@@ -587,7 +588,7 @@ export function ChatWorkspace() {
           requestError instanceof AgentStreamError
             ? requestError
             : new AgentStreamError(
-                requestError instanceof Error ? requestError.message : "请求失败。",
+                requestError instanceof Error ? requestError.message : "Request failed.",
               );
         const partialContent = options.appendToExistingAssistant
           ? `${options.existingAssistantContent ?? ""}${streamError.partialContent}`
@@ -627,8 +628,8 @@ export function ChatWorkspace() {
 
         if (currentSessionIdRef.current === options.targetSessionId) {
           const message = isAbortLikeError(streamError)
-            ? "已停止生成。当前内容已保留，可继续生成。"
-            : streamError.message || "请求失败。";
+            ? "Generation stopped. The current content has been preserved and can be continued."
+            : streamError.message || "Request failed.";
           setError(message);
           saveLastApiError({
             message,
@@ -693,6 +694,7 @@ export function ChatWorkspace() {
     const assistantMessageId = createMessageId("assistant");
     const requestId = createMessageId("request");
     const nextMessages: ChatMessage[] = [...messages, userMessage];
+    const detectedLanguage = detectLanguage(message, memory.recentLanguage ?? "en");
     const initialMessages = withAssistantMessage(
       nextMessages,
       assistantMessageId,
@@ -707,6 +709,9 @@ export function ChatWorkspace() {
       model: model || undefined,
       useRag,
       answerDepth,
+      detectedLanguage,
+      practiceStyle: memory.practiceStyle,
+      referenceProfile: memory.referenceProfile,
     };
     const toolContextSnapshot = toolContext;
     const intent = classifyAgentIntent({
@@ -724,9 +729,12 @@ export function ChatWorkspace() {
         taskType,
         knowledgePoint: knowledgePoint || undefined,
         toolContext,
+        detectedLanguage,
       },
       intent,
     );
+    contextSnapshot.practiceStyle = memorySnapshot.practiceStyle;
+    contextSnapshot.referenceProfile = memorySnapshot.referenceProfile;
     saveStoredLearningProfile(
       updateLearningProfile(getStoredLearningProfile(), memorySnapshot),
     );
@@ -743,6 +751,9 @@ export function ChatWorkspace() {
       model: model || undefined,
       memory: memorySnapshot,
       answerDepth,
+      detectedLanguage: memorySnapshot.recentLanguage,
+      practiceStyle: memorySnapshot.practiceStyle,
+      referenceProfile: memorySnapshot.referenceProfile,
       conversationId: targetSessionId,
       assistantMessageId,
       requestId,
@@ -823,6 +834,9 @@ export function ChatWorkspace() {
       requestId: createMessageId("request"),
       memory,
       answerDepth,
+      detectedLanguage: memory.recentLanguage,
+      practiceStyle: memory.practiceStyle,
+      referenceProfile: memory.referenceProfile,
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,
@@ -831,6 +845,9 @@ export function ChatWorkspace() {
       model: model || undefined,
       useRag,
       answerDepth,
+      detectedLanguage: memory.recentLanguage,
+      practiceStyle: memory.practiceStyle,
+      referenceProfile: memory.referenceProfile,
     };
 
     await runAssistantRequest({
@@ -974,7 +991,7 @@ export function ChatWorkspace() {
                 disabled={isCurrentSessionGenerating}
                 className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
               >
-                继续生成
+                Continue generation
               </button>
               <button
                 type="button"
@@ -982,7 +999,7 @@ export function ChatWorkspace() {
                 disabled={isCurrentSessionGenerating}
                 className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
               >
-                重新生成
+                Regenerate
               </button>
             </div>
           ) : null}
@@ -997,7 +1014,7 @@ export function ChatWorkspace() {
         >
           <span className="flex items-center gap-1">
             <ArrowDown size={14} />
-            回到底部
+             Back to bottom
           </span>
         </button>
       ) : null}
@@ -1017,7 +1034,7 @@ export function ChatWorkspace() {
             }}
           />
           <p className="mt-2 text-center text-xs text-zinc-500">
-            回答由 DeepSeek 生成，公式与推导请结合教材核对。
+            Responses are generated by DeepSeek. Check formulas and derivations against your course materials.
           </p>
         </form>
       </footer>

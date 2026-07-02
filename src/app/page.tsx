@@ -7,7 +7,7 @@ export default function HomePage() {
     <Suspense
       fallback={
         <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-          正在加载学习工作台...
+          Loading learning workspace...
         </div>
       }
     >

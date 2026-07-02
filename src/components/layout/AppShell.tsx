@@ -26,14 +26,14 @@ export function AppShell({ children }: AppShellProps) {
           <button
             type="button"
             className="absolute inset-0 bg-black/20"
-            aria-label="关闭侧边栏遮罩"
+            aria-label="Close sidebar overlay"
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative h-full">
             <button
               type="button"
               className="absolute right-3 top-3 z-10 rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm"
-              aria-label="关闭侧边栏"
+              aria-label="Close sidebar"
               onClick={() => setSidebarOpen(false)}
             >
               <X size={18} />
@@ -47,7 +47,7 @@ export function AppShell({ children }: AppShellProps) {
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-200 px-4 md:hidden">
           <button
             type="button"
-            aria-label="打开侧边栏"
+            aria-label="Open sidebar"
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg border border-zinc-200 p-2 text-zinc-700"
           >

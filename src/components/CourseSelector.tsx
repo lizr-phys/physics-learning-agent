@@ -13,7 +13,7 @@ type CourseSelectorProps = {
 export function CourseSelector({
   value,
   onChange,
-  label = "课程",
+  label = "Course",
   placeholder,
 }: CourseSelectorProps) {
   return (

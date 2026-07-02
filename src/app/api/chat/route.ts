@@ -13,8 +13,12 @@ import {
   type DifficultyId,
   type LearningMemory,
   type PracticeOutputMode,
+  type PracticeStyleId,
+  type DetectedLanguage,
+  type ReferenceProfileId,
   type TaskTypeId,
   type ToolContext,
+  practiceStyleOptions,
 } from "@/types/learning";
 import { courseOptions } from "@/data/courses";
 
@@ -45,6 +49,9 @@ const practiceOutputModes = new Set<PracticeOutputMode>([
   "full-solution",
   "hidden-answer",
 ]);
+const practiceStyles = new Set<PracticeStyleId>(practiceStyleOptions.map((item) => item.id));
+const detectedLanguages = new Set<DetectedLanguage>(["zh", "en"]);
+const referenceProfiles = new Set<ReferenceProfileId>(["auto", "chinese", "english"]);
 const modelIds = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
 
 function asString(value: unknown) {
@@ -166,6 +173,15 @@ function sanitizeLearningMemory(value: unknown): LearningMemory | undefined {
       preferredStyle === "step-by-step" || preferredStyle === "concise"
         ? preferredStyle
         : "balanced",
+    recentLanguage: detectedLanguages.has(asString(record.recentLanguage) as DetectedLanguage)
+      ? (asString(record.recentLanguage) as DetectedLanguage)
+      : undefined,
+    practiceStyle: practiceStyles.has(asString(record.practiceStyle) as PracticeStyleId)
+      ? (asString(record.practiceStyle) as PracticeStyleId)
+      : undefined,
+    referenceProfile: referenceProfiles.has(asString(record.referenceProfile) as ReferenceProfileId)
+      ? (asString(record.referenceProfile) as ReferenceProfileId)
+      : undefined,
     conversationSummary:
       trimToLength(asString(record.conversationSummary), 2000) || undefined,
     updatedAt:
@@ -186,6 +202,9 @@ function sanitizeRequest(body: unknown): AgentRequest {
   const intent = asString(record.intent);
   const answerDepth = asString(record.answerDepth);
   const practiceOutputMode = asString(record.practiceOutputMode);
+  const practiceStyle = asString(record.practiceStyle);
+  const detectedLanguage = asString(record.detectedLanguage);
+  const referenceProfile = asString(record.referenceProfile);
   const parsedCount = Number(record.exerciseCount);
 
   return {
@@ -217,6 +236,15 @@ function sanitizeRequest(body: unknown): AgentRequest {
     practiceOutputMode: practiceOutputModes.has(practiceOutputMode as PracticeOutputMode)
       ? (practiceOutputMode as PracticeOutputMode)
       : undefined,
+    practiceStyle: practiceStyles.has(practiceStyle as PracticeStyleId)
+      ? (practiceStyle as PracticeStyleId)
+      : undefined,
+    detectedLanguage: detectedLanguages.has(detectedLanguage as DetectedLanguage)
+      ? (detectedLanguage as DetectedLanguage)
+      : undefined,
+    referenceProfile: referenceProfiles.has(referenceProfile as ReferenceProfileId)
+      ? (referenceProfile as ReferenceProfileId)
+      : undefined,
     conversationId: trimToLength(asString(record.conversationId), 160) || undefined,
     assistantMessageId: trimToLength(asString(record.assistantMessageId), 160) || undefined,
     requestId: trimToLength(asString(record.requestId), 160) || undefined,
@@ -229,7 +257,7 @@ export async function POST(request: Request) {
     const input = sanitizeRequest(body);
 
     if (!input.message) {
-      return NextResponse.json({ error: "请输入要提问或生成的内容。" }, { status: 400 });
+      return NextResponse.json({ error: "Please enter a question or generation request." }, { status: 400 });
     }
 
     const prepared = await prepareAgentRequest(input);
@@ -248,13 +276,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: "请求体不是有效 JSON。" }, { status: 400 });
+      return NextResponse.json({ error: "The request body is not valid JSON." }, { status: 400 });
     }
 
     if (error instanceof DeepSeekError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
 
-    return NextResponse.json({ error: "服务端处理请求时发生未知错误。" }, { status: 500 });
+    return NextResponse.json({ error: "The server failed to process the request." }, { status: 500 });
   }
 }

@@ -7,7 +7,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="rounded-md border border-zinc-200 bg-white p-8 text-sm text-zinc-500">
-          正在加载学习 Agent...
+          Loading Physics Learning Agent...
         </div>
       }
     >

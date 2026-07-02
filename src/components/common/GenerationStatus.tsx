@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import type { AgentModule, TaskTypeId } from "@/types/learning";
 
 const stages: Record<string, string[]> = {
-  practice: ["正在构造题目条件...", "正在生成提示与解析...", "正在检查公式格式..."],
-  derivation: ["正在确认推导前提...", "正在生成推导步骤...", "正在检查符号一致性..."],
-  chat: ["正在组织回答...", "正在补充必要解释...", "正在检查表达与公式..."],
+  practice: ["Building problem conditions...", "Generating hints and solutions...", "Checking formula format..."],
+  derivation: ["Checking assumptions...", "Writing derivation steps...", "Checking notation consistency..."],
+  chat: ["Organizing the answer...", "Adding necessary explanation...", "Checking notation and formulas..."],
 };
 
 type GenerationStatusProps = {

@@ -45,12 +45,16 @@ export function buildConversationSummary(
     .map((message) => message.content.replace(/\s+/g, " ").trim().slice(0, 180));
 
   const parts = [
-    memory?.currentGoal ? `当前目标：${memory.currentGoal}` : "",
-    memory?.currentKnowledgePoint ? `当前知识点：${memory.currentKnowledgePoint}` : "",
-    memory?.recentConfusions.length
-      ? `最近困惑：${memory.recentConfusions.slice(-3).join("；")}`
+    memory?.currentGoal ? `Current goal: ${memory.currentGoal}` : "",
+    memory?.currentKnowledgePoint
+      ? `Current topic: ${memory.currentKnowledgePoint}`
       : "",
-    userMessages.length ? `最近问题：${userMessages.join("；")}` : "",
+    memory?.recentConfusions.length
+      ? `Recent confusions: ${memory.recentConfusions.slice(-3).join("; ")}`
+      : "",
+    memory?.recentLanguage ? `Recent language: ${memory.recentLanguage}` : "",
+    memory?.practiceStyle ? `Practice style: ${memory.practiceStyle}` : "",
+    userMessages.length ? `Recent user questions: ${userMessages.join("; ")}` : "",
   ].filter(Boolean);
 
   return parts.join("\n").slice(0, 1800);

@@ -16,46 +16,55 @@ import { ErrorMessage } from "@/components/ErrorMessage";
 import { GenerationStatus } from "@/components/common/GenerationStatus";
 import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import { PracticeResultList } from "@/components/practice/PracticeResultList";
+import type { RecommendationItem } from "@/data/recommendations";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
-import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
 import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
 } from "@/lib/preferences";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
+import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
+import { getPersonalizedRecommendations } from "@/lib/recommendations";
 import {
   getStoredLearningProfile,
   getStoredSessions,
   saveStoredLearningProfile,
   upsertToolContextSession,
 } from "@/lib/storage";
-import { getPersonalizedRecommendations } from "@/lib/recommendations";
-import type { RecommendationItem } from "@/data/recommendations";
 import {
-  difficultyOptions,
   answerDepthOptions,
+  difficultyOptions,
   practiceOutputModeOptions,
+  practiceStyleOptions,
+  type AgentRequest,
   type AnswerDepth,
   type CourseId,
+  type DetectedLanguage,
   type DifficultyId,
-  type AgentRequest,
   type PracticeOutputMode,
+  type PracticeStyleId,
   type ToolContext,
 } from "@/types/learning";
 
 const config = {
   taskType: "practice" as const,
   source: "practice" as const,
-  title: "练习题生成",
+  title: "Practice Problems",
   description:
-    "选择课程、知识点、难度和数量，生成贴近国内物理专业课后习题风格的原创变式题。",
-  submitLabel: "生成练习题",
-  inputLabel: "补充要求",
-  placeholder: "例如：偏重边界条件分析，题目从基础到综合递进。",
-  emptyOutput: "生成结果会显示在这里，支持 Markdown 和 LaTeX 公式。",
+    "Generate original physics practice problems from a selected course, topic, difficulty, count, and source-style profile. The agent adapts between Chinese and English problem traditions based on the request.",
+  submitLabel: "Generate problems",
+  inputLabel: "Additional requirements",
+  placeholder:
+    "Examples: open-course problem-set style on electrostatic boundary-value problems; Chinese final-exam style on separation of variables.",
+  emptyOutput:
+    "Generated problems will appear here. Markdown, LaTeX, tables, and long formulas are supported.",
 };
+
+function languageLabel(language?: DetectedLanguage) {
+  return language === "zh" ? "Chinese" : "English";
+}
 
 export function AgentGenerator() {
   const router = useRouter();
@@ -65,6 +74,7 @@ export function AgentGenerator() {
   const [exerciseCount, setExerciseCount] = useState<3 | 5 | 10>(5);
   const [practiceOutputMode, setPracticeOutputMode] =
     useState<PracticeOutputMode>("hidden-answer");
+  const [practiceStyle, setPracticeStyle] = useState<PracticeStyleId>("auto");
   const [answerDepth, setAnswerDepth] = useState<AnswerDepth>(() =>
     getStoredAnswerDepth(),
   );
@@ -126,41 +136,40 @@ export function AgentGenerator() {
       (knowledge) =>
         item.prompt.includes(knowledge.title) ||
         item.knowledgeTitle?.includes(knowledge.title) ||
-        knowledge.alias?.some((alias) => item.prompt.includes(alias)),
+        knowledge.alias?.some((alias) => item.prompt.toLowerCase().includes(alias.toLowerCase())),
     );
 
     setKnowledgePoint(matchedKnowledge?.id ?? "");
     setExtraInput(item.prompt);
   }
 
-  function buildMessage(options?: {
+  function buildMessage(options: {
+    resolvedCourse: CourseId;
     resolvedKnowledgePoint?: string;
-    resolvedDifficulty?: DifficultyId;
-    resolvedCount?: 3 | 5 | 10;
+    resolvedDifficulty: DifficultyId;
+    resolvedCount: 3 | 5 | 10;
+    resolvedLanguage: DetectedLanguage;
+    resolvedPracticeStyle: PracticeStyleId;
   }) {
-    const resolvedKnowledgeTitle = getKnowledgeTitle(
-      options?.resolvedKnowledgePoint ?? knowledgePoint,
-    );
-    const targetTitle = extraInput.trim() || resolvedKnowledgeTitle;
-    const requestedDifficulty = options?.resolvedDifficulty ?? difficulty;
-    const requestedCount = options?.resolvedCount ?? exerciseCount;
-
-    const outputInstruction: Record<PracticeOutputMode, string> = {
-      "questions-only": "每道题只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。",
-      "questions-hints": "每道题输出题目与解题提示，不要输出详细解析或最终答案。",
-      "full-solution": "每道题输出提示、详细解析和最终答案。",
-      "hidden-answer":
-        "每道题输出提示、详细解析和最终答案；前端会默认折叠解析和答案。",
-    };
+    const resolvedKnowledgeTitle = getKnowledgeTitle(options.resolvedKnowledgePoint ?? "");
+    const targetTitle = extraInput.trim() || resolvedKnowledgeTitle || getCourseLabel(options.resolvedCourse);
+    const difficultyLabel =
+      difficultyOptions.find((item) => item.id === options.resolvedDifficulty)?.label ??
+      "Intermediate";
+    const styleLabel =
+      practiceStyleOptions.find((item) => item.id === options.resolvedPracticeStyle)?.label ??
+      "Auto";
 
     return [
-      `请生成 ${requestedCount} 道关于「${targetTitle}」的原创练习题。`,
-      `难度要求：${difficultyOptions.find((item) => item.id === requestedDifficulty)?.label ?? "中等"}。`,
-      "题目风格：仿国内物理专业教材课后习题风格的原创变式题，不能照搬或声称来自具体教材。",
-      "每道题要有明确训练目标，条件完整，符号清楚；涉及边值、本征值、规范、归一化、系综等问题时必须给出必要条件。",
-      "公式统一使用 $...$ 或 $$...$$，不要用代码块包裹公式。",
-      outputInstruction[practiceOutputMode],
-      extraInput && selectedKnowledgeTitle ? `补充要求：${extraInput}` : "",
+      `Generate ${options.resolvedCount} original practice problems on: ${targetTitle}.`,
+      `Course: ${getCourseLabel(options.resolvedCourse)}.`,
+      resolvedKnowledgeTitle ? `Selected topic: ${resolvedKnowledgeTitle}.` : "",
+      `Requested difficulty: ${difficultyLabel}.`,
+      `Requested output language: ${languageLabel(options.resolvedLanguage)}.`,
+      `Requested source style: ${styleLabel}.`,
+      "Use the reference profile only as a style and training convention. Do not copy textbook, exam, MIT OCW, or open-course problem statements.",
+      "Use Markdown. Use $...$ and $$...$$ for formulas; do not wrap formulas in code blocks.",
+      extraInput.trim() ? `User's additional requirements:\n${extraInput.trim()}` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -177,7 +186,7 @@ export function AgentGenerator() {
 
     if (parsed.conflict) {
       setError(
-        `课程信息存在冲突：当前选择“${getCourseLabel(parsed.conflict.selectedCourse)}”，但输入中识别到“${getCourseLabel(parsed.conflict.detectedCourse)}”。请修改课程选择或补充要求后再生成。`,
+        `Course conflict: the selected course is "${getCourseLabel(parsed.conflict.selectedCourse)}", but the request appears to mention "${getCourseLabel(parsed.conflict.detectedCourse)}". Please adjust the course or clarify the request.`,
       );
       return;
     }
@@ -186,14 +195,17 @@ export function AgentGenerator() {
     const resolvedKnowledgePoint = knowledgePoint || parsed.detectedKnowledgeId || "";
     const resolvedDifficulty = parsed.difficulty ?? difficulty;
     const resolvedCount = parsed.count ?? exerciseCount;
+    const resolvedLanguage = parsed.language ?? "en";
+    const resolvedPracticeStyle =
+      practiceStyle !== "auto" ? practiceStyle : parsed.practiceStyle ?? "auto";
 
     if (!resolvedCourse) {
-      setError("请先选择课程，或在需求中明确写出课程名称。");
+      setError("Please select a course, or mention a course clearly in the request.");
       return;
     }
 
     if (!resolvedKnowledgePoint && !extraInput.trim()) {
-      setError(`请选择知识点，或输入一个明确的${config.inputLabel}。`);
+      setError("Please select a topic, or enter a clear practice request.");
       return;
     }
 
@@ -201,6 +213,7 @@ export function AgentGenerator() {
     setKnowledgePoint(resolvedKnowledgePoint);
     setDifficulty(resolvedDifficulty);
     setExerciseCount(resolvedCount);
+    setPracticeStyle(resolvedPracticeStyle);
 
     setIsLoading(true);
     setError("");
@@ -211,26 +224,32 @@ export function AgentGenerator() {
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
+    const message = buildMessage({
+      resolvedCourse,
+      resolvedKnowledgePoint,
+      resolvedDifficulty,
+      resolvedCount,
+      resolvedLanguage,
+      resolvedPracticeStyle,
+    });
+    const baseRequest: AgentRequest = {
+      message,
+      module: "practice",
+      course: resolvedCourse,
+      taskType: config.taskType,
+      knowledgePoint: resolvedKnowledgePoint || undefined,
+      difficulty: resolvedDifficulty,
+      exerciseCount: resolvedCount,
+      includeAnswer,
+      includeHint,
+      includeSolution,
+      practiceOutputMode,
+      practiceStyle: resolvedPracticeStyle,
+      detectedLanguage: resolvedLanguage,
+      answerDepth,
+    };
+
     try {
-      const message = buildMessage({
-        resolvedKnowledgePoint,
-        resolvedDifficulty,
-        resolvedCount,
-      });
-      const baseRequest: AgentRequest = {
-        message,
-        module: "practice",
-        course: resolvedCourse,
-        taskType: config.taskType,
-        knowledgePoint: resolvedKnowledgePoint || undefined,
-        difficulty: resolvedDifficulty,
-        exerciseCount: resolvedCount,
-        includeAnswer,
-        includeHint,
-        includeSolution,
-        practiceOutputMode,
-        answerDepth,
-      };
       const intent = classifyAgentIntent(baseRequest);
       const memory = updateLearningMemory(createLearningMemory(), baseRequest, intent);
       saveStoredLearningProfile(
@@ -240,6 +259,7 @@ export function AgentGenerator() {
         ...baseRequest,
         intent,
         memory,
+        referenceProfile: memory.referenceProfile,
       };
 
       await requestAgentStream(
@@ -256,34 +276,17 @@ export function AgentGenerator() {
       const streamError =
         requestError instanceof AgentStreamError
           ? requestError
-          : new AgentStreamError(requestError instanceof Error ? requestError.message : "请求失败。");
+          : new AgentStreamError(requestError instanceof Error ? requestError.message : "Request failed.");
 
       if (streamError.partialContent) {
         setContent(streamError.partialContent);
       }
 
-      setPendingRequest({
-        message: buildMessage({
-          resolvedKnowledgePoint,
-          resolvedDifficulty,
-          resolvedCount,
-        }),
-        module: "practice",
-        course: resolvedCourse,
-        taskType: config.taskType,
-        knowledgePoint: resolvedKnowledgePoint || undefined,
-        difficulty: resolvedDifficulty,
-        exerciseCount: resolvedCount,
-        includeAnswer,
-        includeHint,
-        includeSolution,
-        practiceOutputMode,
-        answerDepth,
-      });
-      const message = streamError.message || "生成中断，已保留当前内容。";
-      setError(message);
+      setPendingRequest(baseRequest);
+      const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
+      setError(messageText);
       saveLastApiError({
-        message,
+        message: messageText,
         status: streamError.reason,
         occurredAt: Date.now(),
       });
@@ -309,12 +312,12 @@ export function AgentGenerator() {
     try {
       const continuationRequest: AgentRequest = {
         ...pendingRequest,
-        message: `上一段回答在以下位置中断。请不要重复已经写过的内容，从中断处继续完成回答，保持原来的结构、编号、符号和 LaTeX 格式。
+        message: `The previous output stopped at the following point. Do not repeat existing content. Continue from the interruption point, preserving the original structure, numbering, language, notation, and LaTeX format.
 
-用户原始请求：
+Original request:
 ${pendingRequest.message}
 
-已生成内容：
+Generated content:
 ${existingContent}`,
       };
       const continuation = await requestAgentStream(
@@ -334,16 +337,16 @@ ${existingContent}`,
       const streamError =
         requestError instanceof AgentStreamError
           ? requestError
-          : new AgentStreamError(requestError instanceof Error ? requestError.message : "请求失败。");
+          : new AgentStreamError(requestError instanceof Error ? requestError.message : "Request failed.");
 
       if (streamError.partialContent) {
         setContent(`${existingContent}${streamError.partialContent}`);
       }
 
-      const message = streamError.message || "生成中断，已保留当前内容。";
-      setError(message);
+      const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
+      setError(messageText);
       saveLastApiError({
-        message,
+        message: messageText,
         status: streamError.reason,
         occurredAt: Date.now(),
       });
@@ -380,17 +383,17 @@ ${existingContent}`,
         requestError instanceof AgentStreamError
           ? requestError
           : new AgentStreamError(
-              requestError instanceof Error ? requestError.message : "请求失败。",
+              requestError instanceof Error ? requestError.message : "Request failed.",
             );
 
       if (streamError.partialContent) {
         setContent(streamError.partialContent);
       }
 
-      const message = streamError.message || "生成中断，已保留当前内容。";
-      setError(message);
+      const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
+      setError(messageText);
       saveLastApiError({
-        message,
+        message: messageText,
         status: streamError.reason,
         occurredAt: Date.now(),
       });
@@ -418,7 +421,14 @@ ${existingContent}`,
       knowledgeTitle: selectedKnowledgeTitle || undefined,
       topic,
       taskTitle: config.title,
-      userInput: buildMessage(),
+      userInput: buildMessage({
+        resolvedCourse: course,
+        resolvedKnowledgePoint: knowledgePoint,
+        resolvedDifficulty: difficulty,
+        resolvedCount: exerciseCount,
+        resolvedLanguage: pendingRequest?.detectedLanguage ?? "en",
+        resolvedPracticeStyle: practiceStyle,
+      }),
       generatedContent: content,
       selectedItem,
       createdAt: generatedAtRef.current || 0,
@@ -432,6 +442,9 @@ ${existingContent}`,
         knowledgePoint: knowledgePoint || undefined,
         useRag: false,
         answerDepth,
+        practiceStyle,
+        detectedLanguage: pendingRequest?.detectedLanguage,
+        referenceProfile: pendingRequest?.referenceProfile,
       },
     });
 
@@ -459,7 +472,7 @@ ${existingContent}`,
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <CourseSelector
             value={course}
-            placeholder="请选择课程"
+            placeholder="Select a course"
             onChange={(nextCourse) => {
               setCourse(nextCourse);
               setKnowledgePoint("");
@@ -468,7 +481,7 @@ ${existingContent}`,
           />
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
-            <span>知识点</span>
+            <span>Topic</span>
             <select
               value={knowledgePoint}
               onChange={(event) => setKnowledgePoint(event.target.value)}
@@ -476,7 +489,7 @@ ${existingContent}`,
               className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
               data-testid="knowledge-selector"
             >
-              <option value="">{course ? "请选择知识点" : "请先选择课程"}</option>
+              <option value="">{course ? "Select a topic" : "Select a course first"}</option>
               {knowledgeOptions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title}
@@ -487,7 +500,7 @@ ${existingContent}`,
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-2 text-sm font-medium text-zinc-800">
-              <span>难度</span>
+              <span>Difficulty</span>
               <select
                 value={difficulty}
                 onChange={(event) => setDifficulty(event.target.value as DifficultyId)}
@@ -502,7 +515,7 @@ ${existingContent}`,
             </label>
 
             <label className="block space-y-2 text-sm font-medium text-zinc-800">
-              <span>数量</span>
+              <span>Count</span>
               <select
                 value={exerciseCount}
                 onChange={(event) => setExerciseCount(Number(event.target.value) as 3 | 5 | 10)}
@@ -516,7 +529,23 @@ ${existingContent}`,
           </div>
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
-            <span>回答深度</span>
+            <span>Problem style</span>
+            <select
+              value={practiceStyle}
+              onChange={(event) => setPracticeStyle(event.target.value as PracticeStyleId)}
+              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+              data-testid="practice-style"
+            >
+              {practiceStyleOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block space-y-2 text-sm font-medium text-zinc-800">
+            <span>Answer depth</span>
             <select
               value={answerDepth}
               onChange={(event) => {
@@ -548,14 +577,14 @@ ${existingContent}`,
 
           <div className="rounded-md border border-zinc-200 p-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-zinc-800">推荐主题</p>
+              <p className="text-sm font-medium text-zinc-800">Recommended prompts</p>
               <button
                 type="button"
                 onClick={refreshRecommendations}
                 className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
               >
                 <RefreshCw size={13} />
-                换一批
+                Refresh
               </button>
             </div>
             <div className="mt-3 space-y-2">
@@ -573,7 +602,7 @@ ${existingContent}`,
           </div>
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
-            <span>输出方式</span>
+            <span>Output mode</span>
             <select
               value={practiceOutputMode}
               onChange={(event) =>
@@ -597,7 +626,7 @@ ${existingContent}`,
             data-testid="generator-submit"
           >
             <Send size={16} />
-            {isLoading ? "停止生成" : config.submitLabel}
+            {isLoading ? "Stop generation" : config.submitLabel}
           </button>
         </form>
       </section>
@@ -612,7 +641,7 @@ ${existingContent}`,
               disabled={isLoading}
               className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
             >
-              继续生成
+              Continue generation
             </button>
             <button
               type="button"
@@ -620,7 +649,7 @@ ${existingContent}`,
               disabled={isLoading}
               className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
             >
-              重新生成
+              Regenerate
             </button>
           </div>
         ) : null}
@@ -656,7 +685,7 @@ ${existingContent}`,
               }
               className="inline-flex rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950"
             >
-              到聊天页继续追问
+              Continue in chat
             </button>
           </div>
         ) : isLoading ? (

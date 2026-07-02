@@ -5,15 +5,18 @@ import {
   createLearningProfile,
 } from "@/agent/memory-manager";
 import type {
-  ChatMessage,
   AnswerDepth,
+  ChatMessage,
   CourseId,
+  DetectedLanguage,
   LearningMemory,
   LearningProfile,
+  PracticeStyleId,
+  ReferenceProfileId,
   TaskTypeId,
   ToolContext,
 } from "@/types/learning";
-import { taskTypeOptions } from "@/types/learning";
+import { practiceStyleOptions, taskTypeOptions } from "@/types/learning";
 
 export type StoredChatSession = {
   id: string;
@@ -29,6 +32,9 @@ export type StoredChatSession = {
     model?: string;
     useRag?: boolean;
     answerDepth?: AnswerDepth;
+    practiceStyle?: PracticeStyleId;
+    detectedLanguage?: DetectedLanguage;
+    referenceProfile?: ReferenceProfileId;
   };
   toolContext?: ToolContext;
   memory: LearningMemory;
@@ -38,12 +44,16 @@ const storageKey = "pla.chat.sessions.v1";
 const activeSessionKey = "pla.chat.activeSessionId.v1";
 const learningProfileKey = "pla.learning.profile.v1";
 
-export const defaultSessionTitle = "新学习会话";
+export const defaultSessionTitle = "New conversation";
 
+const legacyDefaultTitles = new Set(["\u65b0\u5b66\u4e60\u4f1a\u8bdd"]);
 const toolSourceLabels: Record<ToolContext["source"], string> = {
-  practice: "练习题",
+  practice: "Practice",
 };
 const validTaskTypes = new Set<string>(taskTypeOptions.map((item) => item.id));
+const validPracticeStyles = new Set<string>(practiceStyleOptions.map((item) => item.id));
+const validLanguages = new Set<string>(["zh", "en"]);
+const validReferenceProfiles = new Set<string>(["auto", "chinese", "english"]);
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -72,13 +82,36 @@ export function createEmptySession(
       model: context.model,
       useRag: context.useRag,
       answerDepth: context.answerDepth,
+      practiceStyle: context.practiceStyle,
+      detectedLanguage: context.detectedLanguage,
+      referenceProfile: context.referenceProfile,
     },
     memory: createLearningMemory(),
   };
 }
 
 export function isDefaultSessionTitle(title: string) {
-  return title.trim() === defaultSessionTitle;
+  const normalized = title.trim();
+  return normalized === defaultSessionTitle || legacyDefaultTitles.has(normalized);
+}
+
+function normalizeContext(context?: Partial<StoredChatSession["context"]>) {
+  return {
+    ...context,
+    course: context?.course ?? "general",
+    taskType: validTaskTypes.has(String(context?.taskType))
+      ? (context?.taskType as TaskTypeId)
+      : "qa",
+    practiceStyle: validPracticeStyles.has(String(context?.practiceStyle))
+      ? context?.practiceStyle
+      : undefined,
+    detectedLanguage: validLanguages.has(String(context?.detectedLanguage))
+      ? context?.detectedLanguage
+      : undefined,
+    referenceProfile: validReferenceProfiles.has(String(context?.referenceProfile))
+      ? context?.referenceProfile
+      : undefined,
+  } satisfies StoredChatSession["context"];
 }
 
 export function getStoredSessions(): StoredChatSession[] {
@@ -89,23 +122,18 @@ export function getStoredSessions(): StoredChatSession[] {
   try {
     const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? (JSON.parse(raw) as StoredChatSession[]) : [];
+
     return parsed
       .filter((session) => session.id && session.title)
       .map((session) => {
         const toolContext =
           session.toolContext?.source === "practice" ? session.toolContext : undefined;
-        const context = session.context ?? { course: "general", taskType: "qa" };
 
         return {
           ...session,
+          title: isDefaultSessionTitle(session.title) ? defaultSessionTitle : session.title,
           source: toolContext ? "tool" : "manual",
-          context: {
-            ...context,
-            course: context.course ?? "general",
-            taskType: validTaskTypes.has(context.taskType)
-              ? context.taskType
-              : "qa",
-          },
+          context: normalizeContext(session.context),
           toolContext,
           memory: session.memory ?? createLearningMemory(),
         };
@@ -250,7 +278,9 @@ export function saveStoredLearningProfile(profile: LearningProfile) {
 
 export function buildSessionTitle(message: string) {
   const normalized = message.replace(/\s+/g, " ").trim();
-  return normalized.length > 20 ? `${normalized.slice(0, 20)}...` : normalized || defaultSessionTitle;
+  return normalized.length > 20
+    ? `${normalized.slice(0, 20)}...`
+    : normalized || defaultSessionTitle;
 }
 
 export function buildToolSessionTitle(toolContext: ToolContext) {
@@ -260,9 +290,9 @@ export function buildToolSessionTitle(toolContext: ToolContext) {
     toolContext.topic ||
     toolContext.knowledgeTitle ||
     toolContext.taskTitle ||
-    "继续追问";
+    "Continue in chat";
 
-  return `${label}：${topic}`.trim();
+  return `${label}: ${topic}`.trim();
 }
 
 export function upsertToolContextSession(options: {
@@ -277,9 +307,10 @@ export function upsertToolContextSession(options: {
     : undefined;
   const session: StoredChatSession = {
     id: existing?.id ?? createSessionId(),
-    title: existing?.title && !isDefaultSessionTitle(existing.title)
-      ? existing.title
-      : buildToolSessionTitle(options.toolContext),
+    title:
+      existing?.title && !isDefaultSessionTitle(existing.title)
+        ? existing.title
+        : buildToolSessionTitle(options.toolContext),
     source: "tool",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -292,13 +323,15 @@ export function upsertToolContextSession(options: {
     },
     toolContext: options.toolContext,
     memory:
-      existing?.memory ??
-      {
+      existing?.memory ?? {
         ...createLearningMemory(),
         currentCourse: options.context.course ?? options.toolContext.course,
         currentKnowledgePoint:
           options.context.knowledgePoint ?? options.toolContext.knowledgeTitle,
         currentGoal: options.toolContext.topic ?? options.toolContext.taskTitle,
+        practiceStyle: options.context.practiceStyle,
+        recentLanguage: options.context.detectedLanguage,
+        referenceProfile: options.context.referenceProfile,
       },
   };
 
@@ -313,7 +346,9 @@ export function groupSessionsByTime(sessions: StoredChatSession[]) {
 
   return {
     today: sessions.filter((session) => now - session.updatedAt < day),
-    recent: sessions.filter((session) => now - session.updatedAt >= day && now - session.updatedAt < 7 * day),
+    recent: sessions.filter(
+      (session) => now - session.updatedAt >= day && now - session.updatedAt < 7 * day,
+    ),
     older: sessions.filter((session) => now - session.updatedAt >= 7 * day),
   };
 }

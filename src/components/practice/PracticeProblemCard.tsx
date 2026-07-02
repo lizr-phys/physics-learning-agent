@@ -50,8 +50,8 @@ export function PracticeProblemCard({
         <div className="min-w-0">
           <h3 className="font-semibold text-zinc-950">{problem.title}</h3>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
-            {problem.knowledge ? <span>知识点：{problem.knowledge}</span> : null}
-            {problem.difficulty ? <span>难度：{problem.difficulty}</span> : null}
+            {problem.knowledge ? <span>Topics: {problem.knowledge}</span> : null}
+            {problem.difficulty ? <span>Difficulty: {problem.difficulty}</span> : null}
           </div>
         </div>
         <ChevronDown
@@ -64,16 +64,16 @@ export function PracticeProblemCard({
         <div className="px-4 pb-4">
           {problem.trainingGoal ? (
             <p className="mb-3 text-xs leading-5 text-zinc-500">
-              训练目标：{problem.trainingGoal}
+              Training goal: {problem.trainingGoal}
             </p>
           ) : null}
           <div className="rounded-md bg-zinc-50 p-3">
             <MarkdownRenderer content={problem.problem} />
           </div>
           <div className="mt-3">
-            <FoldSection title="显示提示" content={problem.hint} />
-            <FoldSection title="显示解析" content={problem.solution} />
-            <FoldSection title="显示答案" content={problem.answer} />
+            <FoldSection title="Show hint" content={problem.hint} />
+            <FoldSection title="Show solution" content={problem.solution} />
+            <FoldSection title="Show answer" content={problem.answer} />
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
             <button
@@ -82,7 +82,7 @@ export function PracticeProblemCard({
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 text-xs text-zinc-700 hover:bg-zinc-50"
             >
               <MessageSquare size={13} />
-              追问本题
+              Ask about this problem
             </button>
           </div>
         </div>

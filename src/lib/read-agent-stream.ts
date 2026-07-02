@@ -34,7 +34,7 @@ function raceReadWithIdleTimeout(
     reader.read(),
     new Promise<never>((_, reject) => {
       timeout = setTimeout(() => {
-        reject(new AgentStreamError("长时间没有收到模型输出，连接可能已中断。", "", "timeout"));
+        reject(new AgentStreamError("No model output was received for a while. The connection may have stalled.", "", "timeout"));
       }, timeoutMs);
     }),
   ]).finally(() => {
@@ -59,7 +59,7 @@ function looksIncomplete(content: string) {
   }
 
   return (
-    /(?:答案|解析|提示|最终答案|训练建议|方程|结果|证明|例题|小结|结论)[:：]\s*$/.test(trimmed) ||
+    /(?:Answer|Solution|Hint|Final answer|Training advice|Equation|Result|Proof|Example|Conclusion|答案|解析|提示|最终答案|训练建议|方程|结果|证明|例题|小结|结论)[:：]\s*$/i.test(trimmed) ||
     /[，、；：=+\-*/(（\[]$/.test(trimmed)
   );
 }
@@ -100,14 +100,14 @@ export async function readAgentStream(
 
     if (contentType.includes("application/json")) {
       const data = (await response.json()) as { error?: string };
-      throw new AgentStreamError(data.error ?? "Agent 请求失败。", "", "http");
+      throw new AgentStreamError(data.error ?? "Agent request failed.", "", "http");
     }
 
-    throw new AgentStreamError(`Agent 请求失败：${response.status}`, "", "http");
+    throw new AgentStreamError(`Agent request failed: ${response.status}`, "", "http");
   }
 
   if (!response.body) {
-    throw new AgentStreamError("浏览器没有收到可读取的响应流。", "", "empty");
+    throw new AgentStreamError("The browser did not receive a readable response stream.", "", "empty");
   }
 
   const reader = response.body.getReader();
@@ -159,7 +159,7 @@ export async function readAgentStream(
       }
 
       if (event.type === "error") {
-        streamError = event.detail || "DeepSeek 流式返回中断。";
+        streamError = event.detail || "DeepSeek streaming was interrupted.";
       }
 
       if (event.type === "done") {
@@ -177,7 +177,7 @@ export async function readAgentStream(
     while (true) {
       if (options?.signal?.aborted) {
         await reader.cancel();
-        throw new AgentStreamError("已停止生成。", fullContent, "abort");
+        throw new AgentStreamError("Generation stopped.", fullContent, "abort");
       }
 
       const { done, value } = await raceReadWithIdleTimeout(reader, idleTimeoutMs);
@@ -203,7 +203,7 @@ export async function readAgentStream(
     }
 
     if (eventBuffer) {
-      streamError = "流式控制信息不完整，连接可能在传输中断开。";
+      streamError = "The stream control message was incomplete; the connection may have been interrupted.";
       eventBuffer = "";
     }
 
@@ -211,7 +211,7 @@ export async function readAgentStream(
 
     if (streamError) {
       throw new AgentStreamError(
-        `生成中断：${streamError} 已保留当前内容。`,
+        `Generation interrupted: ${streamError} The current content has been preserved.`,
         fullContent,
         "network",
       );
@@ -219,7 +219,7 @@ export async function readAgentStream(
 
     if (lengthLimited) {
       throw new AgentStreamError(
-        "回答可能已达到模型输出长度上限。已保留当前内容，可以点击“继续生成”补全。",
+        "The answer may have reached the model output limit. The current content has been preserved; use Continue generation to complete it.",
         fullContent,
         "length",
       );
@@ -227,19 +227,19 @@ export async function readAgentStream(
 
     if (!doneReceived) {
       throw new AgentStreamError(
-        "生成流没有收到完整结束标记。已保留当前内容，可以点击“继续生成”补全。",
+        "The stream ended without a completion marker. The current content has been preserved; use Continue generation to complete it.",
         fullContent,
         "incomplete",
       );
     }
 
     if (!fullContent.trim()) {
-      throw new AgentStreamError("Agent 返回内容为空。", fullContent, "empty");
+      throw new AgentStreamError("The agent returned empty content.", fullContent, "empty");
     }
 
     if (looksIncomplete(fullContent)) {
       throw new AgentStreamError(
-        "回答看起来在半截公式、列表或小节处结束。已保留当前内容，可以点击“继续生成”补全。",
+        "The answer appears to end in the middle of a formula, list, or section. The current content has been preserved; use Continue generation to complete it.",
         fullContent,
         "incomplete",
       );
@@ -257,11 +257,11 @@ export async function readAgentStream(
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new AgentStreamError("已停止生成。", fullContent, "abort");
+      throw new AgentStreamError("Generation stopped.", fullContent, "abort");
     }
 
     throw new AgentStreamError(
-      error instanceof Error ? error.message : "读取模型输出时发生网络错误。",
+      error instanceof Error ? error.message : "A network error occurred while reading model output.",
       fullContent,
       "network",
     );

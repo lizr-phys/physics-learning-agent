@@ -12,24 +12,24 @@ function installStreamingMock() {
 
     const encoder = new TextEncoder();
     let timer = 0;
-    let marker = "旧会话";
+    let marker = "old session";
 
     try {
       const request = JSON.parse(String(init?.body ?? "{}")) as { message?: string };
 
-      if (request.message?.includes("会话 A")) {
-        marker = "会话 A 响应";
-      } else if (request.message?.includes("会话 B")) {
-        marker = "会话 B 响应";
+      if (request.message?.includes("Session A")) {
+        marker = "Session A response";
+      } else if (request.message?.includes("Session B")) {
+        marker = "Session B response";
       }
     } catch {
-      marker = "旧会话";
+      marker = "old session";
     }
 
     const parts = [
-      `${marker}片段 1，行内公式 \\(E=mc^2\\)\n`,
-      `${marker}片段 2\n`,
-      `${marker}片段 3\n`,
+      `${marker} segment 1 with inline math \\(E=mc^2\\)\n`,
+      `${marker} segment 2\n`,
+      `${marker} segment 3\n`,
       "[[PLA_STREAM_EVENT:done]]\n",
     ];
 
@@ -68,7 +68,7 @@ async function openSidebarIfNeeded(
   projectName: string,
 ) {
   if (projectName.includes("mobile")) {
-    await page.getByLabel("打开侧边栏").click();
+    await page.getByLabel("Open sidebar").click();
   }
 }
 
@@ -87,10 +87,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("new session aborts and isolates the previous stream", async ({ page }, testInfo) => {
-  const question = "详细推导一维线性谐振子的能级量子化过程";
+  const question = "Derive the energy quantization of the one-dimensional harmonic oscillator in detail.";
   await page.getByTestId("chat-input").fill(question);
   await page.getByTestId("send-message").click();
-  await expect(page.getByTestId("assistant-message")).toContainText("旧会话片段 1");
+  await expect(page.getByTestId("assistant-message")).toContainText("old session segment 1");
   await expect(page.locator(".katex").first()).toBeVisible();
 
   await openSidebarIfNeeded(page, testInfo.project.name);
@@ -108,24 +108,24 @@ test("new session aborts and isolates the previous stream", async ({ page }, tes
     page.getByTitle(expectedSessionTitle(question)),
     testInfo.project.name,
   ).click();
-  await expect(page.getByTestId("assistant-message")).toContainText("旧会话片段 1");
-  await expect(page.getByTestId("assistant-message")).not.toContainText("旧会话片段 3");
+  await expect(page.getByTestId("assistant-message")).toContainText("old session segment 1");
+  await expect(page.getByTestId("assistant-message")).not.toContainText("old session segment 3");
 });
 
 test("deleting the active streaming session prevents it from returning", async ({ page }, testInfo) => {
-  const question = "详细说明 Maxwell 方程组如何推出电磁波方程";
+  const question = "Explain how Maxwell's equations imply the electromagnetic wave equation.";
   await page.getByTestId("chat-input").fill(question);
   await page.getByTestId("send-message").click();
-  await expect(page.getByTestId("assistant-message")).toContainText("旧会话片段 1");
+  await expect(page.getByTestId("assistant-message")).toContainText("old session segment 1");
 
   await openSidebarIfNeeded(page, testInfo.project.name);
   const title = activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(question)),
     testInfo.project.name,
   );
-  await title.locator("..").getByLabel("会话菜单").click();
+  await title.locator("..").getByLabel("Conversation menu").click();
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "删除" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
 
   await expect(page.getByTestId("assistant-message")).toHaveCount(0);
   await page.waitForTimeout(700);
@@ -134,12 +134,12 @@ test("deleting the active streaming session prevents it from returning", async (
 });
 
 test("rapid session switching never mixes assistant content", async ({ page }, testInfo) => {
-  const questionA = "会话 A：解释 Green 函数与边界条件";
-  const questionB = "会话 B：解释正则系综与配分函数";
+  const questionA = "Session A: explain Green's functions and boundary conditions.";
+  const questionB = "Session B: explain the canonical ensemble and partition function.";
 
   await page.getByTestId("chat-input").fill(questionA);
   await page.getByTestId("send-message").click();
-  await expect(page.getByTestId("assistant-message")).toContainText("会话 A 响应片段 3");
+  await expect(page.getByTestId("assistant-message")).toContainText("Session A response segment 3");
   await expect(page.getByTestId("stop-generation")).toHaveCount(0);
 
   await openSidebarIfNeeded(page, testInfo.project.name);
@@ -149,21 +149,21 @@ test("rapid session switching never mixes assistant content", async ({ page }, t
   ).click();
   await page.getByTestId("chat-input").fill(questionB);
   await page.getByTestId("send-message").click();
-  await expect(page.getByTestId("assistant-message")).toContainText("会话 B 响应片段 1");
+  await expect(page.getByTestId("assistant-message")).toContainText("Session B response segment 1");
 
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(questionA)),
     testInfo.project.name,
   ).click();
-  await expect(page.getByTestId("assistant-message")).toContainText("会话 A 响应");
-  await expect(page.getByTestId("assistant-message")).not.toContainText("会话 B 响应");
+  await expect(page.getByTestId("assistant-message")).toContainText("Session A response");
+  await expect(page.getByTestId("assistant-message")).not.toContainText("Session B response");
 
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(questionB)),
     testInfo.project.name,
   ).click();
-  await expect(page.getByTestId("assistant-message")).toContainText("会话 B 响应");
-  await expect(page.getByTestId("assistant-message")).not.toContainText("会话 A 响应");
+  await expect(page.getByTestId("assistant-message")).toContainText("Session B response");
+  await expect(page.getByTestId("assistant-message")).not.toContainText("Session A response");
 });

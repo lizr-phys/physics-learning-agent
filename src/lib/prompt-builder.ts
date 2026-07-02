@@ -7,62 +7,77 @@ import {
   taskLengthHints,
   taskOutputTemplates,
 } from "@/data/promptTemplates";
+import {
+  buildCourseReferenceInstruction,
+  describePracticeStyle,
+  referenceProfiles,
+  resolvePracticeStyle,
+  resolveReferenceProfile,
+} from "@/data/referenceProfiles";
 import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier";
 import { formatLearningMemory } from "@/agent/memory-manager";
 import { buildKnowledgeContext } from "@/lib/knowledge-utils";
+import { detectLanguage, languageName } from "@/lib/language";
 import { classifyQuery } from "@/lib/query-classifier";
 import {
   difficultyOptions,
   type AnswerDepth,
   type AgentIntent,
   type AgentRequest,
+  type DetectedLanguage,
   type QueryType,
+  type ReferenceProfileId,
   type TaskTypeId,
 } from "@/types/learning";
 
 export const PHYSICS_TUTOR_SYSTEM_PROMPT = buildSystemPrompt();
 
 const taskLabels: Record<TaskTypeId, string> = {
-  qa: "普通问答",
-  explain: "知识点解释",
-  derivation: "标准推导",
-  practice: "练习题生成",
-  "solution-guide": "解题指导",
-  misconceptions: "易错点分析",
-  "review-plan": "复习计划",
+  qa: "Q&A",
+  explain: "Concept explanation",
+  derivation: "Derivation",
+  practice: "Practice problem generation",
+  "solution-guide": "Solution guidance",
+  misconceptions: "Misconception analysis",
+  "study-plan": "Study plan",
 };
 
 const queryTypeLabels: Record<QueryType, string> = {
-  physics_core: "物理核心问题",
-  math_physics_support: "数学物理支撑问题",
-  coding: "编程/数据处理问题",
-  daily_life: "生活或通用学习问题",
-  writing: "写作/表达问题",
-  other: "其他普通问题",
+  physics_core: "Core physics",
+  math_physics_support: "Mathematical support for physics",
+  coding: "Coding or data processing",
+  daily_life: "Daily life or general study",
+  writing: "Writing or communication",
+  other: "General question",
 };
 
 const intentLabels: Record<AgentIntent, string> = {
-  physics_learning: "物理学习",
-  exercise_generation: "练习题生成",
-  study_planning: "学习规划与复习",
-  general_question: "通用问题",
-  meta_question: "助手使用问题",
+  physics_learning: "Physics learning",
+  exercise_generation: "Practice generation",
+  study_planning: "Study planning",
+  general_question: "General question",
+  meta_question: "Assistant usage",
 };
 
 const toolSourceLabels = {
-  practice: "练习题生成",
+  practice: "Practice problems",
 } as const;
 
 function labelById<T extends readonly { id: string; label: string }[]>(items: T, id?: string) {
-  return items.find((item) => item.id === id)?.label ?? "未指定";
+  return items.find((item) => item.id === id)?.label ?? "Unspecified";
 }
 
 const depthInstructions: Record<AnswerDepth, string> = {
-  concise: "回答应简洁，先给结论，只保留理解问题所必需的定义、公式和限制条件。",
-  standard: "采用标准教学深度：定义、必要公式、解释、适用条件和易错点保持完整。",
-  detailed: "回答应较详细，补充推导理由、例子、章节联系和结果检查，但避免无关展开。",
-  "derivation-first": "优先组织推导：明确前提、出发方程、逐步变换、关键理由和结果检验。",
-  "problem-type-first": "优先从题型角度组织：识别条件、建模步骤、常用方程、变式和易错点。",
+  concise:
+    "Concise: answer first, keep only the necessary definitions, formulas, and conditions.",
+  standard:
+    "Standard: include definition, necessary formulas, explanation, applicability, and common pitfalls.",
+  detailed:
+    "Detailed: include derivation reasons, examples, links to related topics, and checks without unrelated expansion.",
+  "derivation-first":
+    "Derivation first: emphasize assumptions, starting equations, step-by-step transformations, reasons, and result checks.",
+  "problem-type-first":
+    "Problem style first: emphasize condition recognition, modeling steps, common equations, variants, and pitfalls.",
 };
 
 export function buildAnswerDepthInstruction(depth?: AnswerDepth) {
@@ -72,15 +87,15 @@ export function buildAnswerDepthInstruction(depth?: AnswerDepth) {
 function buildPracticeOutputInstruction(mode?: AgentRequest["practiceOutputMode"]) {
   switch (mode) {
     case "questions-only":
-      return "只输出题目、训练目标、知识点和难度，不要输出提示、解析或答案。";
+      return "Only output problem statements, source style, training goals, topics, and difficulty. Do not output hints, solutions, or answers.";
     case "questions-hints":
-      return "输出题目和提示，不要给出详细解析和最终答案。";
+      return "Output problem statements and hints. Do not give full solutions or final answers.";
     case "full-solution":
-      return "输出题目、提示、详细解析和最终答案。";
+      return "Output problem statements, hints, detailed solutions, and final answers.";
     case "hidden-answer":
-      return "输出题目、提示、详细解析和最终答案；前端会默认折叠解析和答案。";
+      return "Output problem statements, hints, detailed solutions, and final answers. The frontend will fold solutions and answers by default.";
     default:
-      return "按当前任务参数输出必要的题目、提示、解析和答案。";
+      return "Output the necessary problem statements, hints, solutions, and answers according to the task parameters.";
   }
 }
 
@@ -93,11 +108,12 @@ export function buildRagContext(input: AgentRequest) {
 
   if (!snippets.length) {
     return input.useRag
-      ? "用户启用了本地知识库，但没有检索到足够相关的本地资料。请正常回答；必要时说明“本地资料未覆盖该点”。"
-      : "未启用本地知识库。";
+      ? "Local knowledge retrieval was enabled, but no sufficiently relevant local snippets were found. Answer normally; if useful, say that the local notes did not cover the point."
+      : "Local knowledge retrieval is not enabled.";
   }
 
-  return `以下是可参考的本地资料片段。优先依据这些片段和本地知识库，但不要大段复制资料，不要编造资料中不存在的页码；若资料不足，应说明“本地资料未覆盖该点”，再用通用物理知识补充。
+  return `Relevant local note snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with general physics knowledge.
+
 ${snippets
   .map(
     (snippet, index) =>
@@ -105,13 +121,13 @@ ${snippets
   )
   .join("\n\n")}
 
-若使用了本地片段，回答末尾用简短“参考资料”列出文档名和片段标题。`;
+If local snippets are used, end with a short "References" list containing document names and snippet headings only.`;
 }
 
 function truncateContext(content: string, maxLength: number) {
   const normalized = content.replace(/\n{3,}/g, "\n\n").trim();
   return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength)}\n\n[以上内容已截断，后续回答应优先围绕已给出的具体片段。]`
+    ? `${normalized.slice(0, maxLength)}\n\n[Content truncated. Continue from the concrete context above.]`
     : normalized;
 }
 
@@ -119,61 +135,94 @@ export function buildToolContext(input: AgentRequest) {
   const context = input.toolContext;
 
   if (!context) {
-    return "没有来自工具页的上下文。";
+    return "No tool-page context is attached.";
   }
 
   const selected = context.selectedItem;
   const selectedBlock = selected?.content
-    ? `用户当前追问对象：\n- 类型：${selected.type}\n- 标题：${selected.title ?? "未命名"}\n- 序号：${selected.index ?? "未指定"}\n\n${truncateContext(selected.content, 6000)}`
+    ? `Current follow-up target:\n- Type: ${selected.type}\n- Title: ${selected.title ?? "Untitled"}\n- Index: ${selected.index ?? "Unspecified"}\n\n${truncateContext(selected.content, 6000)}`
     : "";
   const generatedBlock = selectedBlock
-    ? `完整生成内容摘要或截断版：\n${truncateContext(context.generatedContent, 3000)}`
-    : `已生成内容：\n${truncateContext(context.generatedContent, 6000)}`;
+    ? `Full generated material, summarized or truncated:\n${truncateContext(context.generatedContent, 3000)}`
+    : `Generated material:\n${truncateContext(context.generatedContent, 6000)}`;
 
-  return `以下是用户刚才在工具页面生成的学习材料。当前回答如果与该材料相关，需要基于这份材料继续，不要当作全新对话。
-来源：${toolSourceLabels[context.source]}
-课程：${getCourseLabel(context.course)}
-知识点：${context.knowledgeTitle ?? context.knowledgeId ?? "未指定"}
-主题：${context.topic ?? context.taskTitle ?? "未指定"}
-用户原始输入：${context.userInput ?? "未记录"}
+  return `The user is continuing from material generated on a tool page. If the current question refers to this material, use it as context rather than treating the turn as a fresh conversation.
+
+Source: ${toolSourceLabels[context.source]}
+Course: ${getCourseLabel(context.course)}
+Topic: ${context.knowledgeTitle ?? context.knowledgeId ?? context.topic ?? "Unspecified"}
+Original tool input: ${context.userInput ?? "Not recorded"}
 
 ${selectedBlock}
 
 ${generatedBlock}
 
-回答时可以说明“沿用刚才的${toolSourceLabels[context.source]}内容”，但不要把整段材料原样重复给用户。`;
+Do not repeat the whole tool output unless the user asks to see it again.`;
 }
 
 function buildSessionMemory(input: AgentRequest) {
   const history = input.history ?? [];
 
   if (!history.length) {
-    return "暂无历史消息。";
+    return "No previous messages.";
   }
 
   return history
     .slice(-16)
     .map((message, index) => {
-      const role = message.role === "user" ? "用户" : "Agent";
-      return `${index + 1}. ${role}：${truncateContext(message.content, 700)}`;
+      const role = message.role === "user" ? "User" : "Agent";
+      return `${index + 1}. ${role}: ${truncateContext(message.content, 700)}`;
     })
     .join("\n");
 }
 
 function buildLearningContextSnapshot(input: AgentRequest) {
   const context = input.toolContext;
-  const moduleName = context ? toolSourceLabels[context.source] : "chat";
+  const moduleName = context ? toolSourceLabels[context.source] : input.module ?? "chat";
 
   return [
-    `当前模块：${moduleName}`,
-    `当前课程：${getCourseLabel(input.course)}`,
-    `当前任务类型：${taskLabels[input.taskType ?? "qa"]}`,
-    `当前知识点：${context?.knowledgeTitle ?? input.knowledgePoint ?? "未指定"}`,
-    context?.topic || context?.taskTitle ? `当前学习主题：${context.topic ?? context.taskTitle}` : "",
-    context?.selectedItem?.title ? `当前追问对象：${context.selectedItem.title}` : "",
+    `Current module: ${moduleName}`,
+    `Current course: ${getCourseLabel(input.course)}`,
+    `Current task type: ${taskLabels[input.taskType ?? "qa"]}`,
+    `Current topic: ${context?.knowledgeTitle ?? input.knowledgePoint ?? "Unspecified"}`,
+    context?.topic || context?.taskTitle ? `Current learning target: ${context.topic ?? context.taskTitle}` : "",
+    context?.selectedItem?.title ? `Current follow-up item: ${context.selectedItem.title}` : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildLanguageAndReferenceBlock(input: AgentRequest) {
+  const language = resolveInputLanguage(input);
+  const profileId = resolveInputReferenceProfile(input);
+  const practiceStyle = resolvePracticeStyle({
+    language,
+    practiceStyle: input.practiceStyle,
+  });
+  const profile = referenceProfiles[profileId];
+
+  return `Language and reference profile:
+- Detected language: ${languageName(language)}
+- Response language: answer in ${languageName(language)} unless the user explicitly asks otherwise.
+- Reference profile: ${profile.label}
+- Practice style: ${describePracticeStyle(practiceStyle)}
+- Profile instruction: ${profile.responseInstruction}
+- Practice instruction: ${profile.practiceInstruction}
+- Course reference notes: ${buildCourseReferenceInstruction(input.course ?? "general", profileId)}
+- Copyright boundary: use only source style, terminology, sequencing, and training conventions. Do not reproduce protected text or official problem statements.`;
+}
+
+export function resolveInputLanguage(input: AgentRequest): DetectedLanguage {
+  return input.detectedLanguage ?? input.memory?.recentLanguage ?? detectLanguage(input.message);
+}
+
+export function resolveInputReferenceProfile(input: AgentRequest): ReferenceProfileId {
+  const language = resolveInputLanguage(input);
+  return resolveReferenceProfile({
+    language,
+    practiceStyle: input.practiceStyle ?? input.memory?.practiceStyle,
+    referenceProfile: input.referenceProfile ?? input.memory?.referenceProfile,
+  });
 }
 
 function buildGeneralPrompt(
@@ -181,39 +230,41 @@ function buildGeneralPrompt(
   queryType: QueryType,
   intent: AgentIntent,
 ) {
-  return `任务意图：${intentLabels[intent]}
-问题分类：${queryTypeLabels[queryType]}
+  return `Intent: ${intentLabels[intent]}
+Query type: ${queryTypeLabels[queryType]}
 
-一、回答策略
-- 这是非物理核心问题。请正常回答用户问题本身，不要拒答。
-- 不要强行引入大学物理、数学物理方法、Maxwell 方程、Hamilton 体系、Green 函数、PDE 或变分法。
-- 不要套用物理题型模板，不要自动改写成推导题或解题题。
-- 如果问题是编程，直接给可用代码、步骤或排错建议。
-- 如果问题是写作，直接给文本结构、改写稿或表达建议。
-- 如果问题是生活、学习效率或其他普通问题，给清晰、实用的回答。
-- 如果用户问题本身同时包含物理实验、科研数据、数值模拟等背景，可以先解决通用问题，再单独补充一小段物理应用。
-- 不要主动添加“更适合物理学习”等身份提醒，系统会在输出完成后统一追加，避免重复。
+1. Answer strategy
+- This is not a core physics task. Answer the user's question directly.
+- Do not force physics concepts, physics equations, or problem-solving templates into the answer.
+- For coding, give usable code, steps, or debugging advice.
+- For writing, give structure, edits, or wording suggestions.
+- For daily-life or general study questions, give clear practical advice.
+- If the user mixes a general topic with physics experiments, modeling, or scientific data, answer the general question first and then add a small physics application note only if useful.
+- Do not add the gentle physics-learning reminder yourself; it is appended after generation for general questions.
 
-二、当前学习上下文
-这些信息只用于理解用户是否在延续某个学习目标；若本轮问题明显无关，不要强行套用。
+2. Language and context
+${buildLanguageAndReferenceBlock(input)}
+
+3. Current learning context
+Use this only to understand continuity. If the current question is unrelated, do not force it into the learning context.
 ${buildLearningContextSnapshot(input)}
 
-三、最近会话上下文
+4. Recent conversation
 ${buildSessionMemory(input)}
 
-四、结构化学习记忆
+5. Structured learning memory
 ${formatLearningMemory(input.memory)}
 
-五、内部角色
+6. Internal role
 ${buildAgentRoleInstruction(intent, input.taskType)}
 
-六、输出限制
-- 禁止出现这些套话：${forbiddenAnswerStyle.join("、")}。
-- 主体回答必须围绕用户问题本身。
-- 如果是关于本助手能力或使用方式的问题，只解释功能、边界和使用方法，不追加物理学习提醒。
-- 回答深度：${buildAnswerDepthInstruction(input.answerDepth)}
+7. Output constraints
+- Avoid these stock phrases: ${forbiddenAnswerStyle.join(", ")}.
+- The main answer must serve the user's actual question.
+- If the user asks about this assistant's capabilities or usage, explain features, boundaries, and usage without adding the physics-learning reminder.
+- Answer depth: ${buildAnswerDepthInstruction(input.answerDepth)}
 
-七、用户问题
+8. User question
 ${input.message}`;
 }
 
@@ -227,73 +278,86 @@ function buildPhysicsPrompt(
   const difficultyLabel = labelById(difficultyOptions, input.difficulty);
   const course = input.course ?? "general";
 
-  return `任务意图：${intentLabels[intent]}
-问题分类：${queryTypeLabels[queryType]}
+  return `Intent: ${intentLabels[intent]}
+Query type: ${queryTypeLabels[queryType]}
 
-请将本轮问题作为大学物理或数学物理学习任务处理。只有因为本轮问题被判定为物理/数学物理相关，才使用下列课程模板；不要把该模板用于非物理问题。
+Treat this turn as an undergraduate physics or mathematical-physics learning task. Use the course template only because the current turn is physics-related; never apply it to unrelated general questions.
 
-一、任务定位
-- 课程：${getCourseLabel(course)}
-- 任务类型：${taskLabel}
-- 难度：${difficultyLabel}
-- 练习数量：${input.exerciseCount ?? "未指定"}
-- 是否需要提示：${input.includeHint ? "是" : "否或未指定"}
-- 是否需要答案：${input.includeAnswer ? "是" : "否或未指定"}
-- 是否需要详细解析：${input.includeSolution ? "是" : "否或未指定"}
+1. Task profile
+- Course: ${getCourseLabel(course)}
+- Task type: ${taskLabel}
+- Difficulty: ${difficultyLabel}
+- Practice count: ${input.exerciseCount ?? "Unspecified"}
+- Include hint: ${input.includeHint ? "yes" : "no or unspecified"}
+- Include answer: ${input.includeAnswer ? "yes" : "no or unspecified"}
+- Include full solution: ${input.includeSolution ? "yes" : "no or unspecified"}
 
-二、当前学习上下文
+2. Language and reference profile
+${buildLanguageAndReferenceBlock(input)}
+
+3. Current learning context
 ${buildLearningContextSnapshot(input)}
 
-三、最近会话上下文
+4. Recent conversation
 ${buildSessionMemory(input)}
 
-四、结构化学习记忆
+5. Structured learning memory
 ${formatLearningMemory(input.memory)}
 
-五、内部角色分工
+6. Internal roles
 ${buildAgentRoleInstruction(intent, taskType)}
 
-六、课程约束
+7. Course constraints
 ${buildCourseInstruction(course)}
 
-七、知识点上下文
+8. Knowledge context
 ${buildKnowledgeContext(input)}
 
-八、本地资料上下文
+9. Local note context
 ${buildRagContext(input)}
 
-九、工具页连续追问上下文
+10. Tool-page follow-up context
 ${buildToolContext(input)}
 
-十、输出模板
+11. Output template
 ${buildTaskTemplate(taskType)}
 
-十一、长度要求
+12. Length guidance
 ${taskLengthHints[taskType]}
 
-十二、回答风格限制
-- 禁止出现这些套话：${forbiddenAnswerStyle.join("、")}。
-- 先回答用户问题本身，再展开必要推导或解释。
-- 公式统一使用行内 $...$ 或块级 $$...$$；不要把公式放进代码块，除非用户明确要求展示 LaTeX 源码。
-- 对含糊问题，先给出最常见课程语境下的解释；必要时再说明其他理解。
-- 对明显错误前提，要温和指出并修正。
-- 回答前在内部判断问题类型和所需假设，不要展示冗长内部判断过程。
-- 结论必须与边界条件、初始条件、规范条件、本征条件、归一化条件等限制一致。
-- 输出前由严谨审稿角色检查：符号是否前后一致、条件是否完整、量纲或极限是否合理、练习题数量和结构是否满足要求。只修正最终答案，不展示角色讨论。
-- 回答深度：${buildAnswerDepthInstruction(input.answerDepth)}
-- 练习输出方式：${buildPracticeOutputInstruction(input.practiceOutputMode)}
+13. Style and correctness constraints
+- Avoid these stock phrases: ${forbiddenAnswerStyle.join(", ")}.
+- Answer the user's question first, then expand with derivation or explanation where needed.
+- Use $...$ for inline formulas and $$...$$ for displayed formulas. Do not put formulas in code blocks unless the user asks for LaTeX source.
+- For ambiguous questions, give the most common course interpretation first and briefly mention alternatives if needed.
+- For false premises, correct them calmly.
+- Internally classify the problem and assumptions before answering; do not show verbose internal reasoning.
+- Results must match boundary conditions, initial conditions, gauge conditions, eigenvalue conditions, normalization conditions, ensemble assumptions, or process constraints as appropriate.
+- The technical reviewer role must check symbol consistency, complete conditions, dimensions or limits, and whether the requested number and structure of practice problems are satisfied. Do not show the reviewer discussion.
+- Answer depth: ${buildAnswerDepthInstruction(input.answerDepth)}
+- Practice output mode: ${buildPracticeOutputInstruction(input.practiceOutputMode)}
 
-十三、用户问题
+14. User question
 ${input.message}`;
 }
 
 export function buildUserPrompt(input: AgentRequest) {
-  const queryType = input.queryType ?? classifyQuery(input);
-  const intent = input.intent ?? classifyAgentIntent(input);
+  const detectedLanguage = resolveInputLanguage(input);
+  const normalizedInput: AgentRequest = {
+    ...input,
+    detectedLanguage,
+    referenceProfile: input.referenceProfile ?? resolveInputReferenceProfile(input),
+    practiceStyle:
+      input.practiceStyle ??
+      input.memory?.practiceStyle ??
+      resolvePracticeStyle({ language: detectedLanguage }),
+  };
+  const queryType = normalizedInput.queryType ?? classifyQuery(normalizedInput);
+  const intent = normalizedInput.intent ?? classifyAgentIntent(normalizedInput);
 
   if (isPhysicsIntent(intent)) {
-    return buildPhysicsPrompt(input, queryType, intent);
+    return buildPhysicsPrompt(normalizedInput, queryType, intent);
   }
 
-  return buildGeneralPrompt(input, queryType, intent);
+  return buildGeneralPrompt(normalizedInput, queryType, intent);
 }

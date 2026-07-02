@@ -40,13 +40,13 @@ export function FirstUseGuide() {
           type="button"
           onClick={close}
           className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-950"
-          aria-label="关闭使用引导"
+          aria-label="Close guide"
         >
           <X size={15} />
         </button>
-        <p className="text-sm font-medium text-zinc-950">直接提问，或使用左侧学习工具。</p>
+        <p className="text-sm font-medium text-zinc-950">Ask directly, or use the tools on the left.</p>
         <p className="mt-1 text-xs leading-5 text-zinc-600">
-          例如：解释 Green 函数的物理意义、生成 5 道谐振子练习题、梳理静电边值问题题型。
+          Try: explain the physical meaning of Green&apos;s functions, generate harmonic oscillator problems, or practice electrostatic boundary-value problems.
         </p>
       </div>
     </div>

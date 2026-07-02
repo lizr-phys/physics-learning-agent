@@ -1,4 +1,7 @@
 import { getKnowledgeItem, knowledgeItems } from "@/data/knowledge";
+import { detectPracticeStyleFromText } from "@/agent/exercise-parser";
+import { resolveReferenceProfile } from "@/data/referenceProfiles";
+import { detectLanguage } from "@/lib/language";
 import type {
   AgentIntent,
   AgentRequest,
@@ -7,7 +10,21 @@ import type {
   LearningProfile,
 } from "@/types/learning";
 
-const confusionTerms = ["为什么", "不理解", "不明白", "区别", "怎么来的", "哪里错", "困惑"];
+const confusionTerms = [
+  "why",
+  "confused",
+  "do not understand",
+  "difference",
+  "where does",
+  "why is",
+  "为什么",
+  "不理解",
+  "不明白",
+  "区别",
+  "怎么来的",
+  "哪里错",
+  "困惑",
+];
 
 function uniqueRecent(items: string[], limit: number) {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean))).slice(-limit);
@@ -15,6 +32,9 @@ function uniqueRecent(items: string[], limit: number) {
 
 export function createLearningMemory(): LearningMemory {
   return {
+    recentLanguage: "en",
+    referenceProfile: "english",
+    practiceStyle: "auto",
     recentConfusions: [],
     coveredConcepts: [],
     exerciseTopics: [],
@@ -28,16 +48,19 @@ export function createLearningProfile(): LearningProfile {
     courseFrequency: {},
     recentTopics: [],
     preferredStyle: "balanced",
+    recentLanguage: "en",
+    referenceProfile: "english",
+    practiceStyle: "auto",
     updatedAt: Date.now(),
   };
 }
 
 function inferPreferredStyle(message: string, current: LearningMemory["preferredStyle"]) {
-  if (/一步一步|详细推导|每一步|完整过程/.test(message)) {
+  if (/step by step|detailed derivation|every step|一步一步|详细推导|每一步|完整过程/i.test(message)) {
     return "step-by-step";
   }
 
-  if (/简短|简洁|只要结论|概括/.test(message)) {
+  if (/brief|concise|short answer|只要结论|简短|简洁|概括/i.test(message)) {
     return "concise";
   }
 
@@ -45,11 +68,12 @@ function inferPreferredStyle(message: string, current: LearningMemory["preferred
 }
 
 function inferMentionedConcepts(message: string) {
+  const normalized = message.toLowerCase();
   return knowledgeItems
     .filter(
       (item) =>
-        message.includes(item.title) ||
-        item.alias?.some((alias) => message.toLowerCase().includes(alias.toLowerCase())),
+        normalized.includes(item.title.toLowerCase()) ||
+        item.alias?.some((alias) => normalized.includes(alias.toLowerCase())),
     )
     .map((item) => item.title)
     .slice(0, 4);
@@ -57,15 +81,15 @@ function inferMentionedConcepts(message: string) {
 
 function buildGoal(input: AgentRequest, intent: AgentIntent) {
   if (intent === "exercise_generation") {
-    return `围绕${input.knowledgePoint ?? input.message.slice(0, 60)}进行练习训练`;
+    return `Practice around ${input.knowledgePoint ?? input.message.slice(0, 80)}`;
   }
 
   if (intent === "study_planning") {
-    return `整理并复习${input.knowledgePoint ?? input.message.slice(0, 60)}`;
+    return `Plan study around ${input.knowledgePoint ?? input.message.slice(0, 80)}`;
   }
 
   if (intent === "physics_learning") {
-    return `理解${input.knowledgePoint ?? input.message.slice(0, 60)}`;
+    return `Understand ${input.knowledgePoint ?? input.message.slice(0, 80)}`;
   }
 
   return undefined;
@@ -81,10 +105,20 @@ export function updateLearningMemory(
   const mentionedConcepts = inferMentionedConcepts(input.message);
   const currentKnowledgePoint =
     selectedKnowledge?.title ?? mentionedConcepts[0] ?? current.currentKnowledgePoint;
-  const isConfusion = confusionTerms.some((term) => input.message.includes(term));
+  const language = input.detectedLanguage ?? detectLanguage(input.message, current.recentLanguage ?? "en");
+  const practiceStyle =
+    input.practiceStyle ?? detectPracticeStyleFromText(input.message) ?? current.practiceStyle ?? "auto";
+  const referenceProfile =
+    input.referenceProfile ??
+    resolveReferenceProfile({
+      language,
+      practiceStyle,
+      referenceProfile: current.referenceProfile,
+    });
+  const isConfusion = confusionTerms.some((term) => input.message.toLowerCase().includes(term));
   const exerciseTopic =
     intent === "exercise_generation"
-      ? currentKnowledgePoint ?? input.message.replace(/\s+/g, " ").slice(0, 80)
+      ? currentKnowledgePoint ?? input.message.replace(/\s+/g, " ").slice(0, 100)
       : "";
 
   return {
@@ -93,8 +127,11 @@ export function updateLearningMemory(
       input.course && input.course !== "general" ? input.course : current.currentCourse,
     currentKnowledgePoint,
     currentGoal: buildGoal(input, intent) ?? current.currentGoal,
+    recentLanguage: language,
+    practiceStyle,
+    referenceProfile,
     recentConfusions: uniqueRecent(
-      [...current.recentConfusions, isConfusion ? input.message.slice(0, 160) : ""],
+      [...current.recentConfusions, isConfusion ? input.message.slice(0, 200) : ""],
       6,
     ),
     coveredConcepts: uniqueRecent(
@@ -125,31 +162,37 @@ export function updateLearningProfile(
       12,
     ),
     preferredStyle: memory.preferredStyle,
+    recentLanguage: memory.recentLanguage ?? profile.recentLanguage,
+    practiceStyle: memory.practiceStyle ?? profile.practiceStyle,
+    referenceProfile: memory.referenceProfile ?? profile.referenceProfile,
     updatedAt: Date.now(),
   } satisfies LearningProfile;
 }
 
 export function formatLearningMemory(memory?: LearningMemory) {
   if (!memory) {
-    return "暂无结构化学习记忆。";
+    return "No structured learning memory.";
   }
 
   const course = memory.currentCourse as CourseId | undefined;
   return [
-    course ? `持续课程：${course}` : "",
-    memory.currentKnowledgePoint ? `持续知识点：${memory.currentKnowledgePoint}` : "",
-    memory.currentGoal ? `当前学习目标：${memory.currentGoal}` : "",
+    course ? `Ongoing course: ${course}` : "",
+    memory.currentKnowledgePoint ? `Ongoing topic: ${memory.currentKnowledgePoint}` : "",
+    memory.currentGoal ? `Current learning goal: ${memory.currentGoal}` : "",
+    memory.recentLanguage ? `Recent language: ${memory.recentLanguage}` : "",
+    memory.practiceStyle ? `Recent practice style: ${memory.practiceStyle}` : "",
+    memory.referenceProfile ? `Reference profile: ${memory.referenceProfile}` : "",
     memory.recentConfusions.length
-      ? `尚需关注的困惑：${memory.recentConfusions.slice(-3).join("；")}`
+      ? `Recent confusions: ${memory.recentConfusions.slice(-3).join(" | ")}`
       : "",
     memory.coveredConcepts.length
-      ? `已讨论概念：${memory.coveredConcepts.slice(-6).join("；")}`
+      ? `Covered concepts: ${memory.coveredConcepts.slice(-6).join(" | ")}`
       : "",
     memory.exerciseTopics.length
-      ? `最近练习方向：${memory.exerciseTopics.slice(-4).join("；")}`
+      ? `Recent practice directions: ${memory.exerciseTopics.slice(-4).join(" | ")}`
       : "",
-    `偏好讲解方式：${memory.preferredStyle}`,
-    memory.conversationSummary ? `长对话摘要：${memory.conversationSummary}` : "",
+    `Preferred explanation style: ${memory.preferredStyle}`,
+    memory.conversationSummary ? `Long conversation summary: ${memory.conversationSummary}` : "",
   ]
     .filter(Boolean)
     .join("\n");

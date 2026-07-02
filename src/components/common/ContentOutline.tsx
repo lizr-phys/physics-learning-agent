@@ -43,14 +43,14 @@ export function ContentOutline({ content, minimumItems = 3 }: ContentOutlineProp
       <details className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 md:hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-zinc-800">
           <List size={15} />
-          目录
+          Outline
         </summary>
         <div className="mt-3 border-t border-zinc-200 pt-3">{links}</div>
       </details>
       <aside className="hidden rounded-lg border border-zinc-200 bg-zinc-50 p-3 md:block">
         <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-800">
           <List size={15} />
-          目录
+          Outline
         </div>
         {links}
       </aside>

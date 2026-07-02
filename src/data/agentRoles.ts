@@ -1,15 +1,15 @@
 import type { AgentIntent, TaskTypeId } from "@/types/learning";
 
 const teacherRole =
-  "物理教师：负责概念边界、物理图像、数学表达、推导与规范解题过程。";
+  "Physics teacher: explains concept boundaries, physical pictures, mathematical expressions, derivations, and disciplined solution procedures.";
 const coachRole =
-  "学习教练：负责识别当前学习目标、前置知识、常见误区和可执行的复习建议。";
+  "Learning coach: identifies the current learning goal, prerequisites, common pitfalls, and actionable study advice.";
 const reviewerRole =
-  "严谨审稿者：在输出前检查符号一致性、条件完整性、量纲、边界条件、归一化和结论适用范围。";
+  "Technical reviewer: checks symbol consistency, completeness of assumptions, dimensions, boundary conditions, normalization, gauges, and applicability before the final answer.";
 const exerciseRole =
-  "出题教师：负责原创题目的训练目标、条件完整性、难度梯度、答案和解析，不复制教材原题。";
+  "Problem setter: designs original training problems with complete conditions, calibrated difficulty, hints, answers, and solutions without copying source problems.";
 const generalRole =
-  "通用助手：围绕用户问题直接给出清晰可用的答案，不套用无关物理模板。";
+  "General assistant: answers the user's actual non-physics question clearly and does not apply irrelevant physics templates.";
 
 export function buildAgentRoleInstruction(intent: AgentIntent, taskType?: TaskTypeId) {
   if (intent === "general_question" || intent === "meta_question") {
@@ -22,15 +22,12 @@ export function buildAgentRoleInstruction(intent: AgentIntent, taskType?: TaskTy
     roles.push(exerciseRole);
   }
 
-  if (
-    intent === "study_planning" ||
-    taskType === "review-plan"
-  ) {
+  if (intent === "study_planning" || taskType === "study-plan") {
     roles.push(coachRole);
   }
 
   return [
-    "内部采用轻量角色分工，但只输出一份统一答案，不展示角色讨论过程：",
+    "Use lightweight internal role separation, but output one coherent answer and do not expose role discussion.",
     ...roles.map((role) => `- ${role}`),
   ].join("\n");
 }

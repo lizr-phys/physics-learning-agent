@@ -34,10 +34,10 @@ type SidebarProps = {
 };
 
 const navItems = [
-  { href: "/map", label: "知识点导览", icon: Route },
-  { href: "/practice", label: "练习题生成", icon: PenLine },
-  { href: "/settings/api", label: "API 设置", icon: Settings },
-  { href: "/settings/api#rag", label: "RAG 知识库", icon: Database, muted: true },
+  { href: "/map", label: "Knowledge Map", icon: Route },
+  { href: "/practice", label: "Practice Problems", icon: PenLine },
+  { href: "/settings/api", label: "API Settings", icon: Settings },
+  { href: "/settings/api#rag", label: "RAG Notes", icon: Database, muted: true },
 ];
 
 type SessionGroupProps = {
@@ -128,7 +128,7 @@ function SessionGroup({
               {!editing ? (
                 <button
                   type="button"
-                  aria-label="会话菜单"
+                  aria-label="Conversation menu"
                   onClick={() => onToggleMenu(session.id)}
                   className={
                     menuOpen
@@ -149,7 +149,7 @@ function SessionGroup({
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-100"
                 >
                   <Pencil size={14} />
-                  重命名
+                  Rename
                 </button>
                 <button
                   type="button"
@@ -157,7 +157,7 @@ function SessionGroup({
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-100"
                 >
                   <Trash2 size={14} />
-                  删除
+                  Delete
                 </button>
               </div>
             ) : null}
@@ -270,7 +270,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   function deleteSession(session: StoredChatSession) {
     setMenuSessionId("");
 
-    if (!window.confirm("确定删除这个会话吗？此操作无法撤销。")) {
+    if (!window.confirm("Delete this conversation? This action cannot be undone.")) {
       return;
     }
 
@@ -302,7 +302,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           <BookOpen size={18} />
           Physics Learning Agent
         </Link>
-        <p className="mt-1 text-xs text-zinc-500">大学物理学习助手</p>
+        <p className="mt-1 text-xs text-zinc-500">Undergraduate physics workspace</p>
         <button
           type="button"
           onClick={newSession}
@@ -310,7 +310,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           data-testid="new-session"
         >
           <Plus size={16} />
-          新建学习会话
+          New conversation
         </button>
       </div>
 
@@ -332,7 +332,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             >
               <Icon size={16} />
               <span>{item.label}</span>
-              {item.muted ? <span className="ml-auto text-xs text-zinc-400">预留</span> : null}
+              {item.muted ? <span className="ml-auto text-xs text-zinc-400">Beta</span> : null}
             </Link>
           );
         })}
@@ -341,12 +341,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <div className="mb-2 flex items-center gap-2 px-2 text-xs font-medium text-zinc-500">
           <FileText size={14} />
-          会话历史
+          Conversations
         </div>
         {sessions.length ? (
           <>
             <SessionGroup
-              title="今天"
+              title="Today"
               sessions={grouped.today}
               activeId={activeId}
               editingId={editingId}
@@ -361,7 +361,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               onToggleMenu={toggleMenu}
             />
             <SessionGroup
-              title="最近 7 天"
+              title="Last 7 days"
               sessions={grouped.recent}
               activeId={activeId}
               editingId={editingId}
@@ -376,7 +376,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               onToggleMenu={toggleMenu}
             />
             <SessionGroup
-              title="更早"
+              title="Older"
               sessions={grouped.older}
               activeId={activeId}
               editingId={editingId}
@@ -393,7 +393,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </>
         ) : (
           <p className="px-2 py-3 text-sm leading-6 text-zinc-500">
-            暂无本地会话。点击“新建学习会话”或直接发送第一条问题后会自动保存。
+            No local conversations yet. Start a new conversation or send your first question.
           </p>
         )}
       </div>

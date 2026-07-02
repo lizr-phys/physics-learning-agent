@@ -8,22 +8,22 @@ export type CourseId =
   | "thermo-stat";
 
 export const taskTypeOptions = [
-  { id: "qa", label: "普通问答" },
-  { id: "explain", label: "知识点解释" },
-  { id: "derivation", label: "标准推导" },
-  { id: "practice", label: "练习题生成" },
-  { id: "solution-guide", label: "解题指导" },
-  { id: "misconceptions", label: "易错点分析" },
-  { id: "review-plan", label: "复习计划" },
+  { id: "qa", label: "Q&A" },
+  { id: "explain", label: "Concept explanation" },
+  { id: "derivation", label: "Derivation" },
+  { id: "practice", label: "Practice problems" },
+  { id: "solution-guide", label: "Solution guidance" },
+  { id: "misconceptions", label: "Misconceptions" },
+  { id: "study-plan", label: "Study plan" },
 ] as const;
 
 export type TaskTypeId = (typeof taskTypeOptions)[number]["id"];
 
 export const difficultyOptions = [
-  { id: "basic", label: "基础" },
-  { id: "medium", label: "中等" },
-  { id: "advanced", label: "提高" },
-  { id: "exam", label: "考研或竞赛风格" },
+  { id: "basic", label: "Basic" },
+  { id: "medium", label: "Intermediate" },
+  { id: "advanced", label: "Advanced" },
+  { id: "exam", label: "Exam style" },
 ] as const;
 
 export type DifficultyId = (typeof difficultyOptions)[number]["id"];
@@ -67,28 +67,46 @@ export type AgentIntent =
 export type AgentModule = "chat" | "practice";
 
 export const answerDepthOptions = [
-  { id: "concise", label: "简洁" },
-  { id: "standard", label: "标准" },
-  { id: "detailed", label: "详细" },
-  { id: "derivation-first", label: "推导优先" },
-  { id: "problem-type-first", label: "题型优先" },
+  { id: "concise", label: "Concise" },
+  { id: "standard", label: "Standard" },
+  { id: "detailed", label: "Detailed" },
+  { id: "derivation-first", label: "Derivation first" },
+  { id: "problem-type-first", label: "Problem style first" },
 ] as const;
 
 export type AnswerDepth = (typeof answerDepthOptions)[number]["id"];
 
 export const practiceOutputModeOptions = [
-  { id: "questions-only", label: "只生成题目" },
-  { id: "questions-hints", label: "题目 + 提示" },
-  { id: "full-solution", label: "题目 + 详细解析" },
-  { id: "hidden-answer", label: "题目 + 提示，答案默认隐藏" },
+  { id: "questions-only", label: "Questions only" },
+  { id: "questions-hints", label: "Questions + hints" },
+  { id: "full-solution", label: "Questions + full solutions" },
+  { id: "hidden-answer", label: "Questions + hidden answers" },
 ] as const;
 
 export type PracticeOutputMode = (typeof practiceOutputModeOptions)[number]["id"];
+
+export const practiceStyleOptions = [
+  { id: "auto", label: "Auto" },
+  { id: "chinese-textbook", label: "Chinese textbook exercises" },
+  { id: "chinese-final-exam", label: "Chinese final exam" },
+  { id: "chinese-postgraduate-exam", label: "Chinese postgraduate entrance exam" },
+  { id: "english-textbook", label: "English textbook exercises" },
+  { id: "open-course", label: "Open-course problem set" },
+] as const;
+
+export type PracticeStyleId = (typeof practiceStyleOptions)[number]["id"];
+
+export type DetectedLanguage = "zh" | "en";
+
+export type ReferenceProfileId = "auto" | "chinese" | "english";
 
 export type LearningMemory = {
   currentCourse?: CourseId;
   currentKnowledgePoint?: string;
   currentGoal?: string;
+  recentLanguage?: DetectedLanguage;
+  practiceStyle?: PracticeStyleId;
+  referenceProfile?: ReferenceProfileId;
   recentConfusions: string[];
   coveredConcepts: string[];
   exerciseTopics: string[];
@@ -101,6 +119,9 @@ export type LearningProfile = {
   courseFrequency: Partial<Record<CourseId, number>>;
   recentTopics: string[];
   preferredStyle: LearningMemory["preferredStyle"];
+  recentLanguage?: DetectedLanguage;
+  practiceStyle?: PracticeStyleId;
+  referenceProfile?: ReferenceProfileId;
   updatedAt: number;
 };
 
@@ -161,6 +182,9 @@ export type AgentRequest = {
   memory?: LearningMemory;
   answerDepth?: AnswerDepth;
   practiceOutputMode?: PracticeOutputMode;
+  practiceStyle?: PracticeStyleId;
+  detectedLanguage?: DetectedLanguage;
+  referenceProfile?: ReferenceProfileId;
   conversationId?: string;
   assistantMessageId?: string;
   requestId?: string;

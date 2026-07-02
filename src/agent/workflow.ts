@@ -1,9 +1,15 @@
 import "server-only";
 
 import { selectConversationHistory } from "@/agent/context-manager";
-import { detectCourseFromText, detectKnowledgeFromText } from "@/agent/exercise-parser";
+import {
+  detectCourseFromText,
+  detectKnowledgeFromText,
+  detectPracticeStyleFromText,
+} from "@/agent/exercise-parser";
 import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier";
 import { createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
+import { resolvePracticeStyle, resolveReferenceProfile } from "@/data/referenceProfiles";
+import { detectLanguage } from "@/lib/language";
 import { classifyQuery } from "@/lib/query-classifier";
 import { retrieveRagSnippets } from "@/rag/retrieve";
 import type { AgentRequest } from "@/types/learning";
@@ -22,6 +28,20 @@ export type PreparedAgentRequest = {
 export async function prepareAgentRequest(input: AgentRequest): Promise<PreparedAgentRequest> {
   const stages: AgentWorkflowStage[] = ["understand-input"];
   const intent = input.intent ?? classifyAgentIntent(input);
+  const language =
+    input.detectedLanguage ?? detectLanguage(input.message, input.memory?.recentLanguage ?? "en");
+  const practiceStyle =
+    input.practiceStyle ??
+    detectPracticeStyleFromText(input.message) ??
+    input.memory?.practiceStyle ??
+    resolvePracticeStyle({ language });
+  const referenceProfile =
+    input.referenceProfile ??
+    resolveReferenceProfile({
+      language,
+      practiceStyle,
+      referenceProfile: input.memory?.referenceProfile,
+    });
   const detectedCourse = detectCourseFromText(input.message);
   const course =
     input.course && input.course !== "general"
@@ -36,6 +56,9 @@ export async function prepareAgentRequest(input: AgentRequest): Promise<Prepared
     intent,
     course,
     knowledgePoint,
+    detectedLanguage: language,
+    practiceStyle,
+    referenceProfile,
     queryType: input.queryType ?? classifyQuery({ ...input, course, knowledgePoint }),
     history: selectConversationHistory(input.history),
   };

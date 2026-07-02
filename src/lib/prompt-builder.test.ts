@@ -10,10 +10,11 @@ describe("prompt builder", () => {
       taskType: "derivation",
     });
 
-    expect(prompt).toContain("物理学习");
-    expect(prompt).toContain("前提条件");
-    expect(prompt).toContain("严谨审稿者");
-    expect(prompt).toContain("归一化");
+    expect(prompt).toContain("Physics learning");
+    expect(prompt).toContain("Assumptions and conditions");
+    expect(prompt).toContain("Technical reviewer");
+    expect(prompt).toContain("normalization");
+    expect(prompt).toContain("Detected language: Chinese");
   });
 
   it("keeps coding questions out of the physics task template", () => {
@@ -23,22 +24,27 @@ describe("prompt builder", () => {
       taskType: "qa",
     });
 
-    expect(prompt).toContain("通用问题");
-    expect(prompt).toContain("直接给可用代码");
-    expect(prompt).not.toContain("输出模板");
+    expect(prompt).toContain("General question");
+    expect(prompt).toContain("give usable code");
+    expect(prompt).not.toContain("Practice problem output structure");
   });
 
-  it("applies answer depth and practice output mode instructions", () => {
+  it("applies answer depth, language, reference profile, and practice mode instructions", () => {
     const prompt = buildUserPrompt({
-      message: "生成 3 道 Green 函数练习题",
-      course: "math-physics",
+      message: "Generate 3 open-course problem-set style problems on electrostatic boundary-value problems.",
+      course: "electrodynamics",
       taskType: "practice",
       exerciseCount: 3,
       answerDepth: "derivation-first",
       practiceOutputMode: "questions-hints",
+      practiceStyle: "open-course",
+      detectedLanguage: "en",
     });
 
-    expect(prompt).toContain("优先组织推导");
-    expect(prompt).toContain("不要给出详细解析和最终答案");
+    expect(prompt).toContain("Detected language: English");
+    expect(prompt).toContain("English textbook and open-course tradition");
+    expect(prompt).toContain("Open-course problem-set style");
+    expect(prompt).toContain("Derivation first");
+    expect(prompt).toContain("Do not give full solutions or final answers");
   });
 });

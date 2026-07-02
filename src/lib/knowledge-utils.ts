@@ -3,21 +3,21 @@ import { getKnowledgeItem, getRelatedKnowledgeItems } from "@/data/knowledge";
 import type { AgentRequest, KnowledgeItem } from "@/types/learning";
 
 function listOrNone(items: string[] | undefined) {
-  return items?.length ? items.join("；") : "未列出";
+  return items?.length ? items.join("; ") : "None specified";
 }
 
 export function formatKnowledgeBrief(item: KnowledgeItem) {
   return [
-    `知识点：${item.title}`,
-    item.alias?.length ? `别名：${item.alias.join("；")}` : "",
-    `简要定义：${item.description}`,
-    `教材式说明：${item.textbookStyleSummary}`,
-    `前置知识：${listOrNone(item.prerequisites)}`,
-    `关联知识：${listOrNone(item.related)}`,
-    `常见题型：${listOrNone(item.typicalProblems)}`,
-    item.keyFormulas?.length ? `常用公式：${item.keyFormulas.join("；")}` : "",
+    `Topic: ${item.title}`,
+    item.alias?.length ? `Aliases: ${item.alias.join("; ")}` : "",
+    `Short description: ${item.description}`,
+    `Textbook-style note: ${item.textbookStyleSummary}`,
+    `Prerequisites: ${listOrNone(item.prerequisites)}`,
+    `Related topics: ${listOrNone(item.related)}`,
+    `Typical problems: ${listOrNone(item.typicalProblems)}`,
+    item.keyFormulas?.length ? `Key formulas: ${item.keyFormulas.join("; ")}` : "",
     item.commonMisunderstandings?.length
-      ? `易错点：${item.commonMisunderstandings.join("；")}`
+      ? `Common pitfalls: ${item.commonMisunderstandings.join("; ")}`
       : "",
   ]
     .filter(Boolean)
@@ -31,9 +31,9 @@ export function buildKnowledgeContext(input: AgentRequest) {
 
   if (!selected) {
     return [
-      `课程：${courseLabel}`,
-      courseContext ? `课程范围：${courseContext}` : "",
-      "未限定具体知识点。回答时只使用课程层面的上下文，不要假定用户已经指定章节。",
+      `Course: ${courseLabel}`,
+      courseContext ? `Course scope: ${courseContext}` : "",
+      "No specific topic is selected. Use only course-level context and do not assume a chapter unless the user names it.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -41,12 +41,12 @@ export function buildKnowledgeContext(input: AgentRequest) {
 
   const related = getRelatedKnowledgeItems(selected)
     .slice(0, 3)
-    .map((item) => `${item.title}：${item.description}`);
+    .map((item) => `${item.title}: ${item.description}`);
 
   return [
-    `课程：${courseLabel}`,
+    `Course: ${courseLabel}`,
     formatKnowledgeBrief(selected),
-    related.length ? `相关知识提示：\n${related.join("\n")}` : "",
+    related.length ? `Related context hints:\n${related.join("\n")}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");

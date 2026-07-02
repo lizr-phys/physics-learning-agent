@@ -10,6 +10,15 @@ const exerciseTerms = [
   "生成题目",
   "再出几道",
   "答案解析",
+  "problem",
+  "problems",
+  "exercise",
+  "exercises",
+  "problem set",
+  "assignment",
+  "quiz",
+  "generate",
+  "make it harder",
 ];
 
 const planningTerms = [
@@ -20,6 +29,10 @@ const planningTerms = [
   "学习路径",
   "怎么学",
   "备考",
+  "study plan",
+  "learning plan",
+  "roadmap",
+  "how should i study",
 ];
 
 const metaTerms = [
@@ -31,6 +44,12 @@ const metaTerms = [
   "功能有哪些",
   "支持什么",
   "api 设置",
+  "what can you do",
+  "how do i use",
+  "how to use",
+  "this assistant",
+  "features",
+  "api settings",
 ];
 
 function includesAny(text: string, terms: string[]) {
@@ -48,10 +67,7 @@ export function classifyAgentIntent(input: AgentRequest): AgentIntent {
     return "exercise_generation";
   }
 
-  if (
-    input.taskType === "review-plan" ||
-    includesAny(text, planningTerms)
-  ) {
+  if (input.taskType === "study-plan" || includesAny(text, planningTerms)) {
     return "study_planning";
   }
 

@@ -39,7 +39,9 @@ class MarkdownBoundary extends Component<
     if (this.state.failed) {
       return (
         <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
-          <p className="mb-2 text-xs text-zinc-500">公式排版失败，已保留原始内容。</p>
+          <p className="mb-2 text-xs text-zinc-500">
+            Formula rendering failed. The original content is preserved below.
+          </p>
           <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-zinc-800">
             {this.props.content}
           </pre>
