@@ -90,9 +90,9 @@ export function describePracticeStyle(style: PracticeStyleId) {
 
 const englishReferenceByCourse: Record<CourseId, string> = {
   general:
-    "Use standard undergraduate general physics terminology; Feynman Lectures may guide conceptual explanations where appropriate.",
+    "Use standard undergraduate basic physics terminology, with conceptual style guided by The Feynman Lectures on Physics and the Berkeley Physics Course.",
   "general-physics":
-    "Use general physics conventions from Halliday-Resnick-Walker, Young and Freedman, and concept-first open-course material.",
+    "Use basic physics conventions from The Feynman Lectures on Physics and the Berkeley Physics Course, emphasizing conceptual structure, physical reasoning, and well-posed quantitative examples.",
   "math-physics":
     "Use English mathematical physics conventions from Arfken-Weber-Harris, Riley-Hobson-Bence, Boas, Churchill-Brown, and Haberman.",
   "theoretical-mechanics":
@@ -107,13 +107,13 @@ const englishReferenceByCourse: Record<CourseId, string> = {
 
 const chineseReferenceByCourse: Record<CourseId, string> = {
   general:
-    "Use Chinese university general physics and physics teaching conventions.",
+    "Use Chinese university foundational physics conventions with clear physical reasoning and complete problem conditions.",
   "general-physics":
-    "Use Chinese general physics course, experiment, uncertainty-analysis, and secondary-physics teaching conventions.",
+    "Use Chinese foundational physics course conventions, with reference style aligned to concept-first treatments such as The Feynman Lectures on Physics and the Berkeley Physics Course.",
   "math-physics":
     "Use Chinese mathematical physics conventions in the Liang Kunmiao tradition: complex variables, Fourier analysis, PDE boundary-value problems, Sturm-Liouville theory, Green's functions, and special functions.",
   "theoretical-mechanics":
-    "Use Chinese theoretical mechanics conventions in the Zhou Yanbai tradition: constraints, generalized coordinates, Lagrange equations, Hamiltonian formalism, rigid bodies, central forces, and small oscillations.",
+    "Use classical mechanics conventions: Newtonian mechanics, constraints, generalized coordinates, Lagrange equations, Hamiltonian formalism, rigid bodies, central forces, and small oscillations.",
   electrodynamics:
     "Use Chinese electrodynamics conventions in the Guo Shuohong tradition: electrostatic boundary-value problems, image method, multipole expansion, Maxwell equations, electromagnetic waves, potentials, and gauge transformations.",
   "quantum-mechanics":

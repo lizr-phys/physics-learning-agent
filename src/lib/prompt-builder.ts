@@ -112,7 +112,7 @@ export function buildRagContext(input: AgentRequest) {
       : "Local knowledge retrieval is not enabled.";
   }
 
-  return `Relevant local note snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with general physics knowledge.
+  return `Relevant local note snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with basic physics knowledge.
 
 ${snippets
   .map(

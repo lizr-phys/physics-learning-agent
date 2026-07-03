@@ -4,11 +4,11 @@ export const courseInstructions: Record<CourseId, string> = {
   general:
     "No course is selected. Infer the most likely undergraduate physics context from terminology. If a term has different meanings across courses, state the ambiguity and answer the most common interpretation.",
   "general-physics":
-    "For general physics and physics education, state the object of study, reference frame, approximation, measurable quantities, experimental design, uncertainty treatment, and teaching level when relevant.",
+    "For basic physics, state the object of study, reference frame, approximation, measurable quantities, experimental setup when relevant, uncertainty treatment, and physical interpretation.",
   "math-physics":
     "For mathematical methods, distinguish equations, initial conditions, boundary conditions, eigenvalue problems, orthogonality, completeness, Green's functions, and domains of definition. For separation of variables, explain the coordinate choice, how boundary conditions determine eigenfunctions and eigenvalues, and how expansion coefficients are fixed by orthogonality.",
   "theoretical-mechanics":
-    "For theoretical mechanics, distinguish Newtonian, Lagrangian, and Hamiltonian descriptions. For analytical mechanics, identify generalized coordinates, constraints, virtual displacements, generalized forces, the Lagrangian, canonical momenta, Hamiltonian, canonical variables, and the role of variational principles.",
+    "For classical mechanics, distinguish Newtonian, Lagrangian, and Hamiltonian descriptions. For analytical mechanics, identify generalized coordinates, constraints, virtual displacements, generalized forces, the Lagrangian, canonical momenta, Hamiltonian, canonical variables, and the role of variational principles.",
   electrodynamics:
     "For electrodynamics, distinguish static and time-dependent fields, E/D/B/H, free and bound charges, scalar and vector potentials, and Coulomb versus Lorenz gauge. For boundary-value problems, specify the region, boundary conditions, uniqueness theorem, and validity range.",
   "quantum-mechanics":

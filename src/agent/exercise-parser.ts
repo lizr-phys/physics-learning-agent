@@ -7,12 +7,10 @@ const courseAliases: Record<Exclude<CourseId, "general">, string[]> = {
   "general-physics": [
     "普通物理",
     "大学物理",
-    "中学物理",
-    "物理教学",
-    "general physics",
+    "基础物理",
+    "basic physics",
     "introductory physics",
     "university physics",
-    "physics education",
   ],
   "math-physics": [
     "数学物理方法",
@@ -29,7 +27,7 @@ const courseAliases: Record<Exclude<CourseId, "general">, string[]> = {
     "理论力学",
     "分析力学",
     "classical mechanics",
-    "theoretical mechanics",
+    "classical mechanics",
     "analytical mechanics",
     "lagrangian mechanics",
     "hamiltonian mechanics",

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildUserPrompt } from "@/lib/prompt-builder";
 
 describe("prompt builder", () => {
-  it("uses the physics teaching workflow for a derivation", () => {
+  it("uses the physics tutoring workflow for a derivation", () => {
     const prompt = buildUserPrompt({
       message: "推导一维谐振子的能级量子化",
       course: "quantum-mechanics",

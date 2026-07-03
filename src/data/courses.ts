@@ -12,12 +12,12 @@ export type CourseOption = {
 export const courseOptions: CourseOption[] = [
   {
     id: "general-physics",
-    label: "General Physics and Physics Education",
-    shortLabel: "General Physics",
-    chineseReferences: ["Chinese university general physics curricula", "Chinese secondary physics teaching standards"],
-    englishReferences: ["Halliday, Resnick, and Walker", "Young and Freedman", "Feynman Lectures where conceptually appropriate"],
+    label: "Basic Physics",
+    shortLabel: "Basic Physics",
+    chineseReferences: ["Chinese university foundational physics curricula"],
+    englishReferences: ["The Feynman Lectures on Physics", "Berkeley Physics Course"],
     contextSummary:
-      "Mechanics, thermal physics, electromagnetism, waves, optics, modern physics, experiment design, uncertainty analysis, and physics teaching explanations.",
+      "Mechanics, thermal physics, electromagnetism, waves, optics, modern physics, measurement, uncertainty analysis, and conceptual physical reasoning.",
   },
   {
     id: "math-physics",
@@ -36,9 +36,9 @@ export const courseOptions: CourseOption[] = [
   },
   {
     id: "theoretical-mechanics",
-    label: "Theoretical Mechanics",
+    label: "Classical Mechanics",
     shortLabel: "Mechanics",
-    chineseReferences: ["Zhou Yanbai style Theoretical Mechanics"],
+    chineseReferences: ["Chinese analytical mechanics and classical mechanics course traditions"],
     englishReferences: ["Landau and Lifshitz Mechanics", "Goldstein, Poole, and Safko", "John R. Taylor", "Marion and Thornton"],
     contextSummary:
       "Newtonian mechanics, constrained systems, generalized coordinates, Lagrange equations, Hamilton's principle, canonical equations, Poisson brackets, rigid bodies, and small oscillations.",

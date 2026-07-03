@@ -23,14 +23,14 @@ type Seed = {
 const seeds: Seed[] = [
   {
     course: "general-physics",
-    tags: ["general physics", "experiment design", "uncertainty", "waves", "teaching"],
+    tags: ["basic physics", "measurement", "uncertainty", "waves", "conceptual reasoning"],
     chat: [
       "Explain when momentum conservation can be used safely",
       "How does Gauss's law become useful for finding electric fields?",
       "What assumptions justify the simple harmonic oscillator approximation?",
       "How do state variables differ from process quantities in thermodynamics?",
-      "How should I design a controlled-variable physics experiment?",
-      "Explain common student misconceptions about force and motion",
+      "How should uncertainty be reported in a basic physics measurement?",
+      "Explain common conceptual pitfalls about force and motion",
     ],
     practice: [
       "Generate 5 Newton's-law force-analysis problems",
@@ -38,7 +38,7 @@ const seeds: Seed[] = [
       "Generate 5 thermal-process practice problems",
       "Generate 3 electromagnetic induction problems",
       "Generate 5 oscillation and wave problems",
-      "Generate 3 uncertainty-analysis problems from experimental data",
+      "Generate 3 measurement and uncertainty-analysis problems",
     ],
   },
   {

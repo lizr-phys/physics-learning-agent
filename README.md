@@ -21,9 +21,9 @@ The project is built for students who want a quiet place to ask physics question
 
 Physics Learning Agent is organized around the main undergraduate physics sequence:
 
-- General Physics and physics education contexts
+- Basic Physics
 - Mathematical Methods for Physics
-- Theoretical Mechanics
+- Classical Mechanics
 - Electrodynamics
 - Quantum Mechanics
 - Thermodynamics and Statistical Physics
@@ -34,9 +34,9 @@ The knowledge map and course metadata live in `src/data` and can be extended wit
 
 The interface is English, while answers follow the language and intent of the user's input.
 
-For Chinese questions, the agent follows common Chinese undergraduate physics conventions, including textbook terminology, after-chapter exercise style, university final-exam style, and postgraduate-entrance-exam style. The reference traditions include widely used Chinese course structures for mathematical methods, theoretical mechanics, electrodynamics, quantum mechanics, and thermodynamics and statistical physics.
+For Chinese questions, the agent follows common Chinese undergraduate physics conventions, including textbook terminology, after-chapter exercise style, university final-exam style, and postgraduate-entrance-exam style. The reference traditions include widely used Chinese course structures for basic physics, mathematical methods, classical mechanics, electrodynamics, quantum mechanics, and thermodynamics and statistical physics.
 
-For English questions, the agent follows English textbook and open-course conventions. The reference profile is aligned with standard undergraduate and graduate physics traditions such as Arfken, Boas, Goldstein, Taylor, Griffiths, Jackson, Sakurai, Shankar, Schroeder, Reif, Pathria, Callen, Kardar, and related course problem-set styles.
+For English questions, the agent follows English textbook and open-course conventions. Basic Physics is guided by The Feynman Lectures on Physics and the Berkeley Physics Course. Other reference profiles are aligned with standard undergraduate and graduate physics traditions such as Arfken, Boas, Goldstein, Taylor, Griffiths, Jackson, Sakurai, Shankar, Schroeder, Reif, Pathria, Callen, Kardar, and related course problem-set styles.
 
 These references are used as curriculum and style guidance only. The project does not include textbook content, official exam questions, or official open-course problem statements.
 
