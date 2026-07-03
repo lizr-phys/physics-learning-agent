@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Send } from "lucide-react";
+import { Download, RefreshCw, Send } from "lucide-react";
 
 import { parseExerciseRequest } from "@/agent/exercise-parser";
 import { classifyAgentIntent } from "@/agent/intent-classifier";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/preferences";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
+import { buildLatexDocument, createTexFileName } from "@/lib/latex-export";
 import { getPersonalizedRecommendations } from "@/lib/recommendations";
 import {
   getStoredLearningProfile,
@@ -409,6 +410,30 @@ ${existingContent}`,
     abortControllerRef.current?.abort();
   }
 
+  function downloadLatex() {
+    if (!content.trim()) {
+      return;
+    }
+
+    const latex = buildLatexDocument(content, {
+      title: "Physics Learning Agent Practice Problems",
+      subtitle: topic ? `Topic: ${topic}` : undefined,
+      generatedAt: generatedAtRef.current ? new Date(generatedAtRef.current) : new Date(),
+    });
+    const blob = new Blob([latex], {
+      type: "application/x-tex;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = createTexFileName(topic);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function continueInChat(selectedItem?: ToolContext["selectedItem"]) {
     if (!content.trim() || !course) {
       return;
@@ -674,19 +699,32 @@ ${existingContent}`,
               />
             )}
 
-            <button
-              type="button"
-              onClick={() =>
-                continueInChat({
-                  type: "summary",
-                  title: topic,
-                  content,
-                })
-              }
-              className="inline-flex rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950"
-            >
-              Continue in chat
-            </button>
+            {!isLoading ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={downloadLatex}
+                  className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950"
+                  data-testid="download-latex"
+                >
+                  <Download size={15} />
+                  Download .tex
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    continueInChat({
+                      type: "summary",
+                      title: topic,
+                      content,
+                    })
+                  }
+                  className="inline-flex rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950"
+                >
+                  Continue in chat
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : isLoading ? (
           <div className="flex min-h-[440px] items-center justify-center">

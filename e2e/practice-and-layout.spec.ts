@@ -64,6 +64,7 @@ test("practice infers course from a natural-language request", async ({ page }) 
   await expect(page.getByTestId("practice-result-list")).not.toContainText("\\(");
   await expect(page.getByTestId("practice-result-list")).not.toContainText("\\[");
   await expect(page.getByText("Show answer")).toBeVisible();
+  await expect(page.getByTestId("download-latex")).toBeVisible();
   await expect(
     page.getByText("The allowed energies are fixed by the integer quantum number", {
       exact: false,
