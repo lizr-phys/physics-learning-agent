@@ -1,22 +1,39 @@
-# RAG 预留说明
+# Retrieval-Augmented Learning Notes
 
-当前版本是轻量 RAG 骨架，不依赖向量数据库，也不假设 DeepSeek 提供 embedding。
+This directory contains the lightweight retrieval layer used by Physics Learning Agent.
 
-## 当前实现
+## Current implementation
 
-- `sample-docs/`：本地 Markdown 样例资料。
-- `chunk.ts`：按 Markdown 标题切分，再按段落控制片段长度。
-- `retrieve.ts`：基于关键词的简单评分检索，返回相关片段标题、来源和内容。
-- `/api/chat`：当 `useRag: true` 时检索 2 到 4 个片段并加入 prompt。
+- `sample-docs/` stores small Markdown examples for local development.
+- `chunk.ts` splits Markdown documents by heading and paragraph length.
+- `retrieve.ts` performs simple keyword scoring and returns source, heading, and content.
+- Authenticated users can upload text-like files from the Personal Knowledge page. Those files are indexed separately under `PLA_DATA_DIR` and retrieved during chat.
 
-## 后续扩展路线
+The current implementation does not require a vector database and does not assume that DeepSeek provides embeddings.
 
-1. 支持上传 PDF / Markdown / LaTeX 讲义。
-2. 抽取文本，按章节、标题、公式上下文切分。
-3. 选择中文效果稳定的 embedding provider。
-4. 引入向量库，例如 LanceDB、Chroma、pgvector 或 Supabase Vector。
-5. 在回答末尾引用文档名、章节名、片段标题，不编造页码。
+## Indexed file types
 
-## 版权注意
+The personal knowledge base currently indexes:
 
-不要把受版权保护的教材全文提交到公开仓库。建议只放个人学习笔记、讲义摘要、自己整理的题解或有授权的公开材料。
+- Markdown
+- TXT
+- TeX
+- CSV
+
+PDF, DOCX, and PPTX files can be stored in the catalog, but full text extraction is not enabled yet. Add dedicated parsers before relying on those formats for retrieval.
+
+## Extension path
+
+Recommended next steps:
+
+1. Add robust PDF, DOCX, and PPTX text extraction.
+2. Preserve document metadata such as course, topic, page, section, and source type.
+3. Add embeddings with a provider that performs well on both Chinese and English technical text.
+4. Add a vector store such as LanceDB, Chroma, pgvector, or Supabase Vector.
+5. Combine vector retrieval with keyword retrieval for formulas, symbols, and textbook terminology.
+6. Add a reranker and retrieval evaluation set for common physics questions.
+7. Display citations using document names, sections, and chunk headings. Do not invent page numbers.
+
+## Copyright note
+
+Do not commit copyrighted textbooks or protected course materials to a public repository. The intended use is local, user-owned notes, lecture summaries, problem solutions, and materials the user has permission to process.

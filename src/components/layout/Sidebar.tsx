@@ -36,8 +36,8 @@ type SidebarProps = {
 const navItems = [
   { href: "/map", label: "Knowledge Map", icon: Route },
   { href: "/practice", label: "Practice Problems", icon: PenLine },
+  { href: "/knowledge-base", label: "Personal Knowledge", icon: Database },
   { href: "/settings/api", label: "API Settings", icon: Settings },
-  { href: "/settings/api#rag", label: "RAG Notes", icon: Database, muted: true },
 ];
 
 type SessionGroupProps = {
@@ -332,7 +332,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             >
               <Icon size={16} />
               <span>{item.label}</span>
-              {item.muted ? <span className="ml-auto text-xs text-zinc-400">Beta</span> : null}
             </Link>
           );
         })}

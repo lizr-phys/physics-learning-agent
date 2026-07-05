@@ -10,6 +10,7 @@ import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier"
 import { createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
 import { resolvePracticeStyle, resolveReferenceProfile } from "@/data/referenceProfiles";
 import { detectLanguage } from "@/lib/language";
+import { retrievePersonalKnowledge } from "@/lib/personal-knowledge";
 import { classifyQuery } from "@/lib/query-classifier";
 import { retrieveRagSnippets } from "@/rag/retrieve";
 import type { AgentRequest } from "@/types/learning";
@@ -25,7 +26,10 @@ export type PreparedAgentRequest = {
   stages: AgentWorkflowStage[];
 };
 
-export async function prepareAgentRequest(input: AgentRequest): Promise<PreparedAgentRequest> {
+export async function prepareAgentRequest(
+  input: AgentRequest,
+  options: { userId?: string } = {},
+): Promise<PreparedAgentRequest> {
   const stages: AgentWorkflowStage[] = ["understand-input"];
   const intent = input.intent ?? classifyAgentIntent(input);
   const language =
@@ -70,10 +74,14 @@ export async function prepareAgentRequest(input: AgentRequest): Promise<Prepared
 
   stages.push("resolve-context");
 
-  const ragResults =
+  const personalRagResults = options.userId
+    ? await retrievePersonalKnowledge(options.userId, contextInput.message, 4)
+    : [];
+  const sampleRagResults =
     contextInput.useRag && isPhysicsIntent(intent)
       ? await retrieveRagSnippets(contextInput.message, 4)
       : [];
+  const ragResults = [...personalRagResults, ...sampleRagResults].slice(0, 6);
 
   stages.push("retrieve-knowledge", "prepare-generation");
 

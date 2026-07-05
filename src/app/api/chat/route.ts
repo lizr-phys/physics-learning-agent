@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { prepareAgentRequest } from "@/agent/workflow";
+import { getUserFromRequest } from "@/lib/auth-server";
 import { DeepSeekError, streamDeepSeek } from "@/lib/deepseek";
 import {
   difficultyOptions,
@@ -9,6 +10,7 @@ import {
   type AgentRequest,
   type AnswerDepth,
   type ChatMessage,
+  type ClientProviderConfig,
   type CourseId,
   type DifficultyId,
   type LearningMemory,
@@ -53,6 +55,18 @@ const practiceStyles = new Set<PracticeStyleId>(practiceStyleOptions.map((item) 
 const detectedLanguages = new Set<DetectedLanguage>(["zh", "en"]);
 const referenceProfiles = new Set<ReferenceProfileId>(["auto", "chinese", "english"]);
 const modelIds = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
+const clientProviderIds = new Set([
+  "openai",
+  "deepseek",
+  "qwen",
+  "kimi",
+  "glm",
+  "openrouter",
+  "anthropic",
+  "gemini",
+  "custom",
+]);
+const clientProviderKinds = new Set(["openai-compatible", "anthropic", "gemini"]);
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -191,6 +205,38 @@ function sanitizeLearningMemory(value: unknown): LearningMemory | undefined {
   };
 }
 
+function sanitizeClientProvider(value: unknown): ClientProviderConfig | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const type = asString(record.type);
+  const provider = asString(record.provider);
+  const apiKey = asString(record.apiKey);
+  const baseUrl = asString(record.baseUrl);
+  const model = asString(record.model);
+
+  if (!clientProviderKinds.has(type) || !apiKey || !model) {
+    return undefined;
+  }
+
+  if (type === "openai-compatible" && !baseUrl) {
+    return undefined;
+  }
+
+  return {
+    provider: clientProviderIds.has(provider)
+      ? (provider as ClientProviderConfig["provider"])
+      : "custom",
+    type: type as ClientProviderConfig["type"],
+    label: trimToLength(asString(record.label), 80) || undefined,
+    apiKey: trimToLength(apiKey, 600),
+    baseUrl: baseUrl ? trimToLength(baseUrl, 400) : undefined,
+    model: trimToLength(model, 160),
+  };
+}
+
 function sanitizeRequest(body: unknown): AgentRequest {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const message = asString(record.message);
@@ -245,13 +291,14 @@ function sanitizeRequest(body: unknown): AgentRequest {
     referenceProfile: referenceProfiles.has(referenceProfile as ReferenceProfileId)
       ? (referenceProfile as ReferenceProfileId)
       : undefined,
+    clientProvider: sanitizeClientProvider(record.clientProvider),
     conversationId: trimToLength(asString(record.conversationId), 160) || undefined,
     assistantMessageId: trimToLength(asString(record.assistantMessageId), 160) || undefined,
     requestId: trimToLength(asString(record.requestId), 160) || undefined,
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const input = sanitizeRequest(body);
@@ -260,7 +307,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please enter a question or generation request." }, { status: 400 });
     }
 
-    const prepared = await prepareAgentRequest(input);
+    const user = await getUserFromRequest(request);
+    const prepared = await prepareAgentRequest(input, { userId: user?.id });
     const stream = await streamDeepSeek(prepared.input, request.signal);
 
     return new Response(stream, {

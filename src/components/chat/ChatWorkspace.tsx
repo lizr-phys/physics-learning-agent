@@ -21,6 +21,7 @@ import {
 import { courseOptions } from "@/data/courses";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import { getClientProviderOverride } from "@/lib/client-provider";
 import { detectLanguage } from "@/lib/language";
 import {
   getStoredAnswerDepth,
@@ -754,6 +755,7 @@ export function ChatWorkspace() {
       detectedLanguage: memorySnapshot.recentLanguage,
       practiceStyle: memorySnapshot.practiceStyle,
       referenceProfile: memorySnapshot.referenceProfile,
+      clientProvider: getClientProviderOverride(),
       conversationId: targetSessionId,
       assistantMessageId,
       requestId,
@@ -837,6 +839,7 @@ export function ChatWorkspace() {
       detectedLanguage: memory.recentLanguage,
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
+      clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,
@@ -897,6 +900,7 @@ export function ChatWorkspace() {
       requestId: retryRequestId,
       memory,
       answerDepth,
+      clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,

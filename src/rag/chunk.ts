@@ -11,7 +11,7 @@ export function tokenize(text: string) {
 function splitByHeading(content: string) {
   const lines = content.split(/\r?\n/);
   const sections: Array<{ heading: string; content: string[] }> = [];
-  let current = { heading: "导言", content: [] as string[] };
+  let current = { heading: "Untitled", content: [] as string[] };
 
   for (const line of lines) {
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);

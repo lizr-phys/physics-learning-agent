@@ -1,10 +1,54 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { askDeepSeek, DeepSeekError, getDeepSeekPublicConfig } from "@/lib/deepseek";
+import type { ClientProviderConfig } from "@/types/learning";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+function asString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function sanitizeClientProvider(value: unknown): ClientProviderConfig | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const type = asString(record.type);
+  const provider = asString(record.provider);
+
+  if (!["openai-compatible", "anthropic", "gemini"].includes(type)) {
+    return undefined;
+  }
+
+  if (type === "openai-compatible" && !asString(record.baseUrl)) {
+    return undefined;
+  }
+
+  return {
+    provider: [
+      "openai",
+      "deepseek",
+      "qwen",
+      "kimi",
+      "glm",
+      "openrouter",
+      "anthropic",
+      "gemini",
+      "custom",
+    ].includes(provider)
+      ? (provider as ClientProviderConfig["provider"])
+      : "custom",
+    type: type as ClientProviderConfig["type"],
+    label: asString(record.label).slice(0, 80) || undefined,
+    apiKey: asString(record.apiKey).slice(0, 600),
+    baseUrl: asString(record.baseUrl).slice(0, 400) || undefined,
+    model: asString(record.model).slice(0, 160),
+  };
+}
+
+export async function GET(request: NextRequest) {
   const config = getDeepSeekPublicConfig();
   const url = new URL(request.url);
 
@@ -57,5 +101,69 @@ export async function GET(request: Request) {
       message: "An unknown error occurred while testing the DeepSeek connection.",
       config,
     });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const config = getDeepSeekPublicConfig();
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const clientProvider = sanitizeClientProvider(body.clientProvider);
+
+    if (!clientProvider) {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "invalid-provider",
+          message: "Enter a provider, model, and API key. OpenAI-compatible providers also need a Base URL.",
+          config,
+        },
+        { status: 400 },
+      );
+    }
+
+    const content = await askDeepSeek({
+      message: 'Reply with exactly: "connection ok"',
+      course: "general",
+      taskType: "qa",
+      model: clientProvider.model,
+      detectedLanguage: "en",
+      clientProvider,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      status: "ok",
+      message: content || "Connection ok.",
+      config: {
+        ...config,
+        configured: true,
+        baseUrl: clientProvider.baseUrl?.replace(/\/$/, "") ?? clientProvider.label ?? clientProvider.provider,
+        model: clientProvider.model,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DeepSeekError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: error.code,
+          message: error.message,
+          config,
+        },
+        { status: error.status },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        status: "unknown-error",
+        message: "An unknown error occurred while testing the custom provider.",
+        config,
+      },
+      { status: 500 },
+    );
   }
 }

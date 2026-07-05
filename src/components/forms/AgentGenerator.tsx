@@ -20,6 +20,7 @@ import type { RecommendationItem } from "@/data/recommendations";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import { getClientProviderOverride } from "@/lib/client-provider";
 import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
@@ -248,6 +249,7 @@ export function AgentGenerator() {
       practiceStyle: resolvedPracticeStyle,
       detectedLanguage: resolvedLanguage,
       answerDepth,
+      clientProvider: getClientProviderOverride(),
     };
 
     try {
@@ -313,6 +315,7 @@ export function AgentGenerator() {
     try {
       const continuationRequest: AgentRequest = {
         ...pendingRequest,
+        clientProvider: getClientProviderOverride(),
         message: `The previous output stopped at the following point. Do not repeat existing content. Continue from the interruption point, preserving the original structure, numbering, language, notation, and LaTeX format.
 
 Original request:
@@ -371,11 +374,15 @@ ${existingContent}`,
     abortControllerRef.current = abortController;
 
     try {
-      const result = await requestAgentStream(pendingRequest, setContent, {
-        signal: abortController.signal,
-        throttleMs: 80,
-        idleTimeoutMs: pendingRequest.exerciseCount === 10 ? 180000 : 120000,
-      });
+      const result = await requestAgentStream(
+        { ...pendingRequest, clientProvider: getClientProviderOverride() },
+        setContent,
+        {
+          signal: abortController.signal,
+          throttleMs: 80,
+          idleTimeoutMs: pendingRequest.exerciseCount === 10 ? 180000 : 120000,
+        },
+      );
       setContent(result);
       setPendingRequest(null);
       clearLastApiError();

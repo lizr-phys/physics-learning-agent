@@ -258,13 +258,16 @@ ${formatLearningMemory(input.memory)}
 6. Internal role
 ${buildAgentRoleInstruction(intent, input.taskType)}
 
-7. Output constraints
+7. Local note context
+${buildRagContext(input)}
+
+8. Output constraints
 - Avoid these stock phrases: ${forbiddenAnswerStyle.join(", ")}.
 - The main answer must serve the user's actual question.
 - If the user asks about this assistant's capabilities or usage, explain features, boundaries, and usage without adding the physics-learning reminder.
 - Answer depth: ${buildAnswerDepthInstruction(input.answerDepth)}
 
-8. User question
+9. User question
 ${input.message}`;
 }
 

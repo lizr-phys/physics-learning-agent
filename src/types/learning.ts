@@ -161,6 +161,28 @@ export type RagContext = {
   snippets: Array<RagCitation & { content: string }>;
 };
 
+export type ClientProviderKind = "openai-compatible" | "anthropic" | "gemini";
+
+export type ClientProviderId =
+  | "openai"
+  | "deepseek"
+  | "qwen"
+  | "kimi"
+  | "glm"
+  | "openrouter"
+  | "anthropic"
+  | "gemini"
+  | "custom";
+
+export type ClientProviderConfig = {
+  provider: ClientProviderId;
+  type: ClientProviderKind;
+  label?: string;
+  apiKey: string;
+  baseUrl?: string;
+  model: string;
+};
+
 export type AgentRequest = {
   message: string;
   intent?: AgentIntent;
@@ -185,6 +207,7 @@ export type AgentRequest = {
   practiceStyle?: PracticeStyleId;
   detectedLanguage?: DetectedLanguage;
   referenceProfile?: ReferenceProfileId;
+  clientProvider?: ClientProviderConfig;
   conversationId?: string;
   assistantMessageId?: string;
   requestId?: string;

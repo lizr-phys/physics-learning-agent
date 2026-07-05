@@ -26,13 +26,14 @@
 # misc
 .DS_Store
 *.pem
+.pla-data
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-dev-server.log
+dev-server*.log
 
 # env files (can opt-in for committing if needed)
 .env*
