@@ -163,7 +163,7 @@ export async function addPersonalDocument(input: {
     const content = input.data.toString("utf8").replace(/\u0000/g, "").trim();
 
     if (content) {
-      const chunks = chunkMarkdownDocument(
+      const chunks = await chunkMarkdownDocument(
         {
           source: fileName,
           content: `# ${fileName}\n\n${input.description ? `${input.description}\n\n` : ""}${content}`,

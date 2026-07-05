@@ -17,6 +17,7 @@
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square">
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?style=flat-square">
+  <img alt="LangChain" src="https://img.shields.io/badge/LangChain-document_retrieval-black?style=flat-square">
   <img alt="LaTeX" src="https://img.shields.io/badge/LaTeX-KaTeX-black?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black?style=flat-square">
 </p>
@@ -28,7 +29,7 @@ The project is built around two primary workflows:
 1. Learn through conversation: ask conceptual questions, follow derivations, debug mistakes, and continue from previous context.
 2. Train through problems: generate original practice sets with hidden hints, solutions, answers, and LaTeX export.
 
-It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, retrieval from user-owned materials, local conversation memory, and strict streaming isolation between sessions.
+It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, LangChain-based document chunking, retrieval from user-owned materials, local conversation memory, and strict streaming isolation between sessions.
 
 ## Overview
 
@@ -108,6 +109,7 @@ flowchart LR
 
 - Local account flow for small-group or personal deployments
 - Upload user-owned notes, problem sets, handouts, or course materials
+- LangChain document splitters for Markdown, LaTeX, and plain text indexing
 - Markdown, text, TeX, and CSV extraction for retrieval
 - PDF, DOCX, and PPTX files are stored as source documents and can be extended with richer parsers later
 - Retrieval snippets are injected into the answer context when relevant
@@ -207,6 +209,7 @@ flowchart TB
     Classifier["intent and language classifier"]
     PromptBuilder["prompt builder"]
     Memory["context and learning memory"]
+    LC["LangChain document splitters"]
     PostProcess["post-processing and safety rules"]
   end
 
@@ -223,6 +226,7 @@ flowchart TB
   ChatAPI --> Agent
   Agent --> ProviderAPI
   Agent --> Data
+  Agent --> LC
   KBAPI --> Docs
   KBAPI --> Chunks
   AuthAPI --> Sessions
@@ -235,9 +239,9 @@ flowchart TB
 | `src/app` | App Router pages and API routes |
 | `src/components` | Chat, layout, practice, knowledge map, settings, and shared UI components |
 | `src/data` | Course metadata, knowledge topics, recommendations, and prompt-related data |
-| `src/lib` | Provider clients, prompt builder, session storage, retrieval, recommendations, and utilities |
+| `src/lib` | Provider clients, prompt builder, session storage, personal knowledge indexing, recommendations, and utilities |
 | `src/types` | Shared TypeScript types |
-| `src/rag` | Lightweight retrieval utilities and sample notes |
+| `src/rag` | LangChain-backed chunking, lightweight retrieval utilities, and sample notes |
 
 ## Personal Knowledge Base
 
@@ -245,13 +249,14 @@ flowchart TB
 flowchart LR
   Upload["Upload document"] --> Store["Store source file"]
   Store --> Extract["Extract text when supported"]
-  Extract --> Chunk["Split into searchable chunks"]
+  Extract --> LangChain["LangChain splitter"]
+  LangChain --> Chunk["Searchable chunks"]
   Chunk --> Search["Keyword retrieval"]
   Search --> Context["Inject relevant snippets into prompt"]
   Context --> Answer["Grounded answer"]
 ```
 
-The current knowledge base is intentionally lightweight. It is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can be added later with document loaders, embeddings, vector indexes, and citation-aware answer generation.
+The current knowledge base is intentionally lightweight. It uses LangChain for document abstraction and splitting, then applies local keyword retrieval over generated chunks. It is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can later add LangChain loaders, embeddings, vector indexes, reranking, and citation-aware answer generation.
 
 ## Model Providers
 

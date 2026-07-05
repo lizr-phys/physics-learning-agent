@@ -27,7 +27,7 @@ export async function getRagChunks() {
   }
 
   const documents = await loadSampleDocuments();
-  cachedChunks = documents.flatMap((document) => chunkMarkdownDocument(document));
+  cachedChunks = (await Promise.all(documents.map((document) => chunkMarkdownDocument(document)))).flat();
   return cachedChunks;
 }
 
