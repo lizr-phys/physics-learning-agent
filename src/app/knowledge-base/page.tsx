@@ -129,6 +129,7 @@ export default function KnowledgeBasePage() {
       setUser(data.user);
       setPassword("");
       setNotice(authMode === "login" ? "Signed in." : "Account created.");
+      window.dispatchEvent(new Event("pla:auth-changed"));
       await loadDocuments();
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Authentication failed.");
@@ -143,6 +144,7 @@ export default function KnowledgeBasePage() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     setDocuments([]);
+    window.dispatchEvent(new Event("pla:auth-changed"));
   }
 
   async function uploadDocument(event: FormEvent<HTMLFormElement>) {

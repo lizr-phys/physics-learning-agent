@@ -111,6 +111,7 @@ export default function ApiSettingsPage() {
   function handleModelChange(model: string) {
     setSelectedModel(model);
     window.localStorage.setItem("pla.deepseek.model", model);
+    window.dispatchEvent(new Event("pla:user-data-changed"));
   }
 
   function handleByokProviderChange(provider: ClientProviderId) {

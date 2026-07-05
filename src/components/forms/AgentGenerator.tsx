@@ -25,6 +25,12 @@ import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
 } from "@/lib/preferences";
+import {
+  createPracticeGenerationId,
+  getStoredPracticeGenerations,
+  upsertStoredPracticeGeneration,
+  type StoredPracticeGeneration,
+} from "@/lib/practice-history";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { buildLatexDocument, createTexFileName } from "@/lib/latex-export";
@@ -68,6 +74,14 @@ function languageLabel(language?: DetectedLanguage) {
   return language === "zh" ? "Chinese" : "English";
 }
 
+function createStoredApiError(message: string, status?: string) {
+  return {
+    message,
+    status,
+    occurredAt: Date.now(),
+  };
+}
+
 export function AgentGenerator() {
   const router = useRouter();
   const [course, setCourse] = useState<CourseId | "">("");
@@ -85,6 +99,7 @@ export function AgentGenerator() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [linkedSessionId, setLinkedSessionId] = useState("");
+  const [practiceRecordId, setPracticeRecordId] = useState("");
   const [pendingRequest, setPendingRequest] = useState<AgentRequest | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const generatedAtRef = useRef(0);
@@ -109,6 +124,30 @@ export function AgentGenerator() {
           profile: getStoredLearningProfile(),
         }),
       );
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const latest = getStoredPracticeGenerations()[0];
+
+      if (!latest) {
+        return;
+      }
+
+      setPracticeRecordId(latest.id);
+      setCourse(latest.course ?? "");
+      setKnowledgePoint(latest.knowledgePoint ?? "");
+      setDifficulty(latest.difficulty ?? "medium");
+      setExerciseCount(latest.exerciseCount ?? 5);
+      setPracticeOutputMode(latest.practiceOutputMode ?? "hidden-answer");
+      setPracticeStyle(latest.practiceStyle ?? "auto");
+      setAnswerDepth(latest.answerDepth ?? getStoredAnswerDepth());
+      setExtraInput(latest.prompt);
+      setContent(latest.content);
+      generatedAtRef.current = latest.createdAt;
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -177,6 +216,34 @@ export function AgentGenerator() {
       .join("\n");
   }
 
+  function savePracticeResult(options: {
+    recordId: string;
+    resultContent: string;
+    status: StoredPracticeGeneration["status"];
+    request: AgentRequest;
+    promptText: string;
+  }) {
+    const now = Date.now();
+    const createdAt = generatedAtRef.current || now;
+
+    upsertStoredPracticeGeneration({
+      id: options.recordId,
+      title: topic || selectedKnowledgeTitle || "Practice problems",
+      course: options.request.course,
+      knowledgePoint: options.request.knowledgePoint,
+      difficulty: options.request.difficulty,
+      exerciseCount: options.request.exerciseCount,
+      practiceOutputMode: options.request.practiceOutputMode,
+      practiceStyle: options.request.practiceStyle,
+      answerDepth: options.request.answerDepth,
+      prompt: options.promptText,
+      content: options.resultContent,
+      status: options.status,
+      createdAt,
+      updatedAt: now,
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -223,6 +290,8 @@ export function AgentGenerator() {
     setLinkedSessionId("");
     setPendingRequest(null);
     generatedAtRef.current = Date.now();
+    const recordId = createPracticeGenerationId();
+    setPracticeRecordId(recordId);
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
@@ -265,7 +334,7 @@ export function AgentGenerator() {
         referenceProfile: memory.referenceProfile,
       };
 
-      await requestAgentStream(
+      const result = await requestAgentStream(
         requestBody,
         setContent,
         {
@@ -274,6 +343,14 @@ export function AgentGenerator() {
           idleTimeoutMs: resolvedCount === 10 ? 180000 : 120000,
         },
       );
+      setContent(result);
+      savePracticeResult({
+        recordId,
+        resultContent: result,
+        status: "complete",
+        request: requestBody,
+        promptText: extraInput.trim() || message,
+      });
       clearLastApiError();
     } catch (requestError) {
       const streamError =
@@ -283,16 +360,19 @@ export function AgentGenerator() {
 
       if (streamError.partialContent) {
         setContent(streamError.partialContent);
+        savePracticeResult({
+          recordId,
+          resultContent: streamError.partialContent,
+          status: streamError.reason === "abort" ? "interrupted" : "error",
+          request: baseRequest,
+          promptText: extraInput.trim() || message,
+        });
       }
 
       setPendingRequest(baseRequest);
       const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
       setError(messageText);
-      saveLastApiError({
-        message: messageText,
-        status: streamError.reason,
-        occurredAt: Date.now(),
-      });
+      saveLastApiError(createStoredApiError(messageText, streamError.reason));
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -335,6 +415,13 @@ ${existingContent}`,
       );
 
       setContent(`${existingContent}${continuation}`);
+      savePracticeResult({
+        recordId: ensurePracticeRecordId(),
+        resultContent: `${existingContent}${continuation}`,
+        status: "complete",
+        request: pendingRequest,
+        promptText: extraInput.trim() || pendingRequest.message,
+      });
       setPendingRequest(null);
       clearLastApiError();
     } catch (requestError) {
@@ -345,15 +432,18 @@ ${existingContent}`,
 
       if (streamError.partialContent) {
         setContent(`${existingContent}${streamError.partialContent}`);
+        savePracticeResult({
+          recordId: ensurePracticeRecordId(),
+          resultContent: `${existingContent}${streamError.partialContent}`,
+          status: streamError.reason === "abort" ? "interrupted" : "error",
+          request: pendingRequest,
+          promptText: extraInput.trim() || pendingRequest.message,
+        });
       }
 
       const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
       setError(messageText);
-      saveLastApiError({
-        message: messageText,
-        status: streamError.reason,
-        occurredAt: Date.now(),
-      });
+      saveLastApiError(createStoredApiError(messageText, streamError.reason));
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -384,6 +474,13 @@ ${existingContent}`,
         },
       );
       setContent(result);
+      savePracticeResult({
+        recordId: ensurePracticeRecordId(),
+        resultContent: result,
+        status: "complete",
+        request: pendingRequest,
+        promptText: extraInput.trim() || pendingRequest.message,
+      });
       setPendingRequest(null);
       clearLastApiError();
     } catch (requestError) {
@@ -396,15 +493,18 @@ ${existingContent}`,
 
       if (streamError.partialContent) {
         setContent(streamError.partialContent);
+        savePracticeResult({
+          recordId: ensurePracticeRecordId(),
+          resultContent: streamError.partialContent,
+          status: streamError.reason === "abort" ? "interrupted" : "error",
+          request: pendingRequest,
+          promptText: extraInput.trim() || pendingRequest.message,
+        });
       }
 
       const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
       setError(messageText);
-      saveLastApiError({
-        message: messageText,
-        status: streamError.reason,
-        occurredAt: Date.now(),
-      });
+      saveLastApiError(createStoredApiError(messageText, streamError.reason));
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -415,6 +515,16 @@ ${existingContent}`,
 
   function stopGeneration() {
     abortControllerRef.current?.abort();
+  }
+
+  function ensurePracticeRecordId() {
+    if (practiceRecordId) {
+      return practiceRecordId;
+    }
+
+    const nextId = createPracticeGenerationId();
+    setPracticeRecordId(nextId);
+    return nextId;
   }
 
   function downloadLatex() {

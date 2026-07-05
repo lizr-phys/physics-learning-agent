@@ -196,6 +196,7 @@ export function saveStoredSessions(sessions: StoredChatSession[]) {
 
   window.localStorage.setItem(storageKey, JSON.stringify(sorted));
   window.dispatchEvent(new Event("pla:sessions-changed"));
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function upsertStoredSession(session: StoredChatSession) {
@@ -274,6 +275,7 @@ export function saveStoredLearningProfile(profile: LearningProfile) {
   }
 
   window.localStorage.setItem(learningProfileKey, JSON.stringify(profile));
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function buildSessionTitle(message: string) {

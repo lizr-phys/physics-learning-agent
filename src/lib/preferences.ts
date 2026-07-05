@@ -22,6 +22,7 @@ export function getStoredAnswerDepth(): AnswerDepth {
 
 export function saveStoredAnswerDepth(value: AnswerDepth) {
   window.localStorage.setItem(answerDepthKey, value);
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function isOnboardingDismissed() {
@@ -30,8 +31,10 @@ export function isOnboardingDismissed() {
 
 export function dismissOnboarding() {
   window.localStorage.setItem(onboardingKey, "1");
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function resetOnboarding() {
   window.localStorage.removeItem(onboardingKey);
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }

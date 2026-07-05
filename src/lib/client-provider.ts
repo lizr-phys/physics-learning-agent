@@ -172,6 +172,7 @@ export function saveClientProviderPublicConfig(input: {
   window.localStorage.setItem(labelKey, input.label?.trim() || preset.label);
   window.localStorage.setItem(baseUrlKey, input.baseUrl?.trim() || preset.defaultBaseUrl || "");
   window.localStorage.setItem(modelKey, input.model.trim());
+  window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function saveClientProviderSessionKey(apiKey: string) {

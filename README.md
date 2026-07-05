@@ -29,7 +29,7 @@ The project is built around two primary workflows:
 1. Learn through conversation: ask conceptual questions, follow derivations, debug mistakes, and continue from previous context.
 2. Train through problems: generate original practice sets with hidden hints, solutions, answers, and LaTeX export.
 
-It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, LangChain-based document chunking, retrieval from user-owned materials, local conversation memory, and strict streaming isolation between sessions.
+It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, LangChain-based document chunking, retrieval from user-owned materials, account-scoped workspace memory, and strict streaming isolation between sessions.
 
 ## Overview
 
@@ -40,6 +40,7 @@ flowchart LR
   Workspace --> Practice["Practice problems"]
   Workspace --> Map["Knowledge map"]
   Workspace --> KB["Personal knowledge base"]
+  Workspace --> DataSync["Workspace data sync"]
   Workspace --> Settings["Model settings"]
 
   Chat --> Agent["Learning agent layer"]
@@ -57,6 +58,7 @@ flowchart LR
 | Practice Problems | Original problem sets with difficulty, style, language, hidden answers, and `.tex` export |
 | Knowledge Map | Course topics, prerequisites, related topics, formulas, typical problems, and pitfalls |
 | Personal Knowledge Base | User-owned notes and materials indexed for local retrieval |
+| Workspace Persistence | Conversations, active session, practice history, learning memory, and safe preferences saved per signed-in user |
 | Model Providers | Server-side default model plus browser-side user keys for multiple providers |
 | Rendering | Markdown, LaTeX, tables, code blocks, and long formulas with overflow protection |
 
@@ -65,10 +67,11 @@ flowchart LR
 ### Study-first chat
 
 - ChatGPT-style conversation layout with a persistent input area and scrollable message history
-- Session history stored locally in the browser
+- Session history stored locally in the browser and synced to the signed-in account workspace
 - Request isolation across conversations so stale streaming output cannot leak into another session
 - Answer depth preferences: concise, standard, detailed, derivation-first, or problem-type-first
 - Normal handling of non-physics questions, with a light final note that the workspace is optimized for physics learning
+- Account-scoped persistence for conversations, active session, learning memory, and safe model preferences
 
 ### Physics-aware answer generation
 
@@ -114,6 +117,13 @@ flowchart LR
 - PDF, DOCX, and PPTX files are stored as source documents and can be extended with richer parsers later
 - Retrieval snippets are injected into the answer context when relevant
 - No vector database is required for the current implementation
+
+### Workspace data persistence
+
+- Signed-in users get a server-side workspace snapshot under `PLA_DATA_DIR`
+- Persisted data includes chat conversations, active conversation, learning memory, answer-depth preference, onboarding state, non-secret provider preferences, and generated practice history
+- Browser storage remains available for anonymous use and is merged into the account snapshot after sign-in
+- Provider API keys are intentionally excluded from persistent workspace data
 
 ### Bring Your Own Key model access
 
@@ -203,6 +213,7 @@ flowchart TB
     ProviderAPI["provider adapters"]
     KBAPI["knowledge-base APIs"]
     AuthAPI["local account APIs"]
+    UserDataAPI["workspace data API"]
   end
 
   subgraph Agent["Agent modules"]
@@ -216,6 +227,7 @@ flowchart TB
   subgraph Data["Local data"]
     Courses["course and topic data"]
     Sessions["conversation sessions"]
+    WorkspaceData["workspace snapshots"]
     Docs["uploaded documents"]
     Chunks["retrieval chunks"]
   end
@@ -230,6 +242,7 @@ flowchart TB
   KBAPI --> Docs
   KBAPI --> Chunks
   AuthAPI --> Sessions
+  UserDataAPI --> WorkspaceData
 ```
 
 ### Key directories
@@ -239,7 +252,7 @@ flowchart TB
 | `src/app` | App Router pages and API routes |
 | `src/components` | Chat, layout, practice, knowledge map, settings, and shared UI components |
 | `src/data` | Course metadata, knowledge topics, recommendations, and prompt-related data |
-| `src/lib` | Provider clients, prompt builder, session storage, personal knowledge indexing, recommendations, and utilities |
+| `src/lib` | Provider clients, prompt builder, session storage, user-data sync, personal knowledge indexing, recommendations, and utilities |
 | `src/types` | Shared TypeScript types |
 | `src/rag` | LangChain-backed chunking, lightweight retrieval utilities, and sample notes |
 
@@ -324,7 +337,9 @@ npm run build
 
 - Server-side provider keys are read from environment variables and are never exposed to client code.
 - Browser-entered provider keys are kept in `sessionStorage` for the active browser session.
-- Local conversation history and study state are stored in the browser.
+- Anonymous conversation history and study state are stored in the browser.
+- Signed-in workspace data is saved under `PLA_DATA_DIR`, including conversations, practice history, learning memory, and safe preferences.
+- API keys entered through Bring Your Own Key mode are not written to the account workspace snapshot.
 - The personal knowledge base is designed for user-owned learning materials.
 - Do not upload copyrighted textbooks or private course materials to a public deployment unless you have the right to do so.
 - The built-in local account system is intended for personal or small-group deployments, not as a hardened enterprise identity system.

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { Sidebar } from "@/components/layout/Sidebar";
+import { UserDataSync } from "@/components/layout/UserDataSync";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-white text-[#111111]">
+      <UserDataSync />
       <div className="hidden h-full md:block">
         <Sidebar />
       </div>
