@@ -1,15 +1,15 @@
 # Physics Learning Agent
 
 <p align="center">
-  <strong>A chat-style learning workspace for undergraduate physics.</strong>
+  <strong>A minimal, extensible learning workspace for undergraduate physics.</strong>
 </p>
 
 <p align="center">
-  <a href="#highlights">Highlights</a> |
-  <a href="#core-workflows">Core Workflows</a> |
-  <a href="#model-providers">Model Providers</a> |
-  <a href="#personal-knowledge-base">Personal Knowledge Base</a> |
+  <a href="#overview">Overview</a> |
+  <a href="#features">Features</a> |
+  <a href="#learning-workflows">Workflows</a> |
   <a href="#architecture">Architecture</a> |
+  <a href="#personal-knowledge-base">Knowledge Base</a> |
   <a href="#getting-started">Getting Started</a>
 </p>
 
@@ -17,166 +17,269 @@
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square">
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?style=flat-square">
+  <img alt="LaTeX" src="https://img.shields.io/badge/LaTeX-KaTeX-black?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black?style=flat-square">
 </p>
 
-Physics Learning Agent is a focused study environment for undergraduate physics. It brings together a clean ChatGPT-style interface, structured course knowledge, original practice problem generation, personal note retrieval, Markdown and LaTeX rendering, and multi-provider model access.
+Physics Learning Agent is a chat-style study workspace for undergraduate physics. It combines conversational tutoring, structured course knowledge, original practice problem generation, personal document retrieval, and multi-provider model access in a restrained interface designed for long reading sessions.
 
-The project is built for long-form learning workflows: asking conceptual questions, checking derivations, generating practice problems, following up on previous explanations, and grounding answers in user-owned notes or course materials.
+The project is built around two primary workflows:
 
-## Highlights
+1. Learn through conversation: ask conceptual questions, follow derivations, debug mistakes, and continue from previous context.
+2. Train through problems: generate original practice sets with hidden hints, solutions, answers, and LaTeX export.
 
-- Chat-style physics learning workspace with local conversation history
-- Undergraduate physics knowledge map with formulas, prerequisites, related topics, and common pitfalls
-- Original practice problem generation with difficulty, count, language, source-style, and output-mode controls
-- Folded practice cards with hints, solutions, and answers hidden by default
-- Export generated practice sets as editable `.tex` files
-- Personal knowledge base for user-owned notes, problem sets, and course materials
-- Lightweight local account system for small-group or local deployments
-- Retrieval-augmented answers from indexed personal notes
-- Bring Your Own Key support for OpenAI, DeepSeek, Qwen, Kimi, GLM, Claude, Gemini, OpenRouter, and custom compatible providers
-- Markdown, LaTeX, tables, and code rendering across chat, knowledge pages, and practice results
-- Per-session streaming isolation to prevent cross-conversation output leaks
+It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, retrieval from user-owned materials, local conversation memory, and strict streaming isolation between sessions.
 
-## Core Workflows
+## Overview
 
-### Chat
+```mermaid
+flowchart LR
+  Student["Student"] --> Workspace["Chat-style workspace"]
+  Workspace --> Chat["Physics chat"]
+  Workspace --> Practice["Practice problems"]
+  Workspace --> Map["Knowledge map"]
+  Workspace --> KB["Personal knowledge base"]
+  Workspace --> Settings["Model settings"]
 
-The chat workspace is optimized for physics learning rather than generic short answers. It keeps recent conversation context, tracks learning memory, supports answer-depth preferences, and adapts the response style to the user question.
+  Chat --> Agent["Learning agent layer"]
+  Practice --> Agent
+  Map --> Agent
+  KB --> Retriever["Local retriever"]
+  Retriever --> Agent
+  Settings --> Router["Provider router"]
+  Router --> Models["OpenAI / DeepSeek / Qwen / Kimi / GLM / Claude / Gemini / Custom"]
+```
 
-Physics-related questions are handled with a teaching-oriented structure: definitions, assumptions, equations, derivation steps, applicability, checks, and common pitfalls. General questions are answered directly without forcing a physics template.
+| Area | What it provides |
+| --- | --- |
+| Chat workspace | Long-form physics tutoring, follow-up questions, context memory, streaming answers |
+| Practice Problems | Original problem sets with difficulty, style, language, hidden answers, and `.tex` export |
+| Knowledge Map | Course topics, prerequisites, related topics, formulas, typical problems, and pitfalls |
+| Personal Knowledge Base | User-owned notes and materials indexed for local retrieval |
+| Model Providers | Server-side default model plus browser-side user keys for multiple providers |
+| Rendering | Markdown, LaTeX, tables, code blocks, and long formulas with overflow protection |
 
-### Knowledge Map
+## Features
 
-The knowledge map covers the standard undergraduate physics sequence:
+### Study-first chat
 
-- General Physics and Physics Education
-- Mathematical Methods for Physics
-- Theoretical Mechanics
-- Electrodynamics
-- Quantum Mechanics
-- Thermodynamics and Statistical Physics
+- ChatGPT-style conversation layout with a persistent input area and scrollable message history
+- Session history stored locally in the browser
+- Request isolation across conversations so stale streaming output cannot leak into another session
+- Answer depth preferences: concise, standard, detailed, derivation-first, or problem-type-first
+- Normal handling of non-physics questions, with a light final note that the workspace is optimized for physics learning
 
-Course metadata and topic definitions live in `src/data`, so the knowledge base can be extended without changing the application shell.
+### Physics-aware answer generation
 
-### Practice Problems
+- Intent classification before prompt construction
+- Course-aware response instructions for:
+  - mathematical methods for physics
+  - theoretical mechanics
+  - electrodynamics
+  - quantum mechanics
+  - thermodynamics and statistical physics
+  - general physics and physics education
+- Bilingual response behavior:
+  - Chinese questions receive Chinese answers and Chinese-course reference style
+  - English questions receive English answers and English-textbook reference style
+  - explicit user language requests take priority
 
-Practice Problems is the primary structured workflow. It supports:
+### Practice problem generation
 
-- automatic language detection
-- natural-language course and topic inference
-- selectable source style:
+- Automatic language and topic inference from natural-language requests
+- Source-style control:
   - Auto
   - Chinese textbook exercises
   - Chinese final exam
   - Chinese postgraduate entrance exam
   - English textbook exercises
   - Open-course problem set
-- difficulty and problem-count controls
-- output modes for questions only, hints, full solutions, or hidden answers
-- folded cards for each generated problem
-- context transfer from a generated problem into chat
-- `.tex` export for generated problem sets
+- Difficulty and count controls
+- Output modes:
+  - questions only
+  - questions with hints
+  - full solutions
+  - hints with answers hidden by default
+- Per-problem folded cards for hints, solutions, and final answers
+- One-click follow-up from a generated problem into chat with context attached
+- Export generated problem sets as editable LaTeX source
 
-Generated problems are original variants. They may follow a broad source style, but they should not copy textbook, exam, MIT OpenCourseWare, or other open-course problem statements, and they should not be presented as official source material.
+### Personal knowledge base
 
-## Bilingual Learning Strategy
+- Local account flow for small-group or personal deployments
+- Upload user-owned notes, problem sets, handouts, or course materials
+- Markdown, text, TeX, and CSV extraction for retrieval
+- PDF, DOCX, and PPTX files are stored as source documents and can be extended with richer parsers later
+- Retrieval snippets are injected into the answer context when relevant
+- No vector database is required for the current implementation
 
-The product interface is English. The response language follows the user's question or explicit instruction.
+### Bring Your Own Key model access
 
-For Chinese questions, the agent follows common Chinese undergraduate physics conventions: textbook terminology, after-chapter exercise structure, university final-exam style, and postgraduate-entrance-exam style.
+- Use the server-configured default model, or provide a temporary browser-side key for another provider
+- Supported provider routes:
+  - OpenAI-compatible APIs
+  - DeepSeek
+  - Qwen
+  - Kimi
+  - GLM
+  - OpenRouter
+  - Anthropic Claude
+  - Google Gemini
+  - custom compatible endpoint
+- User-provided API keys are kept in `sessionStorage`; they are not written to project files or local persistent storage by default
 
-For English questions, the agent follows English textbook and open-course conventions. The reference profiles are aligned with standard physics learning traditions such as Arfken, Boas, Goldstein, Taylor, Griffiths, Jackson, Sakurai, Shankar, Schroeder, Reif, Pathria, Callen, Kardar, and public open-course problem-set styles.
+## Learning Workflows
 
-These references are used only as curriculum and style guidance. The repository does not include textbook content, official exam questions, or official open-course problem statements.
+### Conversation workflow
 
-## Model Providers
+```mermaid
+sequenceDiagram
+  participant U as Student
+  participant UI as Chat UI
+  participant A as Agent Layer
+  participant R as Retriever
+  participant M as Model Provider
 
-Physics Learning Agent can use either a server-configured default provider or user-provided keys.
-
-The server default is configured with environment variables:
-
-```txt
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+  U->>UI: Ask a question
+  UI->>A: Send message, session id, preferences
+  A->>A: Classify intent and language
+  A->>A: Build course and memory context
+  A->>R: Retrieve local snippets when available
+  R-->>A: Relevant notes
+  A->>M: Stream model request
+  M-->>UI: Token stream
+  UI->>UI: Append only to the bound session and message
 ```
 
-Users can also enable Bring Your Own Key mode from API Settings. Supported provider families include:
+### Practice workflow
 
-- OpenAI and GPT models
-- DeepSeek
-- Qwen through DashScope compatible mode
-- Kimi through Moonshot
-- GLM through Zhipu
-- OpenRouter
-- Claude through the Anthropic Messages API
-- Gemini through the Google Gemini API
-- Custom OpenAI-compatible `/chat/completions` endpoints
+```mermaid
+flowchart TD
+  Request["Natural-language request"] --> Parse["Infer course, topic, language, style"]
+  Parse --> Prompt["Build practice-generation prompt"]
+  Prompt --> Model["Generate original problems"]
+  Model --> Cards["Render folded problem cards"]
+  Cards --> FollowUp["Continue a problem in chat"]
+  Cards --> Export["Export to LaTeX"]
+```
 
-User-entered API keys are kept in the current browser tab's `sessionStorage`. They are forwarded only to the server route handling the active request and are not written to localStorage or server-side project files.
+## Course Coverage
 
-## Personal Knowledge Base
+| Course | Representative topics |
+| --- | --- |
+| General Physics and Physics Education | mechanics foundations, waves, electromagnetism, optics, thermodynamics, teaching-oriented explanations |
+| Mathematical Methods for Physics | complex variables, Fourier analysis, integral transforms, PDEs, Green's functions, Sturm-Liouville theory, special functions |
+| Theoretical Mechanics | generalized coordinates, constraints, Lagrange equations, Hamiltonian mechanics, canonical transformations, small oscillations |
+| Electrodynamics | electrostatic boundary-value problems, image method, multipole expansion, Maxwell equations, waves, potentials, gauge transformations |
+| Quantum Mechanics | wave functions, operators, representations, one-dimensional systems, harmonic oscillator, angular momentum, perturbation theory, scattering basics |
+| Thermodynamics and Statistical Physics | thermodynamic potentials, Maxwell relations, ensembles, partition functions, quantum statistics, fluctuations, phase equilibrium |
 
-The Personal Knowledge page provides a lightweight local account system and a private document library. A user can create an account, sign in, upload study materials, and let the chat workflow retrieve relevant snippets from indexed files.
+## Reference Strategy
 
-The current implementation is intentionally small and transparent:
+Physics Learning Agent uses reference profiles to adapt wording and problem style without copying protected source material.
 
-- user records and session metadata are stored under `PLA_DATA_DIR`
-- passwords are hashed with Node.js `scrypt`
-- session tokens are stored as HTTP-only cookies
-- Markdown, TXT, TeX, and CSV files are indexed into searchable chunks
-- PDF, DOCX, and PPTX files can be stored in the catalog, but full text extraction is not enabled yet
+| User context | Reference profile | Output style |
+| --- | --- | --- |
+| Chinese questions | Chinese undergraduate physics curriculum, final exams, postgraduate entrance exam conventions | Chinese classroom terminology, complete conditions, standard derivations, original exercise variants |
+| English questions | English textbook conventions and open-course problem-set style | Academic English, textbook-style assumptions, original problem sets, clear solution structure |
+| Mixed-language context | Most recent explicit user language and task intent | Preserve the active learning context unless the user changes it |
 
-For public deployments, replace the local JSON store with a production authentication provider, database, and object storage layer.
+Generated problems are original. The project does not copy textbook exercises, examination questions, or MIT OpenCourseWare problem statements, and it does not claim generated content is official course material.
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-  UI["Next.js UI"] --> API["Server API Routes"]
-  API --> Agent["Agent Layer"]
-  Agent --> Intent["Intent Classification"]
-  Agent --> Context["Context and Memory"]
-  Agent --> Prompts["Course and Style Profiles"]
-  Agent --> Retrieval["Personal and Local Retrieval"]
-  Agent --> Providers["Model Provider Adapter"]
-  Providers --> OpenAI["OpenAI-compatible APIs"]
-  Providers --> Claude["Anthropic Messages API"]
-  Providers --> Gemini["Google Gemini API"]
-  Providers --> Stream["Streaming Response"]
-  Stream --> UI
+flowchart TB
+  subgraph Client["Client"]
+    Pages["Next.js App Router pages"]
+    Components["React components"]
+    LocalState["localStorage and sessionStorage"]
+  end
+
+  subgraph Server["Server routes"]
+    ChatAPI["/api/chat"]
+    ProviderAPI["provider adapters"]
+    KBAPI["knowledge-base APIs"]
+    AuthAPI["local account APIs"]
+  end
+
+  subgraph Agent["Agent modules"]
+    Classifier["intent and language classifier"]
+    PromptBuilder["prompt builder"]
+    Memory["context and learning memory"]
+    PostProcess["post-processing and safety rules"]
+  end
+
+  subgraph Data["Local data"]
+    Courses["course and topic data"]
+    Sessions["conversation sessions"]
+    Docs["uploaded documents"]
+    Chunks["retrieval chunks"]
+  end
+
+  Pages --> Components
+  Components --> LocalState
+  Components --> ChatAPI
+  ChatAPI --> Agent
+  Agent --> ProviderAPI
+  Agent --> Data
+  KBAPI --> Docs
+  KBAPI --> Chunks
+  AuthAPI --> Sessions
 ```
 
-The main application areas are:
+### Key directories
 
-- `src/app` - Next.js App Router pages and API routes
-- `src/components` - chat workspace, practice UI, layout, selectors, and shared rendering components
-- `src/agent` - intent classification, memory summarization, workflow preparation, and learning-context helpers
-- `src/data` - course metadata, knowledge items, recommendations, and reference profiles
-- `src/lib` - model calls, provider adapters, prompt construction, storage, streaming, parsing, auth, personal knowledge, and export utilities
-- `src/rag` - local Markdown samples, chunking, retrieval prototype, and extension notes
-- `e2e` - Playwright coverage for primary UI workflows
+| Path | Purpose |
+| --- | --- |
+| `src/app` | App Router pages and API routes |
+| `src/components` | Chat, layout, practice, knowledge map, settings, and shared UI components |
+| `src/data` | Course metadata, knowledge topics, recommendations, and prompt-related data |
+| `src/lib` | Provider clients, prompt builder, session storage, retrieval, recommendations, and utilities |
+| `src/types` | Shared TypeScript types |
+| `src/rag` | Lightweight retrieval utilities and sample notes |
 
-## Tech Stack
+## Personal Knowledge Base
 
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS
-- Server-side model provider adapters
-- React Markdown
-- KaTeX
-- Vitest
-- Playwright
+```mermaid
+flowchart LR
+  Upload["Upload document"] --> Store["Store source file"]
+  Store --> Extract["Extract text when supported"]
+  Extract --> Chunk["Split into searchable chunks"]
+  Chunk --> Search["Keyword retrieval"]
+  Search --> Context["Inject relevant snippets into prompt"]
+  Context --> Answer["Grounded answer"]
+```
+
+The current knowledge base is intentionally lightweight. It is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can be added later with document loaders, embeddings, vector indexes, and citation-aware answer generation.
+
+## Model Providers
+
+| Provider path | Notes |
+| --- | --- |
+| Server default | Uses environment variables and keeps the API key server-side |
+| OpenAI-compatible | Works with OpenAI-style `/chat/completions` providers |
+| Anthropic Claude | Uses the Claude messages API |
+| Google Gemini | Uses the Gemini generation API |
+| Custom endpoint | For compatible local or hosted model gateways |
+
+The application separates provider configuration from the learning workflow. This makes it possible to keep a default model for deployment while allowing advanced users to test their own providers from the settings page.
 
 ## Getting Started
 
-Install dependencies:
+### Prerequisites
+
+- Node.js 20 or later
+- npm
+- A model provider key, such as DeepSeek, OpenAI, Qwen, Claude, Gemini, or another compatible provider
+
+### Install
 
 ```bash
 npm install
 ```
+
+### Configure environment variables
 
 Create `.env.local`:
 
@@ -184,12 +287,11 @@ Create `.env.local`:
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_THINKING=disabled
-DEEPSEEK_TIMEOUT_MS=120000
-PLA_DATA_DIR=.pla-data
 ```
 
-Run the development server:
+The server-side DeepSeek configuration is optional if users only rely on browser-provided keys in the settings page, but a server-side default is recommended for a smoother local setup.
+
+### Run locally
 
 ```bash
 npm run dev
@@ -197,7 +299,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Build for production:
+### Build
 
 ```bash
 npm run build
@@ -205,43 +307,35 @@ npm run build
 
 ## Scripts
 
-```bash
-npm run dev       # Start the development server
-npm run build     # Create a production build
-npm run start     # Start the production server
-npm run lint      # Run ESLint
-npm run test:run  # Run unit tests
-npm run test:e2e  # Run Playwright tests
-npm run test:all  # Run lint, unit tests, build, and E2E tests
-```
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run build` | Build the production application |
+| `npm run start` | Start the production server |
+| `npm run lint` | Run lint checks |
+| `npm run test:run` | Run the test suite, if configured in the current checkout |
 
 ## Security and Privacy
 
-The server-configured API key is read only on the server side. Browser clients call internal routes such as `/api/chat` and `/api/deepseek/test`.
+- Server-side provider keys are read from environment variables and are never exposed to client code.
+- Browser-entered provider keys are kept in `sessionStorage` for the active browser session.
+- Local conversation history and study state are stored in the browser.
+- The personal knowledge base is designed for user-owned learning materials.
+- Do not upload copyrighted textbooks or private course materials to a public deployment unless you have the right to do so.
+- The built-in local account system is intended for personal or small-group deployments, not as a hardened enterprise identity system.
 
-Conversation history, answer-depth preferences, and lightweight learning memory are stored in the current browser's `localStorage`. Personal knowledge-base accounts and uploaded document indexes are stored on the server under `PLA_DATA_DIR`. User-provided model keys in BYOK mode are kept in the current tab's `sessionStorage`.
+## Roadmap
 
-This repository does not include a production database, remote user management, billing, or a hosted object-storage layer. Those should be added before running the project as a public multi-user service.
+- Richer document extraction for PDF, DOCX, and PPTX
+- Embedding-based retrieval with a pluggable vector store
+- Citation-aware answers for user-owned notes
+- Better export formats for practice sets and study records
+- Optional teacher mode for classroom problem-set preparation
+- More structured test coverage for streaming, retrieval, and provider adapters
 
-## RAG and Knowledge Retrieval
+## Copyright and Source-style Notes
 
-The retrieval layer currently combines:
-
-- local Markdown samples in `src/rag/sample-docs`
-- user-owned text documents uploaded through Personal Knowledge
-- Markdown-style chunking
-- keyword scoring
-- source and heading citations in generated answers
-
-A production retrieval layer can add PDF, DOCX, and PPTX text extraction, embeddings, hybrid retrieval, reranking, and a vector store such as LanceDB, Chroma, pgvector, or Supabase Vector.
-
-## Source-Style and Copyright Notes
-
-Generated explanations and practice problems are intended for learning support. For formal coursework, results should be checked against textbooks, lecture notes, and instructor requirements.
-
-The project may ask the model to follow broad source styles such as "Chinese textbook exercise style" or "open-course problem-set style." It should not reproduce protected source text, copy official problems, claim textbook page numbers, or present generated problems as MIT OpenCourseWare or textbook originals.
-
-Do not upload copyrighted textbooks or protected course materials to a public deployment unless you have the right to store and process that content.
+The project can generate exercises in the style of common textbook or open-course problem sets, but generated problems should be treated as original variants. It should not be used to copy protected problem statements, reproduce textbook content, or imply official affiliation with any textbook, university, or course.
 
 ## License
 
