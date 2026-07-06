@@ -218,6 +218,7 @@ export function AgentGenerator() {
 
   function savePracticeResult(options: {
     recordId: string;
+    title?: string;
     resultContent: string;
     status: StoredPracticeGeneration["status"];
     request: AgentRequest;
@@ -228,7 +229,7 @@ export function AgentGenerator() {
 
     upsertStoredPracticeGeneration({
       id: options.recordId,
-      title: topic || selectedKnowledgeTitle || "Practice problems",
+      title: options.title || topic || selectedKnowledgeTitle || "Practice problems",
       course: options.request.course,
       knowledgePoint: options.request.knowledgePoint,
       difficulty: options.request.difficulty,
@@ -303,6 +304,10 @@ export function AgentGenerator() {
       resolvedLanguage,
       resolvedPracticeStyle,
     });
+    const resultTitle =
+      extraInput.trim() ||
+      getKnowledgeTitle(resolvedKnowledgePoint) ||
+      getCourseLabel(resolvedCourse);
     const baseRequest: AgentRequest = {
       message,
       module: "practice",
@@ -346,6 +351,7 @@ export function AgentGenerator() {
       setContent(result);
       savePracticeResult({
         recordId,
+        title: resultTitle,
         resultContent: result,
         status: "complete",
         request: requestBody,
@@ -362,6 +368,7 @@ export function AgentGenerator() {
         setContent(streamError.partialContent);
         savePracticeResult({
           recordId,
+          title: resultTitle,
           resultContent: streamError.partialContent,
           status: streamError.reason === "abort" ? "interrupted" : "error",
           request: baseRequest,

@@ -36,10 +36,16 @@ export function UserDataSync() {
   const suppressEventsRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
 
   useEffect(() => {
     async function saveSnapshot() {
-      if (!userIdRef.current || suppressEventsRef.current || isSavingRef.current) {
+      if (!userIdRef.current || suppressEventsRef.current) {
+        return;
+      }
+
+      if (isSavingRef.current) {
+        pendingSaveRef.current = true;
         return;
       }
 
@@ -53,6 +59,11 @@ export function UserDataSync() {
         });
       } finally {
         isSavingRef.current = false;
+
+        if (pendingSaveRef.current) {
+          pendingSaveRef.current = false;
+          scheduleSave();
+        }
       }
     }
 
@@ -97,6 +108,7 @@ export function UserDataSync() {
     }
 
     function handleAuthChanged() {
+      pendingSaveRef.current = false;
       void bootstrap();
     }
 
