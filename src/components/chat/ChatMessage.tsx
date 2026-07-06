@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { memo } from "react";
 
 import { ContentOutline } from "@/components/common/ContentOutline";
@@ -27,8 +28,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <div className="flex gap-3" data-testid="assistant-message">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-xs font-semibold text-white">
-        P
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white">
+        <Image src="/logo.png" alt="Physics Learning Agent" width={20} height={20} className="object-contain" />
       </div>
       <div className="min-w-0 flex-1">
         {message.content ? (

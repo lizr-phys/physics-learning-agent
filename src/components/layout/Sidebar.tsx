@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BookOpen,
   Database,
   FileText,
   MoreHorizontal,
@@ -299,7 +299,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-200 bg-[#f7f7f8]">
       <div className="border-b border-zinc-200 p-4">
         <Link href="/chat" onClick={onNavigate} className="flex items-center gap-2 text-sm font-semibold text-zinc-950">
-          <BookOpen size={18} />
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
+            <Image src="/logo.png" alt="Physics Learning Agent logo" width={24} height={24} className="object-contain" />
+          </span>
           Physics Learning Agent
         </Link>
         <p className="mt-1 text-xs text-zinc-500">Undergraduate physics workspace</p>

@@ -47,7 +47,7 @@ function installStreamingMock() {
 
               controller.enqueue(encoder.encode(parts[index]));
               index += 1;
-            }, 180);
+            }, 400);
           },
           cancel() {
             window.clearInterval(timer);

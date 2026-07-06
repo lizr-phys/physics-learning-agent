@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu, X } from "lucide-react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -55,6 +56,9 @@ export function AppShell({ children }: AppShellProps) {
           >
             <Menu size={18} />
           </button>
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
+            <Image src="/logo.png" alt="Physics Learning Agent logo" width={20} height={20} className="object-contain" />
+          </span>
           <span className="text-sm font-semibold">Physics Learning Agent</span>
         </header>
 

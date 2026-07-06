@@ -1,5 +1,7 @@
 import "server-only";
 
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+
 import { selectConversationHistory } from "@/agent/context-manager";
 import {
   detectCourseFromText,
@@ -14,11 +16,24 @@ import { detectLanguage } from "@/lib/language";
 import { retrievePersonalKnowledge } from "@/lib/personal-knowledge";
 import { classifyQuery } from "@/lib/query-classifier";
 import { retrieveRagSnippets } from "@/rag/retrieve";
-import type { AgentRequest } from "@/types/learning";
+import type {
+  AgentIntent,
+  AgentRequest,
+  CourseId,
+  DetectedLanguage,
+  LearningMemory,
+  PersonalKnowledgeDecision,
+  PracticeStyleId,
+  QueryType,
+  RagContext,
+  ReferenceProfileId,
+} from "@/types/learning";
 
 export type AgentWorkflowStage =
   | "understand-input"
   | "resolve-context"
+  | "update-memory"
+  | "plan-retrieval"
   | "retrieve-knowledge"
   | "prepare-generation";
 
@@ -27,11 +42,40 @@ export type PreparedAgentRequest = {
   stages: AgentWorkflowStage[];
 };
 
-export async function prepareAgentRequest(
-  input: AgentRequest,
-  options: { userId?: string } = {},
-): Promise<PreparedAgentRequest> {
-  const stages: AgentWorkflowStage[] = ["understand-input"];
+type WorkflowOptions = {
+  userId?: string;
+};
+
+type WorkflowSnippet = RagContext["snippets"][number];
+
+const AgentWorkflowState = Annotation.Root({
+  input: Annotation<AgentRequest>(),
+  options: Annotation<WorkflowOptions>(),
+  stages: Annotation<AgentWorkflowStage[], AgentWorkflowStage[]>({
+    reducer: (left, right) => left.concat(right),
+    default: () => [],
+  }),
+  intent: Annotation<AgentIntent>(),
+  language: Annotation<DetectedLanguage>(),
+  practiceStyle: Annotation<PracticeStyleId>(),
+  referenceProfile: Annotation<ReferenceProfileId>(),
+  course: Annotation<CourseId>(),
+  knowledgePoint: Annotation<string | undefined>(),
+  queryType: Annotation<QueryType>(),
+  contextInput: Annotation<AgentRequest>(),
+  memory: Annotation<LearningMemory>(),
+  personalKnowledgeDecision: Annotation<PersonalKnowledgeDecision>(),
+  ragSnippets: Annotation<WorkflowSnippet[]>({
+    reducer: (_left, right) => right,
+    default: () => [],
+  }),
+  preparedInput: Annotation<AgentRequest>(),
+});
+
+type WorkflowState = typeof AgentWorkflowState.State;
+
+function understandInput(state: WorkflowState) {
+  const { input } = state;
   const intent = input.intent ?? classifyAgentIntent(input);
   const language =
     input.detectedLanguage ?? detectLanguage(input.message, input.memory?.recentLanguage ?? "en");
@@ -47,6 +91,18 @@ export async function prepareAgentRequest(
       practiceStyle,
       referenceProfile: input.memory?.referenceProfile,
     });
+
+  return {
+    intent,
+    language,
+    practiceStyle,
+    referenceProfile,
+    stages: ["understand-input"] satisfies AgentWorkflowStage[],
+  };
+}
+
+function resolveContext(state: WorkflowState) {
+  const { input, language, practiceStyle, referenceProfile, intent } = state;
   const detectedCourse = detectCourseFromText(input.message);
   const course =
     input.course && input.course !== "general"
@@ -69,59 +125,125 @@ export async function prepareAgentRequest(
     knowledgeMode: resolveKnowledgeMode(input.knowledgeMode),
     history: selectConversationHistory(input.history),
   };
-  const memory = updateLearningMemory(
-    input.memory ?? createLearningMemory(),
+
+  return {
+    course,
+    knowledgePoint,
+    queryType,
     contextInput,
-    intent,
+    stages: ["resolve-context"] satisfies AgentWorkflowStage[],
+  };
+}
+
+function updateMemoryNode(state: WorkflowState) {
+  const memory = updateLearningMemory(
+    state.input.memory ?? createLearningMemory(),
+    state.contextInput,
+    state.intent,
   );
 
-  stages.push("resolve-context");
-
-  const personalKnowledgeDecision = decidePersonalKnowledgeUse({
-    request: {
-      ...contextInput,
+  return {
+    memory,
+    contextInput: {
+      ...state.contextInput,
       memory,
     },
-    mode: contextInput.knowledgeMode,
-    intent,
-    queryType,
-    hasUser: Boolean(options.userId),
+    stages: ["update-memory"] satisfies AgentWorkflowStage[],
+  };
+}
+
+function planRetrieval(state: WorkflowState) {
+  const personalKnowledgeDecision = decidePersonalKnowledgeUse({
+    request: state.contextInput,
+    mode: state.contextInput.knowledgeMode,
+    intent: state.intent,
+    queryType: state.queryType,
+    hasUser: Boolean(state.options.userId),
   });
+
+  return {
+    personalKnowledgeDecision,
+    stages: ["plan-retrieval"] satisfies AgentWorkflowStage[],
+  };
+}
+
+async function retrieveKnowledge(state: WorkflowState) {
   const personalRagResults =
-    options.userId && personalKnowledgeDecision.shouldUse
+    state.options.userId && state.personalKnowledgeDecision.shouldUse
       ? await retrievePersonalKnowledge(
-          options.userId,
-          personalKnowledgeDecision.retrievalQuery ?? contextInput.message,
+          state.options.userId,
+          state.personalKnowledgeDecision.retrievalQuery ?? state.contextInput.message,
           4,
         )
       : [];
   const sampleRagResults =
-    contextInput.useRag && isPhysicsIntent(intent)
-      ? await retrieveRagSnippets(contextInput.message, 4)
+    state.contextInput.useRag && isPhysicsIntent(state.intent)
+      ? await retrieveRagSnippets(state.contextInput.message, 4)
       : [];
-  const ragResults = [
+
+  const ragSnippets: WorkflowSnippet[] = [
     ...personalRagResults.map((result) => ({ ...result, kind: "personal" as const })),
     ...sampleRagResults.map((result) => ({ ...result, kind: "sample" as const })),
-  ].slice(0, 6);
-
-  stages.push("retrieve-knowledge", "prepare-generation");
+  ]
+    .slice(0, 6)
+    .map((result) => ({
+      source: result.source,
+      heading: result.heading,
+      content: result.content,
+      kind: result.kind,
+    }));
 
   return {
-    stages,
-    input: {
-      ...contextInput,
-      memory,
-      personalKnowledgeDecision,
-      ragContext: ragResults.length
-        ? {
-            snippets: ragResults.map((result) => ({
-              source: result.source,
-              heading: result.heading,
-              content: result.content,
-              kind: result.kind,
-            })),
-          }
-        : undefined,
-    },
+    ragSnippets,
+    stages: ["retrieve-knowledge"] satisfies AgentWorkflowStage[],
+  };
+}
+
+function prepareGeneration(state: WorkflowState) {
+  const preparedInput: AgentRequest = {
+    ...state.contextInput,
+    memory: state.memory,
+    personalKnowledgeDecision: state.personalKnowledgeDecision,
+    ragContext: state.ragSnippets.length
+      ? {
+          snippets: state.ragSnippets,
+        }
+      : undefined,
+  };
+
+  return {
+    preparedInput,
+    stages: ["prepare-generation"] satisfies AgentWorkflowStage[],
+  };
+}
+
+const agentWorkflow = new StateGraph(AgentWorkflowState)
+  .addNode("understandInput", understandInput)
+  .addNode("resolveContext", resolveContext)
+  .addNode("updateMemory", updateMemoryNode)
+  .addNode("planRetrieval", planRetrieval)
+  .addNode("retrieveKnowledge", retrieveKnowledge)
+  .addNode("prepareGeneration", prepareGeneration)
+  .addEdge(START, "understandInput")
+  .addEdge("understandInput", "resolveContext")
+  .addEdge("resolveContext", "updateMemory")
+  .addEdge("updateMemory", "planRetrieval")
+  .addEdge("planRetrieval", "retrieveKnowledge")
+  .addEdge("retrieveKnowledge", "prepareGeneration")
+  .addEdge("prepareGeneration", END)
+  .compile();
+
+export async function prepareAgentRequest(
+  input: AgentRequest,
+  options: WorkflowOptions = {},
+): Promise<PreparedAgentRequest> {
+  const result = await agentWorkflow.invoke({
+    input,
+    options,
+  });
+
+  return {
+    stages: result.stages,
+    input: result.preparedInput,
   };
 }

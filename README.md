@@ -1,7 +1,11 @@
-# Physics Learning Agent
+<p align="center">
+  <img src="public/logo.png" alt="Physics Learning Agent logo" width="120" />
+</p>
+
+<h1 align="center">Physics Learning Agent</h1>
 
 <p align="center">
-  <strong>A minimal, extensible learning workspace for undergraduate physics.</strong>
+  <strong>A LangGraph-orchestrated learning workspace for undergraduate physics.</strong>
 </p>
 
 <p align="center">
@@ -18,6 +22,7 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square">
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?style=flat-square">
   <img alt="LangChain" src="https://img.shields.io/badge/LangChain-document_retrieval-black?style=flat-square">
+  <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-agent_workflow-black?style=flat-square">
   <img alt="LaTeX" src="https://img.shields.io/badge/LaTeX-KaTeX-black?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black?style=flat-square">
 </p>
@@ -29,7 +34,7 @@ The project is built around two primary workflows:
 1. Learn through conversation: ask conceptual questions, follow derivations, debug mistakes, and continue from previous context.
 2. Train through problems: generate original practice sets with hidden hints, solutions, answers, and LaTeX export.
 
-It is not a generic chatbot wrapper. The application adds a learning layer around model calls: intent classification, course-aware prompting, language-aware reference profiles, LangChain-based document chunking, retrieval from user-owned materials, account-scoped workspace memory, and strict streaming isolation between sessions.
+It is not a generic chatbot wrapper. The application adds a learning layer around model calls: a LangGraph-orchestrated workflow, intent classification, course-aware prompting, language-aware reference profiles, LangChain-based document chunking, retrieval from user-owned materials, account-scoped workspace memory, and strict streaming isolation between sessions.
 
 ## Overview
 
@@ -43,7 +48,7 @@ flowchart LR
   Workspace --> DataSync["Workspace data sync"]
   Workspace --> Settings["Model settings"]
 
-  Chat --> Agent["Learning agent layer"]
+  Chat --> Agent["LangGraph agent workflow"]
   Practice --> Agent
   Map --> Agent
   KB --> Retriever["Local retriever"]
@@ -58,6 +63,7 @@ flowchart LR
 | Practice Problems | Original problem sets with difficulty, style, language, hidden answers, and `.tex` export |
 | Knowledge Map | Course topics, prerequisites, related topics, formulas, typical problems, and pitfalls |
 | Personal Knowledge Base | User-owned notes and materials indexed for local retrieval |
+| Agent Workflow | LangGraph nodes for input understanding, context resolution, memory update, retrieval planning, retrieval execution, and generation preparation |
 | Workspace Persistence | Conversations, active session, practice history, learning memory, and safe preferences saved per signed-in user |
 | Model Providers | Server-side default model plus browser-side user keys for multiple providers |
 | Rendering | Markdown, LaTeX, tables, code blocks, and long formulas with overflow protection |
@@ -76,6 +82,13 @@ flowchart LR
 
 ### Physics-aware answer generation
 
+- LangGraph workflow before generation:
+  - input understanding
+  - course and topic context resolution
+  - learning-memory update
+  - personal-knowledge retrieval planning
+  - retrieval execution
+  - prompt-ready request preparation
 - Intent classification before prompt construction
 - Course-aware response instructions for:
   - general physics
@@ -153,16 +166,18 @@ flowchart LR
 sequenceDiagram
   participant U as Student
   participant UI as Chat UI
-  participant A as Agent Layer
+  participant A as LangGraph Workflow
   participant R as Retriever
   participant M as Model Provider
 
   U->>UI: Ask a question
   UI->>A: Send message, session id, preferences
-  A->>A: Classify intent and language
-  A->>A: Build course and memory context
+  A->>A: Understand input and language
+  A->>A: Resolve course, topic, style, and memory
+  A->>A: Plan whether retrieval is needed
   A->>R: Retrieve local snippets when available
   R-->>A: Relevant notes
+  A->>A: Prepare model request
   A->>M: Stream model request
   M-->>UI: Token stream
   UI->>UI: Append only to the bound session and message
@@ -222,10 +237,13 @@ flowchart TB
   end
 
   subgraph Agent["Agent modules"]
+    Graph["LangGraph workflow"]
     Classifier["intent and language classifier"]
-    PromptBuilder["prompt builder"]
-    Memory["context and learning memory"]
+    Context["course and topic context manager"]
+    Memory["learning memory"]
+    RetrievalPlan["retrieval planner"]
     LC["LangChain document splitters"]
+    PromptBuilder["prompt builder"]
     PostProcess["post-processing and safety rules"]
   end
 
@@ -240,12 +258,18 @@ flowchart TB
   Pages --> Components
   Components --> LocalState
   Components --> ChatAPI
-  ChatAPI --> Agent
-  Agent --> ProviderAPI
-  Agent --> Data
-  Agent --> LC
+  ChatAPI --> Graph
+  Graph --> Classifier
+  Graph --> Context
+  Graph --> Memory
+  Graph --> RetrievalPlan
+  RetrievalPlan --> Data
+  Graph --> PromptBuilder
+  PromptBuilder --> ProviderAPI
+  Graph --> Data
   KBAPI --> Docs
-  KBAPI --> Chunks
+  KBAPI --> LC
+  LC --> Chunks
   AuthAPI --> Sessions
   UserDataAPI --> WorkspaceData
 ```
@@ -256,6 +280,7 @@ flowchart TB
 | --- | --- |
 | `src/app` | App Router pages and API routes |
 | `src/components` | Chat, layout, practice, knowledge map, settings, and shared UI components |
+| `src/agent` | LangGraph workflow, intent classification, memory, retrieval decisions, model config, and response post-processing |
 | `src/data` | Course metadata, knowledge topics, recommendations, and prompt-related data |
 | `src/lib` | Provider clients, prompt builder, session storage, user-data sync, personal knowledge indexing, recommendations, and utilities |
 | `src/types` | Shared TypeScript types |
