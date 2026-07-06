@@ -89,7 +89,7 @@ flowchart LR
   - personal-knowledge retrieval planning
   - retrieval execution
   - prompt-ready request preparation
-- Intent classification before prompt construction
+- Robust intent routing for conceptual questions, review requests, study planning, practice generation, and non-physics input
 - Course-aware response instructions for:
   - general physics
   - mathematical methods for physics

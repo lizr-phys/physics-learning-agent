@@ -47,4 +47,20 @@ describe("LangGraph agent workflow", () => {
     expect(prepared.input.queryType).toBe("writing");
     expect(prepared.input.personalKnowledgeDecision?.shouldUse).toBe(false);
   });
+
+  it("routes Chinese Hamiltonian mechanics review requests into the physics workflow", async () => {
+    const { prepareAgentRequest } = await import("@/agent/workflow");
+
+    const prepared = await prepareAgentRequest({
+      message: "我想复习哈密顿力学",
+      module: "chat",
+    });
+
+    expect(prepared.input.intent).toBe("study_planning");
+    expect(prepared.input.queryType).toBe("physics_core");
+    expect(prepared.input.course).toBe("theoretical-mechanics");
+    expect(prepared.input.knowledgePoint).toBe("hamilton-equations");
+    expect(prepared.input.detectedLanguage).toBe("zh");
+    expect(prepared.input.memory?.currentCourse).toBe("theoretical-mechanics");
+  });
 });

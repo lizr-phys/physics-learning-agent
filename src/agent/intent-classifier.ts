@@ -35,6 +35,19 @@ const planningTerms = [
   "how should i study",
 ];
 
+const physicsStudyActionTerms = [
+  "复习",
+  "预习",
+  "梳理",
+  "总结",
+  "巩固",
+  "备考",
+  "review",
+  "revise",
+  "recap",
+  "summarize",
+];
+
 const metaTerms = [
   "你能做什么",
   "怎么使用",
@@ -58,20 +71,29 @@ function includesAny(text: string, terms: string[]) {
 
 export function classifyAgentIntent(input: AgentRequest): AgentIntent {
   const text = input.message.toLowerCase();
+  const queryType = classifyQuery(input);
+  const physicsLike = isPhysicsLikeQuery(queryType);
 
   if (includesAny(text, metaTerms)) {
     return "meta_question";
   }
 
-  if (input.taskType === "practice" || includesAny(text, exerciseTerms)) {
+  if (
+    input.taskType === "practice" ||
+    (includesAny(text, exerciseTerms) && physicsLike)
+  ) {
     return "exercise_generation";
   }
 
-  if (input.taskType === "study-plan" || includesAny(text, planningTerms)) {
+  if (
+    input.taskType === "study-plan" ||
+    includesAny(text, planningTerms) ||
+    (includesAny(text, physicsStudyActionTerms) && physicsLike)
+  ) {
     return "study_planning";
   }
 
-  if (isPhysicsLikeQuery(classifyQuery(input))) {
+  if (physicsLike) {
     return "physics_learning";
   }
 

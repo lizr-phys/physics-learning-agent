@@ -34,4 +34,11 @@ describe("exercise request parser", () => {
     expect(parsed.count).toBe(3);
     expect(parsed.difficulty).toBe("basic");
   });
+
+  it("recognizes Chinese Hamiltonian mechanics review requests", () => {
+    const parsed = parseExerciseRequest("我想复习哈密顿力学");
+
+    expect(parsed.detectedCourse).toBe("theoretical-mechanics");
+    expect(parsed.detectedKnowledgeId).toBe("hamilton-equations");
+  });
 });

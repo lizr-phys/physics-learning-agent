@@ -92,6 +92,7 @@ const physicsCoreTerms = [
   "lagrangian",
   "hamilton",
   "hamiltonian",
+  "hamiltonian mechanics",
   "poisson bracket",
   "rigid body",
   "oscillation",
@@ -131,11 +132,52 @@ const physicsCoreTerms = [
   "中学物理",
   "物理实验",
   "牛顿",
+  "拉格朗日",
+  "拉格朗日方程",
+  "哈密顿",
+  "哈密顿力学",
+  "哈密顿原理",
+  "哈密顿方程",
+  "哈密顿正则方程",
+  "正则方程",
+  "正则变量",
+  "正则变换",
+  "泊松括号",
+  "广义坐标",
+  "广义动量",
+  "分析力学",
+  "小振动",
+  "刚体",
+  "非惯性系",
+  "中心力",
   "理论力学",
   "电动力学",
+  "麦克斯韦",
+  "静电",
+  "静磁",
+  "电磁波",
+  "电磁势",
+  "库仑规范",
+  "洛伦兹规范",
+  "多极展开",
   "量子",
+  "量子力学",
+  "薛定谔",
+  "波函数",
+  "态矢量",
+  "算符",
+  "表象",
+  "自旋",
+  "全同粒子",
+  "wkb",
   "热力学",
   "统计物理",
+  "热力学势",
+  "化学势",
+  "玻色",
+  "费米",
+  "玻尔兹曼",
+  "相平衡",
   "系综",
   "配分函数",
   "谐振子",
@@ -163,6 +205,7 @@ const mathSupportTerms = [
   "liouville",
   "green's function",
   "green function",
+  "green 函数",
   "legendre",
   "bessel",
   "variational",
@@ -181,6 +224,11 @@ const mathSupportTerms = [
   "初值",
   "分离变量",
   "格林函数",
+  "贝塞尔",
+  "勒让德",
+  "本征值",
+  "正交性",
+  "完备性",
   "特殊函数",
   "变分法",
   "线性代数",
@@ -233,16 +281,12 @@ export function classifyQuery(input: AgentRequest): QueryType {
     return "writing";
   }
 
-  if (includesAny(text, dailyLifeTerms)) {
-    return "daily_life";
+  if (includesAny(text, mathSupportTerms)) {
+    return "math_physics_support";
   }
 
   if (includesAny(text, physicsCoreTerms)) {
     return "physics_core";
-  }
-
-  if (includesAny(text, mathSupportTerms)) {
-    return "math_physics_support";
   }
 
   if (hasLearningContext(input) && includesAny(text, contextualFollowUpTerms)) {
@@ -251,6 +295,10 @@ export function classifyQuery(input: AgentRequest): QueryType {
 
   if (input.taskType && physicsTaskTypes.has(input.taskType)) {
     return "physics_core";
+  }
+
+  if (includesAny(text, dailyLifeTerms)) {
+    return "daily_life";
   }
 
   return "other";

@@ -448,7 +448,7 @@ const coreKnowledgeItems: KnowledgeItem[] = [
     id: "hamilton-principle",
     course: "theoretical-mechanics",
     title: "Hamilton's Principle",
-    alias: ["stationary action", "least action"],
+    alias: ["stationary action", "least action", "哈密顿原理", "作用量原理", "驻定作用量"],
     description:
       "Hamilton's principle states that the physical path makes the action stationary under admissible variations with fixed endpoints.",
     textbookStyleSummary:
@@ -466,7 +466,7 @@ const coreKnowledgeItems: KnowledgeItem[] = [
     id: "hamilton-equations",
     course: "theoretical-mechanics",
     title: "Hamiltonian Equations",
-    alias: ["Hamiltonian mechanics", "canonical variables"],
+    alias: ["Hamiltonian mechanics", "canonical variables", "哈密顿力学", "哈密顿方程", "哈密顿正则方程", "正则方程", "正则变量", "正则动量"],
     description:
       "Hamiltonian mechanics uses canonical coordinates and momenta to express dynamics as first-order equations in phase space.",
     textbookStyleSummary:
@@ -484,7 +484,7 @@ const coreKnowledgeItems: KnowledgeItem[] = [
     id: "canonical-transformations",
     course: "theoretical-mechanics",
     title: "Canonical Transformations and Poisson Brackets",
-    alias: ["Poisson bracket", "generating function", "canonical transformation"],
+    alias: ["Poisson bracket", "generating function", "canonical transformation", "正则变换", "泊松括号", "母函数", "生成函数"],
     description:
       "Canonical transformations preserve the Hamiltonian structure and are diagnosed through Poisson brackets or generating functions.",
     textbookStyleSummary:
@@ -1586,7 +1586,7 @@ const supplementalKnowledgeItems: KnowledgeItem[] = [
     id: "hamilton-jacobi-theory",
     course: "theoretical-mechanics",
     title: "Hamilton-Jacobi Theory",
-    alias: ["Hamilton-Jacobi equation", "principal function", "complete integral"],
+    alias: ["Hamilton-Jacobi equation", "principal function", "complete integral", "哈密顿-雅可比方程", "哈密顿雅可比方程", "主函数", "完全积分"],
     description:
       "Hamilton-Jacobi theory reformulates mechanics as a first-order partial differential equation for the action.",
     textbookStyleSummary:
