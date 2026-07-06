@@ -90,9 +90,9 @@ export function describePracticeStyle(style: PracticeStyleId) {
 
 const englishReferenceByCourse: Record<CourseId, string> = {
   general:
-    "Use standard undergraduate basic physics terminology, with conceptual style guided by The Feynman Lectures on Physics and the Berkeley Physics Course.",
+    "Use standard undergraduate general physics terminology, with conceptual style guided by The Feynman Lectures on Physics and the Berkeley Physics Course.",
   "general-physics":
-    "Use basic physics conventions from The Feynman Lectures on Physics and the Berkeley Physics Course, emphasizing conceptual structure, physical reasoning, and well-posed quantitative examples.",
+    "Use general physics conventions from The Feynman Lectures on Physics and the Berkeley Physics Course, emphasizing conceptual structure, physical reasoning, and well-posed quantitative examples.",
   "math-physics":
     "Use English mathematical physics conventions from Arfken-Weber-Harris, Riley-Hobson-Bence, Boas, Churchill-Brown, and Haberman.",
   "theoretical-mechanics":
@@ -107,9 +107,9 @@ const englishReferenceByCourse: Record<CourseId, string> = {
 
 const chineseReferenceByCourse: Record<CourseId, string> = {
   general:
-    "Use Chinese university foundational physics conventions with clear physical reasoning and complete problem conditions.",
+    "Use Chinese university general physics conventions with clear physical reasoning and complete problem conditions.",
   "general-physics":
-    "Use Chinese foundational physics course conventions, with reference style aligned to concept-first treatments such as The Feynman Lectures on Physics and the Berkeley Physics Course.",
+    "Use Chinese general physics course conventions, with reference style aligned to concept-first treatments such as The Feynman Lectures on Physics and the Berkeley Physics Course.",
   "math-physics":
     "Use Chinese mathematical physics conventions in the Liang Kunmiao tradition: complex variables, Fourier analysis, PDE boundary-value problems, Sturm-Liouville theory, Green's functions, and special functions.",
   "theoretical-mechanics":

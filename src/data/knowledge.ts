@@ -1,7 +1,7 @@
 import { courseOptions, getCourseLabel } from "@/data/courses";
 import type { CourseId, KnowledgeItem } from "@/types/learning";
 
-export const knowledgeItems: KnowledgeItem[] = [
+const coreKnowledgeItems: KnowledgeItem[] = [
   {
     id: "particle-motion-newton-laws",
     course: "general-physics",
@@ -1143,6 +1143,970 @@ export const knowledgeItems: KnowledgeItem[] = [
     difficulty: "advanced",
     tags: ["variance", "response", "stability"],
   },
+];
+
+const supplementalKnowledgeItems: KnowledgeItem[] = [
+  {
+    id: "units-vectors-dimensional-analysis",
+    course: "general-physics",
+    title: "Units, Vectors, and Dimensional Analysis",
+    alias: ["units", "vectors", "dimensional analysis", "scaling estimates"],
+    description:
+      "Physical quantities must be expressed with dimensions, units, and vector or scalar character before equations can be interpreted.",
+    textbookStyleSummary:
+      "Dimensional analysis checks consistency and guides scaling estimates, but it does not replace a dynamical equation or boundary condition. Vector problems require a specified coordinate system, sign convention, and component decomposition.",
+    prerequisites: [],
+    related: ["Particle Motion and Newton's Laws", "Experimental Measurement and Uncertainty"],
+    typicalProblems: [
+      "Checking the dimensions of a proposed formula",
+      "Resolving vectors into components",
+      "Estimating scaling laws from physical variables",
+    ],
+    keyFormulas: [
+      "[F]=MLT^{-2}",
+      "\\mathbf{A}=A_x\\hat{\\mathbf{x}}+A_y\\hat{\\mathbf{y}}+A_z\\hat{\\mathbf{z}}",
+    ],
+    commonMisunderstandings: [
+      "Treating dimensional correctness as proof of a formula",
+      "Adding quantities with different dimensions",
+      "Ignoring vector direction when using scalar magnitudes",
+    ],
+    studyOrder: 0,
+    difficulty: "basic",
+    tags: ["units", "vectors", "scaling"],
+  },
+  {
+    id: "circular-motion-and-noninertial-basics",
+    course: "general-physics",
+    title: "Circular Motion and Elementary Non-Inertial Effects",
+    alias: ["circular motion", "centripetal acceleration", "rotating frame basics"],
+    description:
+      "Circular motion introduces acceleration from changing direction and provides the first contact with frame-dependent inertial forces.",
+    textbookStyleSummary:
+      "A circular-motion problem should distinguish angular speed, tangential acceleration, centripetal acceleration, and the frame in which forces are written. In a non-inertial frame, fictitious forces are bookkeeping terms required by Newton's form of the equation.",
+    prerequisites: ["Particle Motion and Newton's Laws"],
+    related: ["Non-Inertial Frames", "Rigid-Body Kinematics"],
+    typicalProblems: [
+      "Uniform circular motion with tension or normal force",
+      "Banked-curve and conical-pendulum problems",
+      "Qualitative analysis in a rotating frame",
+    ],
+    keyFormulas: [
+      "a_r=\\frac{v^2}{r}=\\omega^2 r",
+      "\\mathbf{F}_{\\mathrm{inertial}}=-m\\mathbf{a}_{\\mathrm{frame}}",
+    ],
+    commonMisunderstandings: [
+      "Calling centripetal force a new interaction",
+      "Confusing radial acceleration with tangential acceleration",
+      "Mixing inertial and rotating-frame force diagrams",
+    ],
+    studyOrder: 5,
+    difficulty: "basic",
+    tags: ["circular motion", "frames", "force analysis"],
+  },
+  {
+    id: "gravitation-and-orbits",
+    course: "general-physics",
+    title: "Gravitation and Orbital Motion",
+    alias: ["Newtonian gravitation", "Kepler motion", "orbital energy"],
+    description:
+      "Newtonian gravitation connects inverse-square forces, potential energy, central-force motion, and orbital parameters.",
+    textbookStyleSummary:
+      "Orbital problems should specify whether the body is treated as a test mass, whether the central body is fixed, and which conserved quantities are being used. Energy and angular momentum determine orbit type in the two-body approximation.",
+    prerequisites: ["Momentum, Angular Momentum, and Mechanical Energy"],
+    related: ["Central-Force Motion", "Central Potentials"],
+    typicalProblems: [
+      "Circular-orbit speed and period",
+      "Escape speed calculations",
+      "Energy classification of bound and unbound orbits",
+    ],
+    keyFormulas: [
+      "F=G\\frac{m_1m_2}{r^2}",
+      "U(r)=-G\\frac{Mm}{r}",
+      "v_{\\mathrm{esc}}=\\sqrt{\\frac{2GM}{r}}",
+    ],
+    commonMisunderstandings: [
+      "Assuming gravitational acceleration is constant over large distances",
+      "Confusing orbital speed with escape speed",
+      "Forgetting the choice of zero potential energy",
+    ],
+    studyOrder: 6,
+    difficulty: "intermediate",
+    tags: ["gravitation", "orbits", "energy"],
+  },
+  {
+    id: "fluid-mechanics-basics",
+    course: "general-physics",
+    title: "Fluid Statics and Ideal Fluid Flow",
+    alias: ["fluid mechanics", "buoyancy", "Bernoulli equation"],
+    description:
+      "Elementary fluid mechanics studies pressure, buoyancy, continuity, and ideal-flow energy balance.",
+    textbookStyleSummary:
+      "Fluid statics follows from pressure balance in a gravitational field, while Bernoulli's equation requires steady, incompressible, nonviscous flow along a streamline unless additional assumptions are stated.",
+    prerequisites: ["Units, Vectors, and Dimensional Analysis", "Particle Motion and Newton's Laws"],
+    related: ["Thermal Processes and Ideal Gases", "Continuum Mechanics"],
+    typicalProblems: [
+      "Hydrostatic pressure in layered fluids",
+      "Buoyancy and apparent weight",
+      "Continuity and Bernoulli applications",
+    ],
+    keyFormulas: [
+      "p=p_0+\\rho gh",
+      "\\rho A v=\\mathrm{constant}",
+      "p+\\frac12\\rho v^2+\\rho gh=\\mathrm{constant}",
+    ],
+    commonMisunderstandings: [
+      "Using Bernoulli's equation across dissipative devices without corrections",
+      "Confusing pressure with force",
+      "Forgetting that buoyancy depends on displaced fluid",
+    ],
+    studyOrder: 8,
+    difficulty: "intermediate",
+    tags: ["pressure", "buoyancy", "Bernoulli"],
+  },
+  {
+    id: "dc-circuits-and-transients",
+    course: "general-physics",
+    title: "DC Circuits and Transients",
+    alias: ["resistor circuits", "RC circuit", "Kirchhoff laws"],
+    description:
+      "Circuit analysis models lumped elements through current, voltage, energy storage, and network constraints.",
+    textbookStyleSummary:
+      "Kirchhoff's laws apply to lumped circuits when propagation effects can be neglected. Transient problems require initial capacitor voltage or inductor current and a clear switching condition.",
+    prerequisites: ["Electromagnetism Basics"],
+    related: ["Electrostatics", "Electromagnetic Waves"],
+    typicalProblems: [
+      "Equivalent resistance and voltage division",
+      "Kirchhoff-loop and node equations",
+      "RC charging and discharging transients",
+    ],
+    keyFormulas: [
+      "V=IR",
+      "\\sum I=0",
+      "q(t)=CV\\left(1-e^{-t/RC}\\right)",
+    ],
+    commonMisunderstandings: [
+      "Treating current as consumed by circuit elements",
+      "Ignoring capacitor initial conditions",
+      "Applying Kirchhoff laws outside the lumped-circuit approximation",
+    ],
+    studyOrder: 11,
+    difficulty: "basic",
+    tags: ["circuits", "Kirchhoff laws", "transients"],
+  },
+  {
+    id: "geometrical-optics",
+    course: "general-physics",
+    title: "Geometrical Optics",
+    alias: ["ray optics", "lenses", "mirrors"],
+    description:
+      "Geometrical optics approximates light propagation by rays when wavelengths are small compared with optical elements.",
+    textbookStyleSummary:
+      "Ray diagrams and imaging formulas require a sign convention and the paraxial approximation. Wave effects such as diffraction set the limit of geometrical optics.",
+    prerequisites: ["Oscillations, Waves, and Optics"],
+    related: ["Electromagnetic Waves", "Fourier Series and Fourier Transform"],
+    typicalProblems: [
+      "Thin-lens image construction",
+      "Spherical mirror imaging",
+      "Optical instrument magnification",
+    ],
+    keyFormulas: [
+      "\\frac1f=\\frac1s+\\frac1{s'}",
+      "m=-\\frac{s'}{s}",
+    ],
+    commonMisunderstandings: [
+      "Changing sign conventions mid-problem",
+      "Applying thin-lens formulas outside the paraxial regime",
+      "Ignoring diffraction limits",
+    ],
+    studyOrder: 12,
+    difficulty: "basic",
+    tags: ["ray optics", "lenses", "imaging"],
+  },
+  {
+    id: "modern-physics-foundations",
+    course: "general-physics",
+    title: "Modern Physics Foundations",
+    alias: ["special relativity basics", "photoelectric effect", "de Broglie waves"],
+    description:
+      "Modern physics introduces relativity and quantum ideas that motivate later quantum mechanics and electrodynamics.",
+    textbookStyleSummary:
+      "Introductory modern-physics problems should state the approximation level clearly: relativistic kinematics, photon energy, matter-wave relations, and simple atomic spectra are not interchangeable models.",
+    prerequisites: ["Oscillations, Waves, and Optics", "Electromagnetism Basics"],
+    related: ["Wave Function and State Vector", "Relativistic Electrodynamics"],
+    typicalProblems: [
+      "Photoelectric-effect threshold calculations",
+      "de Broglie wavelength estimates",
+      "Time dilation and relativistic energy problems",
+    ],
+    keyFormulas: [
+      "E=h\\nu",
+      "\\lambda=\\frac{h}{p}",
+      "E^2=p^2c^2+m^2c^4",
+    ],
+    commonMisunderstandings: [
+      "Using nonrelativistic kinetic energy at relativistic speeds",
+      "Confusing photon frequency with electron orbital frequency",
+      "Treating matter waves as classical mechanical waves",
+    ],
+    studyOrder: 13,
+    difficulty: "intermediate",
+    tags: ["modern physics", "relativity", "quantization"],
+  },
+  {
+    id: "vector-analysis-curvilinear-coordinates",
+    course: "math-physics",
+    title: "Vector Analysis and Curvilinear Coordinates",
+    alias: ["gradient", "divergence", "curl", "orthogonal coordinates"],
+    description:
+      "Vector analysis supplies the differential and integral operations used to express field equations in different coordinate systems.",
+    textbookStyleSummary:
+      "Before applying a vector operator, specify the coordinate system, scale factors, orientation, and domain. Curvilinear formulas are coordinate representations of geometric operations, not new physical laws.",
+    prerequisites: ["Units, Vectors, and Dimensional Analysis"],
+    related: ["Equations of Mathematical Physics", "Electrostatics", "Electromagnetic Boundary Conditions"],
+    typicalProblems: [
+      "Computing gradient, divergence, and curl in cylindrical coordinates",
+      "Using Gauss and Stokes theorems",
+      "Writing Laplacians in spherical coordinates",
+    ],
+    keyFormulas: [
+      "\\nabla\\cdot\\mathbf{A}=\\frac{1}{h_1h_2h_3}\\sum_i\\frac{\\partial}{\\partial q_i}\\left(\\frac{h_1h_2h_3}{h_i}A_i\\right)",
+      "\\nabla^2 f=\\nabla\\cdot\\nabla f",
+    ],
+    commonMisunderstandings: [
+      "Using Cartesian operator formulas in curvilinear coordinates",
+      "Forgetting scale factors",
+      "Confusing vector components with basis vectors",
+    ],
+    studyOrder: 0,
+    difficulty: "basic",
+    tags: ["vector analysis", "coordinates", "field operators"],
+  },
+  {
+    id: "ordinary-differential-equations",
+    course: "math-physics",
+    title: "Ordinary Differential Equations",
+    alias: ["ODE", "linear differential equations", "series solution"],
+    description:
+      "Ordinary differential equations describe single-variable dynamics and appear as separated equations in many physics problems.",
+    textbookStyleSummary:
+      "A linear ODE problem requires the equation, domain, initial or boundary data, and any regularity conditions. Series solutions require identifying ordinary points, regular singular points, and recurrence relations.",
+    prerequisites: ["Calculus", "Linear Algebra"],
+    related: ["Separation of Variables", "Special Functions", "Sturm-Liouville Eigenvalue Problems"],
+    typicalProblems: [
+      "Solving second-order linear equations with constant coefficients",
+      "Power-series solutions near ordinary points",
+      "Frobenius solutions near regular singular points",
+    ],
+    keyFormulas: [
+      "a_2(x)y''+a_1(x)y'+a_0(x)y=f(x)",
+      "y(x)=\\sum_{n=0}^{\\infty}a_n(x-x_0)^n",
+    ],
+    commonMisunderstandings: [
+      "Giving a general solution without applying conditions",
+      "Using a power series outside its convergence range",
+      "Confusing homogeneous and particular solutions",
+    ],
+    studyOrder: 0.5,
+    difficulty: "basic",
+    tags: ["ODE", "series solution", "conditions"],
+  },
+  {
+    id: "distributions-and-delta-function",
+    course: "math-physics",
+    title: "Distributions and Delta Functions",
+    alias: ["Dirac delta", "generalized functions", "step function"],
+    description:
+      "Distributions extend functions so that point sources, jumps, impulses, and weak derivatives can be treated systematically.",
+    textbookStyleSummary:
+      "The delta function is defined by its action under integration, not by an ordinary pointwise value. Jump conditions often follow by integrating a differential equation across a singular point.",
+    prerequisites: ["Integral Transforms", "Vector Analysis and Curvilinear Coordinates"],
+    related: ["Green's Functions", "Electrostatics", "Scattering Theory"],
+    typicalProblems: [
+      "Using delta functions to represent point sources",
+      "Deriving jump conditions for one-dimensional Green functions",
+      "Computing Fourier transforms of distributions",
+    ],
+    keyFormulas: [
+      "\\int_{-\\infty}^{\\infty}\\delta(x-a)f(x)\\,dx=f(a)",
+      "\\frac{d}{dx}H(x-a)=\\delta(x-a)",
+    ],
+    commonMisunderstandings: [
+      "Treating \\delta(0) as an ordinary number",
+      "Ignoring test functions and integration domains",
+      "Forgetting discontinuity conditions at sources",
+    ],
+    studyOrder: 4.5,
+    difficulty: "intermediate",
+    tags: ["delta function", "weak derivative", "point source"],
+  },
+  {
+    id: "spherical-and-cylindrical-harmonics",
+    course: "math-physics",
+    title: "Cylindrical and Spherical Harmonics",
+    alias: ["spherical harmonics", "Bessel modes", "Legendre polynomials"],
+    description:
+      "Cylindrical and spherical harmonics arise from angular and radial separated equations in symmetric geometries.",
+    textbookStyleSummary:
+      "The coordinate symmetry determines the angular functions and radial equations. Boundary regularity and orthogonality fix allowed modes and expansion coefficients.",
+    prerequisites: ["Separation of Variables", "Special Functions"],
+    related: ["Central Potentials", "Multipole Expansion", "Electrostatic Boundary-Value Problems"],
+    typicalProblems: [
+      "Solving Laplace equations in spherical coordinates",
+      "Expanding boundary data in Legendre polynomials",
+      "Using Bessel zeros in cylindrical boundary-value problems",
+    ],
+    keyFormulas: [
+      "Y_{\\ell m}(\\theta,\\phi)=N_{\\ell m}P_{\\ell}^{m}(\\cos\\theta)e^{im\\phi}",
+      "x^2R''+xR'+(x^2-m^2)R=0",
+    ],
+    commonMisunderstandings: [
+      "Using Cartesian Fourier modes in spherical geometry",
+      "Ignoring regularity at the origin or axis",
+      "Mixing normalization conventions for harmonics",
+    ],
+    studyOrder: 10.5,
+    difficulty: "advanced",
+    tags: ["spherical harmonics", "Bessel functions", "symmetry"],
+  },
+  {
+    id: "asymptotic-and-approximation-methods",
+    course: "math-physics",
+    title: "Asymptotic and Approximation Methods",
+    alias: ["asymptotic expansion", "stationary phase", "saddle point"],
+    description:
+      "Asymptotic methods extract approximate behavior when a parameter is large, small, or singular.",
+    textbookStyleSummary:
+      "An asymptotic expansion is ordered by a limiting parameter and has a stated range of validity. The leading term may capture the dominant behavior even when the series is not convergent.",
+    prerequisites: ["Complex Functions", "Integral Transforms"],
+    related: ["WKB Approximation", "Perturbation Theory", "Fluctuations"],
+    typicalProblems: [
+      "Estimating integrals by Laplace's method",
+      "Using stationary phase for oscillatory integrals",
+      "Finding leading behavior of special functions",
+    ],
+    keyFormulas: [
+      "\\int e^{\\lambda f(x)}g(x)\\,dx\\sim e^{\\lambda f(x_0)}g(x_0)\\sqrt{\\frac{2\\pi}{-\\lambda f''(x_0)}}",
+    ],
+    commonMisunderstandings: [
+      "Confusing asymptotic accuracy with convergence",
+      "Not stating the limiting parameter",
+      "Using an approximation outside its scale range",
+    ],
+    studyOrder: 11.5,
+    difficulty: "advanced",
+    tags: ["asymptotics", "stationary phase", "approximation"],
+  },
+  {
+    id: "calculus-of-variations-mechanics",
+    course: "theoretical-mechanics",
+    title: "Calculus of Variations in Mechanics",
+    alias: ["Euler-Lagrange equation", "functional variation", "fixed endpoints"],
+    description:
+      "Variational calculus provides the mathematical basis for action principles and Euler-Lagrange equations.",
+    textbookStyleSummary:
+      "A variational problem must state the functional, admissible paths, endpoint conditions, and independent variables. Fixed endpoints imply vanishing endpoint variations, which remove boundary terms after integration by parts.",
+    prerequisites: ["Basics of Variational Methods"],
+    related: ["Hamilton's Principle", "Lagrange Equations"],
+    typicalProblems: [
+      "Deriving Euler-Lagrange equations from a functional",
+      "Handling fixed and free endpoint conditions",
+      "Finding extremal curves for simple functionals",
+    ],
+    keyFormulas: [
+      "\\delta J=0,\\quad J[y]=\\int_{x_1}^{x_2}F(y,y',x)\\,dx",
+      "\\frac{\\partial F}{\\partial y}-\\frac{d}{dx}\\frac{\\partial F}{\\partial y'}=0",
+    ],
+    commonMisunderstandings: [
+      "Varying endpoints that are fixed by the problem",
+      "Dropping boundary terms without checking conditions",
+      "Treating extremum as always a minimum",
+    ],
+    studyOrder: 5.5,
+    difficulty: "intermediate",
+    tags: ["variation", "action", "Euler-Lagrange"],
+  },
+  {
+    id: "lagrange-multipliers-and-nonholonomic-constraints",
+    course: "theoretical-mechanics",
+    title: "Lagrange Multipliers and Nonholonomic Constraints",
+    alias: ["constraint multipliers", "nonholonomic constraints", "undetermined multipliers"],
+    description:
+      "Multiplier methods handle constraint forces explicitly when constraints cannot be eliminated by choosing independent coordinates.",
+    textbookStyleSummary:
+      "Holonomic constraints can often be built into generalized coordinates, while nonholonomic constraints require careful velocity-level treatment. Multipliers represent constraint-force components only under the stated virtual-work assumptions.",
+    prerequisites: ["Virtual Work and Constraints", "Lagrange Equations"],
+    related: ["Non-Inertial Frames", "Hamiltonian Equations"],
+    typicalProblems: [
+      "Finding constraint forces with multipliers",
+      "Rolling constraints without slipping",
+      "Comparing eliminable and nonholonomic constraints",
+    ],
+    keyFormulas: [
+      "\\frac{d}{dt}\\frac{\\partial L}{\\partial \\dot q_i}-\\frac{\\partial L}{\\partial q_i}=Q_i+\\sum_\\alpha \\lambda_\\alpha a_{\\alpha i}",
+    ],
+    commonMisunderstandings: [
+      "Treating all velocity constraints as integrated coordinate constraints",
+      "Ignoring whether virtual displacements satisfy the constraint",
+      "Assigning physical meaning to multipliers without checking units and directions",
+    ],
+    studyOrder: 7.5,
+    difficulty: "advanced",
+    tags: ["constraints", "multipliers", "nonholonomic"],
+  },
+  {
+    id: "noether-theorem-and-conservation-laws",
+    course: "theoretical-mechanics",
+    title: "Noether Theorem and Conservation Laws",
+    alias: ["symmetry", "cyclic coordinate", "conserved quantity"],
+    description:
+      "Noether's theorem links continuous symmetries of the action to conserved quantities.",
+    textbookStyleSummary:
+      "A cyclic coordinate gives a conserved canonical momentum, but the deeper statement is invariance of the action under a continuous transformation. The conserved quantity depends on the transformation, not only on the coordinate name.",
+    prerequisites: ["Hamilton's Principle", "Lagrange Equations"],
+    related: ["Canonical Transformations and Poisson Brackets", "Hamiltonian Equations"],
+    typicalProblems: [
+      "Identifying cyclic coordinates",
+      "Deriving energy and momentum conservation from symmetry",
+      "Using conserved quantities to reduce motion",
+    ],
+    keyFormulas: [
+      "\\frac{\\partial L}{\\partial q_i}=0\\Rightarrow p_i=\\frac{\\partial L}{\\partial \\dot q_i}=\\mathrm{constant}",
+    ],
+    commonMisunderstandings: [
+      "Equating every conserved quantity with energy",
+      "Confusing coordinate independence with physical symmetry",
+      "Ignoring explicit time dependence of the Lagrangian",
+    ],
+    studyOrder: 8.5,
+    difficulty: "advanced",
+    tags: ["symmetry", "Noether theorem", "conservation"],
+  },
+  {
+    id: "hamilton-jacobi-theory",
+    course: "theoretical-mechanics",
+    title: "Hamilton-Jacobi Theory",
+    alias: ["Hamilton-Jacobi equation", "principal function", "complete integral"],
+    description:
+      "Hamilton-Jacobi theory reformulates mechanics as a first-order partial differential equation for the action.",
+    textbookStyleSummary:
+      "The Hamilton-Jacobi equation is useful when a complete integral can generate canonical transformations to constants of motion. Separation depends on coordinates and conserved quantities.",
+    prerequisites: ["Hamiltonian Equations", "Canonical Transformations and Poisson Brackets"],
+    related: ["Action-Angle Variables", "WKB Approximation"],
+    typicalProblems: [
+      "Solving separable Hamilton-Jacobi equations",
+      "Deriving trajectories from the principal function",
+      "Connecting classical action with semiclassical phase",
+    ],
+    keyFormulas: [
+      "H\\left(q_i,\\frac{\\partial S}{\\partial q_i},t\\right)+\\frac{\\partial S}{\\partial t}=0",
+    ],
+    commonMisunderstandings: [
+      "Treating the action function as ordinary energy",
+      "Forgetting the role of integration constants",
+      "Assuming every Hamilton-Jacobi equation separates",
+    ],
+    studyOrder: 10.5,
+    difficulty: "advanced",
+    tags: ["Hamilton-Jacobi", "action", "separation"],
+  },
+  {
+    id: "action-angle-variables",
+    course: "theoretical-mechanics",
+    title: "Action-Angle Variables",
+    alias: ["integrable systems", "adiabatic invariant", "angle variables"],
+    description:
+      "Action-angle variables describe periodic integrable motion through conserved actions and uniformly advancing angles.",
+    textbookStyleSummary:
+      "Action variables are phase-space integrals over closed orbits. The construction assumes integrability and is especially useful for oscillatory motion and perturbative treatments.",
+    prerequisites: ["Hamilton-Jacobi Theory", "Canonical Transformations and Poisson Brackets"],
+    related: ["Small Oscillations", "Quantum Harmonic Oscillator"],
+    typicalProblems: [
+      "Computing the action for a one-dimensional oscillator",
+      "Finding frequencies from the Hamiltonian in action variables",
+      "Using adiabatic invariance qualitatively",
+    ],
+    keyFormulas: [
+      "J_i=\\frac{1}{2\\pi}\\oint p_i\\,dq_i",
+      "\\dot\\theta_i=\\frac{\\partial H}{\\partial J_i}",
+    ],
+    commonMisunderstandings: [
+      "Applying action-angle variables to nonintegrable systems without justification",
+      "Dropping the closed-orbit condition",
+      "Confusing angle variables with ordinary polar angles",
+    ],
+    studyOrder: 11.5,
+    difficulty: "advanced",
+    tags: ["action-angle", "integrability", "periodic motion"],
+  },
+  {
+    id: "fields-in-matter",
+    course: "electrodynamics",
+    title: "Fields in Matter",
+    alias: ["polarization", "magnetization", "bound charge", "macroscopic fields"],
+    description:
+      "Fields in matter separate free and bound sources through polarization, magnetization, and macroscopic field variables.",
+    textbookStyleSummary:
+      "The distinction between $\\mathbf{E}$, $\\mathbf{D}$, $\\mathbf{B}$, and $\\mathbf{H}$ depends on how material response is modeled. Constitutive relations are additional assumptions, not Maxwell equations themselves.",
+    prerequisites: ["Electrostatics", "Magnetostatics"],
+    related: ["Electromagnetic Boundary Conditions", "Maxwell Equations"],
+    typicalProblems: [
+      "Finding bound charge from polarization",
+      "Using linear dielectric boundary conditions",
+      "Computing magnetization current",
+    ],
+    keyFormulas: [
+      "\\rho_b=-\\nabla\\cdot\\mathbf{P}",
+      "\\mathbf{D}=\\varepsilon_0\\mathbf{E}+\\mathbf{P}",
+      "\\mathbf{H}=\\frac{1}{\\mu_0}\\mathbf{B}-\\mathbf{M}",
+    ],
+    commonMisunderstandings: [
+      "Treating constitutive relations as universal laws",
+      "Confusing free and bound charge",
+      "Using vacuum boundary conditions inside matter",
+    ],
+    studyOrder: 5.5,
+    difficulty: "intermediate",
+    tags: ["matter", "polarization", "magnetization"],
+  },
+  {
+    id: "electromagnetic-boundary-conditions",
+    course: "electrodynamics",
+    title: "Electromagnetic Boundary Conditions",
+    alias: ["interface conditions", "surface charge", "surface current"],
+    description:
+      "Boundary conditions connect field components across material interfaces and conducting surfaces.",
+    textbookStyleSummary:
+      "Boundary conditions follow from integral Maxwell equations applied to small pillboxes and loops. The discontinuities depend on free surface charge and free surface current, while constitutive laws determine material response.",
+    prerequisites: ["Maxwell Equations", "Fields in Matter"],
+    related: ["Electrostatic Boundary-Value Problems", "Electromagnetic Waves"],
+    typicalProblems: [
+      "Field discontinuities across dielectric interfaces",
+      "Conducting-surface electrostatic conditions",
+      "Plane-wave reflection and transmission at normal incidence",
+    ],
+    keyFormulas: [
+      "\\hat{\\mathbf{n}}\\cdot(\\mathbf{D}_2-\\mathbf{D}_1)=\\sigma_f",
+      "\\hat{\\mathbf{n}}\\times(\\mathbf{H}_2-\\mathbf{H}_1)=\\mathbf{K}_f",
+    ],
+    commonMisunderstandings: [
+      "Applying normal-component rules to tangential components",
+      "Forgetting surface sources",
+      "Using boundary conditions without specifying the normal direction",
+    ],
+    studyOrder: 6.5,
+    difficulty: "intermediate",
+    tags: ["boundary conditions", "interfaces", "surface sources"],
+  },
+  {
+    id: "poynting-theorem-and-field-momentum",
+    course: "electrodynamics",
+    title: "Poynting Theorem and Field Momentum",
+    alias: ["energy conservation", "Poynting vector", "electromagnetic momentum"],
+    description:
+      "Poynting's theorem expresses energy transfer between fields, charges, and electromagnetic energy flux.",
+    textbookStyleSummary:
+      "Energy-density and flux expressions depend on the field model and medium assumptions. A complete problem should specify the volume, surface, and work done on charges.",
+    prerequisites: ["Maxwell Equations"],
+    related: ["Electromagnetic Waves", "Electromagnetic Radiation"],
+    typicalProblems: [
+      "Computing energy flux in a plane wave",
+      "Using Poynting's theorem for charging systems",
+      "Estimating radiation pressure",
+    ],
+    keyFormulas: [
+      "\\mathbf{S}=\\mathbf{E}\\times\\mathbf{H}",
+      "\\frac{\\partial u}{\\partial t}+\\nabla\\cdot\\mathbf{S}=-\\mathbf{J}\\cdot\\mathbf{E}",
+    ],
+    commonMisunderstandings: [
+      "Confusing field energy flow with charge motion",
+      "Ignoring surface terms in conservation laws",
+      "Using vacuum energy density in arbitrary media without assumptions",
+    ],
+    studyOrder: 7.5,
+    difficulty: "intermediate",
+    tags: ["Poynting theorem", "energy flux", "field momentum"],
+  },
+  {
+    id: "waveguides-and-resonant-cavities",
+    course: "electrodynamics",
+    title: "Waveguides and Resonant Cavities",
+    alias: ["waveguides", "TE modes", "TM modes", "cavity modes"],
+    description:
+      "Waveguides and cavities confine electromagnetic waves, producing modal propagation and discrete resonance frequencies.",
+    textbookStyleSummary:
+      "Mode classification depends on boundary conditions on conducting surfaces and the propagation direction. Cutoff frequencies determine whether a mode propagates or decays.",
+    prerequisites: ["Electromagnetic Waves", "Electromagnetic Boundary Conditions"],
+    related: ["Separation of Variables", "Poynting Theorem and Field Momentum"],
+    typicalProblems: [
+      "Finding cutoff frequencies in rectangular waveguides",
+      "Classifying TE and TM modes",
+      "Determining cavity resonance frequencies",
+    ],
+    keyFormulas: [
+      "k^2=k_c^2+\\beta^2",
+      "\\omega_c=ck_c",
+    ],
+    commonMisunderstandings: [
+      "Assuming every frequency propagates in a guide",
+      "Mixing TE and TM boundary conditions",
+      "Ignoring conductor boundary constraints",
+    ],
+    studyOrder: 8.5,
+    difficulty: "advanced",
+    tags: ["waveguide", "modes", "cutoff"],
+  },
+  {
+    id: "hilbert-space-and-dirac-notation",
+    course: "quantum-mechanics",
+    title: "Hilbert Space and Dirac Notation",
+    alias: ["bra-ket notation", "Hilbert space", "inner product"],
+    description:
+      "Quantum states are vectors in a Hilbert space, and Dirac notation expresses states, dual vectors, inner products, and operators compactly.",
+    textbookStyleSummary:
+      "The notation $|\\psi\\rangle$ represents an abstract state, while wave functions are its components in a chosen basis. Inner products, normalization, and completeness depend on the Hilbert-space structure.",
+    prerequisites: ["Linear Algebra"],
+    related: ["Wave Function and State Vector", "Representations", "Operators and Observables"],
+    typicalProblems: [
+      "Expanding a state in an orthonormal basis",
+      "Using completeness relations",
+      "Computing probabilities from inner products",
+    ],
+    keyFormulas: [
+      "\\langle \\phi|\\psi\\rangle",
+      "\\sum_n |n\\rangle\\langle n|=I",
+    ],
+    commonMisunderstandings: [
+      "Equating a ket with a particular wave function",
+      "Forgetting complex conjugation in inner products",
+      "Using non-normalized states for probabilities",
+    ],
+    studyOrder: 0,
+    difficulty: "basic",
+    tags: ["Hilbert space", "Dirac notation", "basis"],
+  },
+  {
+    id: "measurement-postulates",
+    course: "quantum-mechanics",
+    title: "Measurement Postulates",
+    alias: ["Born rule", "projection postulate", "measurement probability"],
+    description:
+      "Measurement connects the state vector with observable eigenvalues, probabilities, and post-measurement states.",
+    textbookStyleSummary:
+      "An ideal measurement of an observable yields an eigenvalue with probability determined by projection onto the corresponding eigenspace. Degeneracy requires projecting onto the full degenerate subspace.",
+    prerequisites: ["Operators and Observables", "Hilbert Space and Dirac Notation"],
+    related: ["Representations", "Spin", "Angular Momentum"],
+    typicalProblems: [
+      "Computing measurement probabilities in a finite basis",
+      "Post-measurement state normalization",
+      "Handling degenerate measurement outcomes",
+    ],
+    keyFormulas: [
+      "P(a_n)=|\\langle a_n|\\psi\\rangle|^2",
+      "|\\psi'\\rangle=\\frac{P_n|\\psi\\rangle}{\\sqrt{\\langle\\psi|P_n|\\psi\\rangle}}",
+    ],
+    commonMisunderstandings: [
+      "Confusing expectation value with a possible measurement result",
+      "Ignoring degeneracy",
+      "Forgetting to renormalize after projection",
+    ],
+    studyOrder: 4.5,
+    difficulty: "intermediate",
+    tags: ["measurement", "Born rule", "projection"],
+  },
+  {
+    id: "addition-of-angular-momenta",
+    course: "quantum-mechanics",
+    title: "Addition of Angular Momenta",
+    alias: ["Clebsch-Gordan coefficients", "coupled basis", "uncoupled basis"],
+    description:
+      "Adding angular momenta relates product bases to coupled total-angular-momentum bases.",
+    textbookStyleSummary:
+      "The allowed total quantum numbers follow from triangle rules, while Clebsch-Gordan coefficients define the basis transformation. Physical interpretation depends on which commuting observables are diagonal.",
+    prerequisites: ["Angular Momentum", "Spin"],
+    related: ["Identical Particles", "Measurement Postulates"],
+    typicalProblems: [
+      "Finding allowed total angular momenta",
+      "Transforming between coupled and uncoupled bases",
+      "Constructing singlet and triplet spin states",
+    ],
+    keyFormulas: [
+      "|jm\\rangle=\\sum_{m_1,m_2}C^{jm}_{j_1m_1j_2m_2}|j_1m_1\\rangle|j_2m_2\\rangle",
+    ],
+    commonMisunderstandings: [
+      "Adding quantum numbers as ordinary scalars without selection rules",
+      "Confusing $m$ with $j$",
+      "Ignoring basis labels in coupled states",
+    ],
+    studyOrder: 8.5,
+    difficulty: "advanced",
+    tags: ["angular momentum", "Clebsch-Gordan", "coupled basis"],
+  },
+  {
+    id: "wkb-approximation",
+    course: "quantum-mechanics",
+    title: "WKB Approximation",
+    alias: ["semiclassical approximation", "turning point", "connection formula"],
+    description:
+      "The WKB approximation estimates wave functions and spectra when the potential varies slowly on the de Broglie wavelength scale.",
+    textbookStyleSummary:
+      "WKB solutions have different forms in classically allowed and forbidden regions and require connection formulas near turning points. Quantization conditions follow from phase accumulation and boundary behavior.",
+    prerequisites: ["One-Dimensional Stationary States", "Asymptotic and Approximation Methods"],
+    related: ["Hamilton-Jacobi Theory", "Scattering Theory"],
+    typicalProblems: [
+      "Applying WKB quantization to bound states",
+      "Estimating tunneling probabilities",
+      "Identifying turning points and validity conditions",
+    ],
+    keyFormulas: [
+      "\\psi(x)\\approx \\frac{C}{\\sqrt{p(x)}}\\exp\\left(\\pm\\frac{i}{\\hbar}\\int^x p(x')\\,dx'\\right)",
+      "\\int_{x_1}^{x_2}p(x)\\,dx=\\left(n+\\frac12\\right)\\pi\\hbar",
+    ],
+    commonMisunderstandings: [
+      "Using WKB at turning points without connection formulas",
+      "Ignoring the slow-variation condition",
+      "Applying bound-state quantization to scattering states",
+    ],
+    studyOrder: 11.5,
+    difficulty: "advanced",
+    tags: ["WKB", "semiclassical", "tunneling"],
+  },
+  {
+    id: "time-dependent-perturbation",
+    course: "quantum-mechanics",
+    title: "Time-Dependent Perturbation Theory",
+    alias: ["transition probability", "Fermi golden rule", "driven quantum system"],
+    description:
+      "Time-dependent perturbation theory describes transitions induced by weak time-varying interactions.",
+    textbookStyleSummary:
+      "A transition calculation must specify the unperturbed states, perturbation, time dependence, initial state, and approximation order. Resonance and density of final states enter long-time transition rates.",
+    prerequisites: ["Perturbation Theory", "Schrodinger Equation"],
+    related: ["Electromagnetic Radiation", "Scattering Theory"],
+    typicalProblems: [
+      "First-order transition amplitudes",
+      "Sinusoidal perturbation and resonance",
+      "Using Fermi's golden rule",
+    ],
+    keyFormulas: [
+      "c_f^{(1)}(t)=-\\frac{i}{\\hbar}\\int_0^t \\langle f|V(t')|i\\rangle e^{i\\omega_{fi}t'}\\,dt'",
+      "W_{i\\to f}=\\frac{2\\pi}{\\hbar}|V_{fi}|^2\\rho(E_f)",
+    ],
+    commonMisunderstandings: [
+      "Using time-independent formulas for driven transitions",
+      "Forgetting phase factors from unperturbed evolution",
+      "Applying Fermi's golden rule without a continuum or long-time limit",
+    ],
+    studyOrder: 11.7,
+    difficulty: "advanced",
+    tags: ["transition", "perturbation", "resonance"],
+  },
+  {
+    id: "density-matrix-and-mixed-states",
+    course: "quantum-mechanics",
+    title: "Density Matrix and Mixed States",
+    alias: ["density operator", "mixed state", "pure state"],
+    description:
+      "The density matrix describes statistical mixtures and subsystems when a single state vector is insufficient.",
+    textbookStyleSummary:
+      "A pure state satisfies $\\rho^2=\\rho$, while a mixed state encodes classical uncertainty or reduced subsystem information. Expectation values are computed by traces over the relevant Hilbert space.",
+    prerequisites: ["Hilbert Space and Dirac Notation", "Measurement Postulates"],
+    related: ["Identical Particles", "Quantum Statistics"],
+    typicalProblems: [
+      "Distinguishing pure and mixed spin states",
+      "Computing expectation values with traces",
+      "Finding reduced density matrices",
+    ],
+    keyFormulas: [
+      "\\rho=\\sum_i p_i|\\psi_i\\rangle\\langle\\psi_i|",
+      "\\langle A\\rangle=\\operatorname{Tr}(\\rho A)",
+    ],
+    commonMisunderstandings: [
+      "Confusing superposition with statistical mixture",
+      "Forgetting trace normalization",
+      "Treating subsystem states as pure after tracing out correlations",
+    ],
+    studyOrder: 12.5,
+    difficulty: "advanced",
+    tags: ["density matrix", "mixed state", "trace"],
+  },
+  {
+    id: "thermodynamic-equilibrium-and-state-functions",
+    course: "thermo-stat",
+    title: "Equilibrium and State Functions",
+    alias: ["equilibrium state", "state variable", "equation of state"],
+    description:
+      "Thermodynamics begins by distinguishing equilibrium states, state functions, and process-dependent transfers.",
+    textbookStyleSummary:
+      "A thermodynamic state is specified by a sufficient set of independent variables and an equation of state. Heat and work describe processes, while internal energy, entropy, and thermodynamic potentials describe states.",
+    prerequisites: ["Thermal Processes and Ideal Gases"],
+    related: ["Thermodynamic Laws", "Thermodynamic Properties of Uniform Matter"],
+    typicalProblems: [
+      "Identifying independent variables",
+      "Distinguishing state functions from path functions",
+      "Using equations of state to compute derivatives",
+    ],
+    keyFormulas: [
+      "f(p,V,T,N)=0",
+      "dU=\\delta Q-\\delta W",
+    ],
+    commonMisunderstandings: [
+      "Treating heat as stored in a system",
+      "Using path-dependent quantities as coordinates of state",
+      "Ignoring equilibrium assumptions",
+    ],
+    studyOrder: 0,
+    difficulty: "basic",
+    tags: ["equilibrium", "state function", "process"],
+  },
+  {
+    id: "chemical-potential-and-open-systems",
+    course: "thermo-stat",
+    title: "Chemical Potential and Open Systems",
+    alias: ["chemical potential", "open system", "particle exchange"],
+    description:
+      "Chemical potential measures the change in thermodynamic potential when particle number changes under specified constraints.",
+    textbookStyleSummary:
+      "The meaning of chemical potential depends on the potential and natural variables being used. It is central to phase equilibrium, diffusion, reactions, and particle exchange with reservoirs.",
+    prerequisites: ["Thermodynamic Potentials"],
+    related: ["Grand Canonical Ensemble", "Phase Equilibrium"],
+    typicalProblems: [
+      "Deriving chemical-potential terms in thermodynamic differentials",
+      "Using equality of chemical potentials for equilibrium",
+      "Analyzing particle exchange between subsystems",
+    ],
+    keyFormulas: [
+      "\\mu=\\left(\\frac{\\partial U}{\\partial N}\\right)_{S,V}",
+      "dF=-S\\,dT-p\\,dV+\\mu\\,dN",
+    ],
+    commonMisunderstandings: [
+      "Treating chemical potential as ordinary potential energy",
+      "Ignoring fixed variables in its definition",
+      "Forgetting particle-number constraints",
+    ],
+    studyOrder: 4.5,
+    difficulty: "intermediate",
+    tags: ["chemical potential", "open system", "particle number"],
+  },
+  {
+    id: "ideal-quantum-gases",
+    course: "thermo-stat",
+    title: "Ideal Quantum Gases",
+    alias: ["ideal Bose gas", "ideal Fermi gas", "quantum gas"],
+    description:
+      "Ideal quantum gases apply Bose-Einstein or Fermi-Dirac occupation rules to noninteracting particles.",
+    textbookStyleSummary:
+      "The thermodynamics of an ideal quantum gas follows from single-particle states, occupation numbers, density of states, and particle-number constraints. The classical limit is recovered when phase-space density is small.",
+    prerequisites: ["Quantum Statistics", "Grand Canonical Ensemble"],
+    related: ["Bose-Einstein Condensation", "Degenerate Fermi Gas"],
+    typicalProblems: [
+      "Computing particle number from density of states",
+      "Taking the classical limit of quantum distributions",
+      "Comparing Bose and Fermi occupation behavior",
+    ],
+    keyFormulas: [
+      "N=\\sum_i \\frac{1}{e^{\\beta(\\epsilon_i-\\mu)}\\mp1}",
+      "g(\\epsilon)\\,d\\epsilon\\propto V\\epsilon^{1/2}\\,d\\epsilon",
+    ],
+    commonMisunderstandings: [
+      "Using a fixed chemical potential without enforcing particle number",
+      "Mixing Bose and Fermi signs",
+      "Applying classical equipartition in the degenerate regime",
+    ],
+    studyOrder: 11.5,
+    difficulty: "advanced",
+    tags: ["quantum gas", "density of states", "occupation"],
+  },
+  {
+    id: "bose-einstein-condensation",
+    course: "thermo-stat",
+    title: "Bose-Einstein Condensation",
+    alias: ["Bose condensation", "critical temperature", "ground-state occupation"],
+    description:
+      "Bose-Einstein condensation occurs when a macroscopic number of bosons occupy the ground state below a critical temperature.",
+    textbookStyleSummary:
+      "The transition follows from the saturation of excited-state occupation under particle-number conservation. It requires bosons and is usually discussed for ideal or weakly interacting gases.",
+    prerequisites: ["Ideal Quantum Gases"],
+    related: ["Quantum Statistics", "Phase Equilibrium"],
+    typicalProblems: [
+      "Deriving critical temperature for an ideal Bose gas",
+      "Computing condensate fraction",
+      "Separating ground-state and excited-state contributions",
+    ],
+    keyFormulas: [
+      "\\frac{N_0}{N}=1-\\left(\\frac{T}{T_c}\\right)^{3/2}",
+    ],
+    commonMisunderstandings: [
+      "Treating condensation as ordinary gas-liquid condensation",
+      "Forgetting the separate ground-state term",
+      "Applying the result to fermions",
+    ],
+    studyOrder: 12.2,
+    difficulty: "advanced",
+    tags: ["Bose gas", "condensation", "critical temperature"],
+  },
+  {
+    id: "degenerate-fermi-gas",
+    course: "thermo-stat",
+    title: "Degenerate Fermi Gas",
+    alias: ["Fermi energy", "Fermi temperature", "electron gas"],
+    description:
+      "A degenerate Fermi gas is governed by the Pauli principle and remains quantum even at low temperature.",
+    textbookStyleSummary:
+      "At zero temperature, fermions fill single-particle states up to the Fermi energy. Low-temperature behavior is controlled by excitations near the Fermi surface rather than all particles equally.",
+    prerequisites: ["Ideal Quantum Gases"],
+    related: ["Fermi-Dirac Statistics", "Identical Particles"],
+    typicalProblems: [
+      "Computing Fermi energy and Fermi temperature",
+      "Finding pressure of a zero-temperature Fermi gas",
+      "Estimating low-temperature heat capacity",
+    ],
+    keyFormulas: [
+      "E_F=\\frac{\\hbar^2}{2m}(3\\pi^2 n)^{2/3}",
+      "f(\\epsilon)=\\frac{1}{e^{\\beta(\\epsilon-\\mu)}+1}",
+    ],
+    commonMisunderstandings: [
+      "Assuming all fermions contribute equally to low-temperature heat capacity",
+      "Confusing Fermi energy with average thermal energy",
+      "Using Maxwell-Boltzmann statistics in the degenerate regime",
+    ],
+    studyOrder: 12.4,
+    difficulty: "advanced",
+    tags: ["Fermi gas", "degeneracy", "Fermi energy"],
+  },
+  {
+    id: "critical-phenomena-and-scaling",
+    course: "thermo-stat",
+    title: "Critical Phenomena and Scaling",
+    alias: ["critical point", "critical exponents", "scaling laws"],
+    description:
+      "Critical phenomena describe universal behavior near continuous phase transitions, where fluctuations become long ranged.",
+    textbookStyleSummary:
+      "Near a critical point, response functions can diverge and simple mean-field descriptions may fail. Scaling laws characterize how observables depend on reduced temperature, field, and system size.",
+    prerequisites: ["Phase Equilibrium", "Fluctuations"],
+    related: ["Statistical Postulates", "Asymptotic and Approximation Methods"],
+    typicalProblems: [
+      "Identifying order parameters",
+      "Using critical exponent definitions",
+      "Comparing mean-field predictions with scaling behavior",
+    ],
+    keyFormulas: [
+      "C\\sim |T-T_c|^{-\\alpha}",
+      "\\xi\\sim |T-T_c|^{-\\nu}",
+    ],
+    commonMisunderstandings: [
+      "Treating all phase transitions as first order",
+      "Ignoring finite-size effects near criticality",
+      "Assuming mean-field exponents are always exact",
+    ],
+    studyOrder: 13,
+    difficulty: "advanced",
+    tags: ["criticality", "scaling", "fluctuations"],
+  },
+];
+
+export const knowledgeItems: KnowledgeItem[] = [
+  ...coreKnowledgeItems,
+  ...supplementalKnowledgeItems,
 ];
 
 export function getKnowledgeByCourse(courseId: CourseId) {

@@ -7,8 +7,7 @@ const courseAliases: Record<Exclude<CourseId, "general">, string[]> = {
   "general-physics": [
     "普通物理",
     "大学物理",
-    "基础物理",
-    "basic physics",
+    "general physics",
     "introductory physics",
     "university physics",
   ],

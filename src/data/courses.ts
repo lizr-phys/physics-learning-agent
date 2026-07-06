@@ -12,12 +12,12 @@ export type CourseOption = {
 export const courseOptions: CourseOption[] = [
   {
     id: "general-physics",
-    label: "Basic Physics",
-    shortLabel: "Basic Physics",
-    chineseReferences: ["Chinese university foundational physics curricula"],
+    label: "General Physics",
+    shortLabel: "General Physics",
+    chineseReferences: ["Chinese university general physics curricula"],
     englishReferences: ["The Feynman Lectures on Physics", "Berkeley Physics Course"],
     contextSummary:
-      "Mechanics, thermal physics, electromagnetism, waves, optics, modern physics, measurement, uncertainty analysis, and conceptual physical reasoning.",
+      "Units and vectors, Newtonian mechanics, gravitation, fluids, oscillations and waves, thermal physics, electromagnetism, circuits, optics, modern physics, measurement, uncertainty analysis, and conceptual physical reasoning.",
   },
   {
     id: "math-physics",

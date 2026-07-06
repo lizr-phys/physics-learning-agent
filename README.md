@@ -78,12 +78,12 @@ flowchart LR
 
 - Intent classification before prompt construction
 - Course-aware response instructions for:
+  - general physics
   - mathematical methods for physics
   - theoretical mechanics
   - electrodynamics
   - quantum mechanics
   - thermodynamics and statistical physics
-  - general physics and physics education
 - Bilingual response behavior:
   - Chinese questions receive Chinese answers and Chinese-course reference style
   - English questions receive English answers and English-textbook reference style
@@ -184,12 +184,12 @@ flowchart TD
 
 | Course | Representative topics |
 | --- | --- |
-| General Physics and Physics Education | mechanics foundations, waves, electromagnetism, optics, thermodynamics, teaching-oriented explanations |
-| Mathematical Methods for Physics | complex variables, Fourier analysis, integral transforms, PDEs, Green's functions, Sturm-Liouville theory, special functions |
-| Theoretical Mechanics | generalized coordinates, constraints, Lagrange equations, Hamiltonian mechanics, canonical transformations, small oscillations |
-| Electrodynamics | electrostatic boundary-value problems, image method, multipole expansion, Maxwell equations, waves, potentials, gauge transformations |
-| Quantum Mechanics | wave functions, operators, representations, one-dimensional systems, harmonic oscillator, angular momentum, perturbation theory, scattering basics |
-| Thermodynamics and Statistical Physics | thermodynamic potentials, Maxwell relations, ensembles, partition functions, quantum statistics, fluctuations, phase equilibrium |
+| General Physics | units and vectors, Newtonian mechanics, circular motion, gravitation, fluids, oscillations and waves, thermal physics, electromagnetism, circuits, geometrical optics, modern physics, measurement, uncertainty |
+| Mathematical Methods for Physics | vector analysis, curvilinear coordinates, complex variables, Fourier analysis, integral transforms, distributions, PDEs, boundary-value problems, Sturm-Liouville theory, Green's functions, special functions, asymptotic methods |
+| Theoretical Mechanics | particle systems, central forces, rigid-body kinematics and dynamics, non-inertial frames, constraints, virtual work, Lagrange equations, Hamilton's principle, canonical equations, Poisson brackets, canonical transformations, Hamilton-Jacobi theory, small oscillations |
+| Electrodynamics | electrostatics, magnetostatics, fields in matter, boundary-value problems, image method, multipole expansion, Maxwell equations, electromagnetic boundary conditions, waves, waveguides, potentials, gauge transformations, radiation, relativistic electrodynamics |
+| Quantum Mechanics | wave functions, state vectors, Hilbert space, Dirac notation, postulates, operators, representations, one-dimensional systems, harmonic oscillator, central-force problems, angular momentum, spin, identical particles, perturbation theory, WKB, scattering basics, density matrices |
+| Thermodynamics and Statistical Physics | equilibrium, thermodynamic laws, state functions, thermodynamic potentials, Maxwell relations, chemical potential, phase equilibrium, ensembles, partition functions, classical statistics, quantum statistics, Bose condensation, degenerate Fermi gas, fluctuations, critical phenomena |
 
 ## Reference Strategy
 
@@ -197,7 +197,7 @@ Physics Learning Agent uses reference profiles to adapt wording and problem styl
 
 | User context | Reference profile | Output style |
 | --- | --- | --- |
-| Chinese questions | Chinese undergraduate physics curriculum, final exams, postgraduate entrance exam conventions | Chinese classroom terminology, complete conditions, standard derivations, original exercise variants |
+| Chinese questions | Chinese undergraduate physics curriculum, final exams, postgraduate entrance exam conventions | Chinese undergraduate-course terminology, complete conditions, standard derivations, original exercise variants |
 | English questions | English textbook conventions and open-course problem-set style | Academic English, textbook-style assumptions, original problem sets, clear solution structure |
 | Mixed-language context | Most recent explicit user language and task intent | Preserve the active learning context unless the user changes it |
 
@@ -355,7 +355,7 @@ npm run build
 - Embedding-based retrieval with a pluggable vector store
 - Citation-aware answers for user-owned notes
 - Better export formats for practice sets and study records
-- Optional teacher mode for classroom problem-set preparation
+- Structured problem-set authoring tools for instructors and study groups
 - More structured test coverage for streaming, retrieval, and provider adapters
 
 ## Copyright and Source-style Notes

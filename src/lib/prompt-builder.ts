@@ -123,7 +123,7 @@ export function buildRagContext(input: AgentRequest) {
   const personalCount = snippets.filter((snippet) => snippet.kind === "personal").length;
   const sampleCount = snippets.filter((snippet) => snippet.kind !== "personal").length;
 
-  return `Relevant retrieval snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with basic physics knowledge.
+  return `Relevant retrieval snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with general physics knowledge.
 
 Retrieval status:
 - Personal knowledge mode: ${personalDecision?.mode ?? "auto"}

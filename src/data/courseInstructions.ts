@@ -4,7 +4,7 @@ export const courseInstructions: Record<CourseId, string> = {
   general:
     "No course is selected. Infer the most likely undergraduate physics context from terminology. If a term has different meanings across courses, state the ambiguity and answer the most common interpretation.",
   "general-physics":
-    "For basic physics, state the object of study, reference frame, approximation, measurable quantities, experimental setup when relevant, uncertainty treatment, and physical interpretation.",
+    "For general physics, state the object of study, reference frame, approximation, measurable quantities, experimental setup when relevant, uncertainty treatment, and physical interpretation.",
   "math-physics":
     "For mathematical methods, distinguish equations, initial conditions, boundary conditions, eigenvalue problems, orthogonality, completeness, Green's functions, and domains of definition. For separation of variables, explain the coordinate choice, how boundary conditions determine eigenfunctions and eigenvalues, and how expansion coefficients are fixed by orthogonality.",
   "theoretical-mechanics":
