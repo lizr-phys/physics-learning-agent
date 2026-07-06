@@ -11,6 +11,7 @@ import {
   type AnswerDepth,
   type CourseId,
   type DifficultyId,
+  type KnowledgeMode,
   type PracticeOutputMode,
   type PracticeStyleId,
   type TaskTypeId,
@@ -42,6 +43,7 @@ export type UserDataSnapshot = {
     answerDepth?: AnswerDepth;
     onboardingDismissed?: boolean;
     selectedModel?: string;
+    knowledgeMode?: KnowledgeMode;
   };
   providerPreferences?: {
     enabled?: boolean;
@@ -68,6 +70,7 @@ const difficultyIds = new Set<string>(difficultyOptions.map((difficulty) => diff
 const answerDepthIds = new Set<string>(answerDepthOptions.map((depth) => depth.id));
 const practiceOutputModeIds = new Set<string>(practiceOutputModeOptions.map((mode) => mode.id));
 const practiceStyleIds = new Set<string>(practiceStyleOptions.map((style) => style.id));
+const knowledgeModeIds = new Set<string>(["auto", "always", "never"]);
 const exerciseCounts = new Set([3, 5, 10]);
 const clientProviderKinds = new Set(["openai-compatible", "anthropic", "gemini"]);
 
@@ -202,6 +205,7 @@ function sanitizeContext(value: unknown) {
   const practiceStyle = asString(record.practiceStyle, 80);
   const detectedLanguage = asString(record.detectedLanguage, 12);
   const referenceProfile = asString(record.referenceProfile, 24);
+  const knowledgeMode = asString(record.knowledgeMode, 24);
 
   return {
     course: (courseIds.has(course) ? course : "general") as CourseId,
@@ -219,6 +223,9 @@ function sanitizeContext(value: unknown) {
       referenceProfile === "auto" || referenceProfile === "chinese" || referenceProfile === "english"
         ? referenceProfile
         : undefined,
+    knowledgeMode: knowledgeModeIds.has(knowledgeMode)
+      ? (knowledgeMode as KnowledgeMode)
+      : undefined,
   };
 }
 
@@ -366,6 +373,7 @@ function sanitizePracticeGeneration(value: unknown): StoredPracticeGeneration | 
 function sanitizePreferences(value: unknown): UserDataSnapshot["preferences"] {
   const record = asRecord(value);
   const answerDepth = asString(record.answerDepth, 80);
+  const knowledgeMode = asString(record.knowledgeMode, 24);
 
   return {
     answerDepth: answerDepthIds.has(answerDepth) ? (answerDepth as AnswerDepth) : undefined,
@@ -373,6 +381,9 @@ function sanitizePreferences(value: unknown): UserDataSnapshot["preferences"] {
       ? record.onboardingDismissed
       : undefined,
     selectedModel: asString(record.selectedModel, 160) || undefined,
+    knowledgeMode: knowledgeModeIds.has(knowledgeMode)
+      ? (knowledgeMode as KnowledgeMode)
+      : undefined,
   };
 }
 

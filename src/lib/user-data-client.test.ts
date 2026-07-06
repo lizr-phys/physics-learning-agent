@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLearningMemory, createLearningProfile } from "@/agent/memory-manager";
 import { saveStoredPracticeGenerations } from "@/lib/practice-history";
-import { saveStoredAnswerDepth } from "@/lib/preferences";
+import { saveStoredAnswerDepth, saveStoredKnowledgeMode } from "@/lib/preferences";
 import { saveStoredSessions, setActiveSessionId, type StoredChatSession } from "@/lib/storage";
 import {
   applyClientUserDataSnapshot,
@@ -56,6 +56,7 @@ describe("client user data sync", () => {
     saveStoredSessions([session("local-1", 1, "Local conversation")]);
     setActiveSessionId("local-1");
     saveStoredAnswerDepth("detailed");
+    saveStoredKnowledgeMode("always");
     saveStoredPracticeGenerations([
       {
         id: "practice-1",
@@ -74,6 +75,7 @@ describe("client user data sync", () => {
     expect(snapshot.sessions).toHaveLength(1);
     expect(snapshot.activeSessionId).toBe("local-1");
     expect(snapshot.preferences?.answerDepth).toBe("detailed");
+    expect(snapshot.preferences?.knowledgeMode).toBe("always");
     expect(snapshot.practiceHistory).toHaveLength(1);
   });
 
@@ -97,7 +99,7 @@ describe("client user data sync", () => {
       sessions: [session("same", 4, "Older remote"), session("remote-only", 7)],
       activeSessionId: "remote-only",
       learningProfile: createLearningProfile(),
-      preferences: { answerDepth: "concise", onboardingDismissed: true },
+      preferences: { answerDepth: "concise", onboardingDismissed: true, knowledgeMode: "never" },
       practiceHistory: [
         {
           id: "practice-same",
@@ -138,5 +140,6 @@ describe("client user data sync", () => {
       "local content",
     );
     expect(snapshot.preferences?.answerDepth).toBe("concise");
+    expect(snapshot.preferences?.knowledgeMode).toBe("never");
   });
 });

@@ -46,6 +46,7 @@ describe("user data server persistence", () => {
           context: {
             course: "math-physics",
             taskType: "explain",
+            knowledgeMode: "always",
           },
           memory: {
             currentCourse: "math-physics",
@@ -74,12 +75,14 @@ describe("user data server persistence", () => {
         answerDepth: "detailed",
         onboardingDismissed: true,
         selectedModel: "deepseek-chat",
+        knowledgeMode: "never",
       },
     });
 
     expect(saved.sessions).toHaveLength(1);
     expect(saved.practiceHistory).toHaveLength(1);
     expect(saved.preferences?.answerDepth).toBe("detailed");
+    expect(saved.preferences?.knowledgeMode).toBe("never");
 
     const loaded = await readUserData("user-1");
 
@@ -87,6 +90,7 @@ describe("user data server persistence", () => {
     expect(loaded.sessions[0]).toMatchObject({
       id: "session-1",
       title: "Green function discussion",
+      context: expect.objectContaining({ knowledgeMode: "always" }),
     });
     expect(loaded.practiceHistory[0]).toMatchObject({
       id: "practice-1",

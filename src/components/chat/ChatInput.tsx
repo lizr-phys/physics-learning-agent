@@ -3,14 +3,21 @@
 import { KeyboardEvent, memo, useCallback, useEffect, useRef } from "react";
 import { Loader2, Send, Square } from "lucide-react";
 
-import { answerDepthOptions, type AnswerDepth } from "@/types/learning";
+import {
+  answerDepthOptions,
+  knowledgeModeOptions,
+  type AnswerDepth,
+  type KnowledgeMode,
+} from "@/types/learning";
 
 type ChatInputProps = {
   value: string;
   isLoading: boolean;
   answerDepth: AnswerDepth;
+  knowledgeMode: KnowledgeMode;
   onChange: (value: string) => void;
   onAnswerDepthChange: (value: AnswerDepth) => void;
+  onKnowledgeModeChange: (value: KnowledgeMode) => void;
   onSubmit: () => void;
   onStop: () => void;
 };
@@ -19,8 +26,10 @@ export const ChatInput = memo(function ChatInput({
   value,
   isLoading,
   answerDepth,
+  knowledgeMode,
   onChange,
   onAnswerDepthChange,
+  onKnowledgeModeChange,
   onSubmit,
   onStop,
 }: ChatInputProps) {
@@ -70,21 +79,42 @@ export const ChatInput = memo(function ChatInput({
         className="max-h-36 min-h-16 w-full resize-none overflow-y-auto bg-transparent pb-7 pr-12 text-sm leading-6 text-zinc-950 outline-none md:max-h-[180px]"
         data-testid="chat-input"
       />
-      <label className="absolute bottom-3 left-4 flex items-center gap-2 text-xs text-zinc-500">
-        <span className="hidden sm:inline">Depth</span>
-        <select
-          value={answerDepth}
-          onChange={(event) => onAnswerDepthChange(event.target.value as AnswerDepth)}
-          className="rounded-md border-0 bg-transparent py-1 pr-1 text-xs text-zinc-600 outline-none hover:text-zinc-950"
-          aria-label="Answer depth"
-        >
-          {answerDepthOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="absolute bottom-3 left-4 flex max-w-[calc(100%-4.5rem)] items-center gap-3 text-xs text-zinc-500">
+        <label className="flex items-center gap-1">
+          <span className="hidden sm:inline">Depth</span>
+          <select
+            value={answerDepth}
+            onChange={(event) => onAnswerDepthChange(event.target.value as AnswerDepth)}
+            className="max-w-28 rounded-md border-0 bg-transparent py-1 pr-1 text-xs text-zinc-600 outline-none hover:text-zinc-950 sm:max-w-none"
+            aria-label="Answer depth"
+          >
+            {answerDepthOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="hidden sm:inline">Knowledge</span>
+          <select
+            value={knowledgeMode}
+            onChange={(event) => onKnowledgeModeChange(event.target.value as KnowledgeMode)}
+            className="max-w-28 rounded-md border-0 bg-transparent py-1 pr-1 text-xs text-zinc-600 outline-none hover:text-zinc-950 sm:max-w-none"
+            aria-label="Personal knowledge mode"
+          >
+            {knowledgeModeOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.id === "auto"
+                  ? "Auto"
+                  : option.id === "always"
+                    ? "Always"
+                    : "Off"}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <button
         type="button"
         disabled={!isLoading && !value.trim()}

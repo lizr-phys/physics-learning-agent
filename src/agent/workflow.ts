@@ -7,6 +7,7 @@ import {
   detectPracticeStyleFromText,
 } from "@/agent/exercise-parser";
 import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier";
+import { decidePersonalKnowledgeUse, resolveKnowledgeMode } from "@/agent/knowledge-mode";
 import { createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
 import { resolvePracticeStyle, resolveReferenceProfile } from "@/data/referenceProfiles";
 import { detectLanguage } from "@/lib/language";
@@ -55,6 +56,7 @@ export async function prepareAgentRequest(
     input.knowledgePoint ??
     detectKnowledgeFromText(input.message, course) ??
     input.memory?.currentKnowledgePoint;
+  const queryType = input.queryType ?? classifyQuery({ ...input, course, knowledgePoint });
   const contextInput: AgentRequest = {
     ...input,
     intent,
@@ -63,7 +65,8 @@ export async function prepareAgentRequest(
     detectedLanguage: language,
     practiceStyle,
     referenceProfile,
-    queryType: input.queryType ?? classifyQuery({ ...input, course, knowledgePoint }),
+    queryType,
+    knowledgeMode: resolveKnowledgeMode(input.knowledgeMode),
     history: selectConversationHistory(input.history),
   };
   const memory = updateLearningMemory(
@@ -74,14 +77,32 @@ export async function prepareAgentRequest(
 
   stages.push("resolve-context");
 
-  const personalRagResults = options.userId
-    ? await retrievePersonalKnowledge(options.userId, contextInput.message, 4)
-    : [];
+  const personalKnowledgeDecision = decidePersonalKnowledgeUse({
+    request: {
+      ...contextInput,
+      memory,
+    },
+    mode: contextInput.knowledgeMode,
+    intent,
+    queryType,
+    hasUser: Boolean(options.userId),
+  });
+  const personalRagResults =
+    options.userId && personalKnowledgeDecision.shouldUse
+      ? await retrievePersonalKnowledge(
+          options.userId,
+          personalKnowledgeDecision.retrievalQuery ?? contextInput.message,
+          4,
+        )
+      : [];
   const sampleRagResults =
     contextInput.useRag && isPhysicsIntent(intent)
       ? await retrieveRagSnippets(contextInput.message, 4)
       : [];
-  const ragResults = [...personalRagResults, ...sampleRagResults].slice(0, 6);
+  const ragResults = [
+    ...personalRagResults.map((result) => ({ ...result, kind: "personal" as const })),
+    ...sampleRagResults.map((result) => ({ ...result, kind: "sample" as const })),
+  ].slice(0, 6);
 
   stages.push("retrieve-knowledge", "prepare-generation");
 
@@ -90,12 +111,14 @@ export async function prepareAgentRequest(
     input: {
       ...contextInput,
       memory,
+      personalKnowledgeDecision,
       ragContext: ragResults.length
         ? {
             snippets: ragResults.map((result) => ({
               source: result.source,
               heading: result.heading,
               content: result.content,
+              kind: result.kind,
             })),
           }
         : undefined,

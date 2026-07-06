@@ -72,6 +72,7 @@ flowchart LR
 - Answer depth preferences: concise, standard, detailed, derivation-first, or problem-type-first
 - Normal handling of non-physics questions, with a light final note that the workspace is optimized for physics learning
 - Account-scoped persistence for conversations, active session, learning memory, and safe model preferences
+- Personal knowledge modes for chat: automatic retrieval, always-on retrieval, or retrieval disabled
 
 ### Physics-aware answer generation
 
@@ -115,7 +116,11 @@ flowchart LR
 - LangChain document splitters for Markdown, LaTeX, and plain text indexing
 - Markdown, text, TeX, and CSV extraction for retrieval
 - PDF, DOCX, and PPTX files are stored as source documents and can be extended with richer parsers later
-- Retrieval snippets are injected into the answer context when relevant
+- Chat can use the personal library in three modes:
+  - `Auto`: retrieve only when the message clearly refers to uploaded materials or follows up on personal-library context
+  - `Always`: retrieve from the signed-in user's personal library on every turn
+  - `Off`: answer without personal-library retrieval
+- Retrieval snippets are injected into the answer context only for the signed-in user who owns the documents
 - No vector database is required for the current implementation
 
 ### Workspace data persistence
@@ -269,7 +274,7 @@ flowchart LR
   Context --> Answer["Grounded answer"]
 ```
 
-The current knowledge base is intentionally lightweight. It uses LangChain for document abstraction and splitting, then applies local keyword retrieval over generated chunks. It is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can later add LangChain loaders, embeddings, vector indexes, reranking, and citation-aware answer generation.
+The current knowledge base is intentionally lightweight. It uses LangChain for document abstraction and splitting, then applies local keyword retrieval over generated chunks. Chat requests can automatically decide whether personal retrieval is needed, while still giving users explicit control through Auto, Always, and Off modes. The implementation is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can later add LangChain loaders, embeddings, vector indexes, reranking, and citation-aware answer generation.
 
 ## Model Providers
 

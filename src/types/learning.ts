@@ -100,6 +100,22 @@ export type DetectedLanguage = "zh" | "en";
 
 export type ReferenceProfileId = "auto" | "chinese" | "english";
 
+export const knowledgeModeOptions = [
+  { id: "auto", label: "Auto" },
+  { id: "always", label: "Always use personal knowledge" },
+  { id: "never", label: "Do not use personal knowledge" },
+] as const;
+
+export type KnowledgeMode = (typeof knowledgeModeOptions)[number]["id"];
+
+export type PersonalKnowledgeDecision = {
+  mode: KnowledgeMode;
+  shouldUse: boolean;
+  confidence: "low" | "medium" | "high";
+  reason: string;
+  retrievalQuery?: string;
+};
+
 export type LearningMemory = {
   currentCourse?: CourseId;
   currentKnowledgePoint?: string;
@@ -155,6 +171,7 @@ export type ToolContext = {
 export type RagCitation = {
   source: string;
   heading: string;
+  kind?: "personal" | "sample";
 };
 
 export type RagContext = {
@@ -207,6 +224,8 @@ export type AgentRequest = {
   practiceStyle?: PracticeStyleId;
   detectedLanguage?: DetectedLanguage;
   referenceProfile?: ReferenceProfileId;
+  knowledgeMode?: KnowledgeMode;
+  personalKnowledgeDecision?: PersonalKnowledgeDecision;
   clientProvider?: ClientProviderConfig;
   conversationId?: string;
   assistantMessageId?: string;

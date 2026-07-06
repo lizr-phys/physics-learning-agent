@@ -47,4 +47,36 @@ describe("prompt builder", () => {
     expect(prompt).toContain("Derivation first");
     expect(prompt).toContain("Do not give full solutions or final answers");
   });
+
+  it("includes personal knowledge retrieval decisions in the prompt context", () => {
+    const prompt = buildUserPrompt({
+      message: "Explain this PDF according to my uploaded notes.",
+      course: "quantum-mechanics",
+      taskType: "explain",
+      intent: "physics_learning",
+      queryType: "physics_core",
+      knowledgeMode: "auto",
+      personalKnowledgeDecision: {
+        mode: "auto",
+        shouldUse: true,
+        confidence: "high",
+        reason: "The message explicitly refers to uploaded notes.",
+      },
+      ragContext: {
+        snippets: [
+          {
+            source: "Personal Library / oscillator-notes.md",
+            heading: "Harmonic oscillator",
+            kind: "personal",
+            content: "The oscillator boundary condition selects normalizable states.",
+          },
+        ],
+      },
+    });
+
+    expect(prompt).toContain("Personal knowledge mode: auto");
+    expect(prompt).toContain("Personal snippets found: 1");
+    expect(prompt).toContain("personal knowledge base");
+    expect(prompt).toContain("oscillator-notes.md");
+  });
 });

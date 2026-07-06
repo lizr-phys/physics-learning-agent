@@ -12,9 +12,11 @@ import {
 import {
   dismissOnboarding,
   getStoredAnswerDepth,
+  getStoredKnowledgeMode,
   isOnboardingDismissed,
   resetOnboarding,
   saveStoredAnswerDepth,
+  saveStoredKnowledgeMode,
 } from "@/lib/preferences";
 import {
   getActiveSessionId,
@@ -25,7 +27,7 @@ import {
   setActiveSessionId,
   type StoredChatSession,
 } from "@/lib/storage";
-import type { AnswerDepth, LearningProfile } from "@/types/learning";
+import type { AnswerDepth, KnowledgeMode, LearningProfile } from "@/types/learning";
 import type { ClientProviderId } from "@/types/learning";
 
 export type ClientUserDataSnapshot = {
@@ -37,6 +39,7 @@ export type ClientUserDataSnapshot = {
     answerDepth?: AnswerDepth;
     onboardingDismissed?: boolean;
     selectedModel?: string;
+    knowledgeMode?: KnowledgeMode;
   };
   providerPreferences?: {
     enabled?: boolean;
@@ -76,6 +79,7 @@ export function collectClientUserDataSnapshot(): ClientUserDataSnapshot {
       answerDepth: getStoredAnswerDepth(),
       onboardingDismissed: isOnboardingDismissed(),
       selectedModel: selectedServerModel(),
+      knowledgeMode: getStoredKnowledgeMode(),
     },
     providerPreferences: {
       enabled: provider.enabled,
@@ -148,6 +152,10 @@ export function applyClientUserDataSnapshot(remote: Partial<ClientUserDataSnapsh
 
   if (remote.preferences?.answerDepth) {
     saveStoredAnswerDepth(remote.preferences.answerDepth);
+  }
+
+  if (remote.preferences?.knowledgeMode) {
+    saveStoredKnowledgeMode(remote.preferences.knowledgeMode);
   }
 
   if (typeof remote.preferences?.onboardingDismissed === "boolean") {

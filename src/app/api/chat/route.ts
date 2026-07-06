@@ -13,6 +13,7 @@ import {
   type ClientProviderConfig,
   type CourseId,
   type DifficultyId,
+  type KnowledgeMode,
   type LearningMemory,
   type PracticeOutputMode,
   type PracticeStyleId,
@@ -54,6 +55,7 @@ const practiceOutputModes = new Set<PracticeOutputMode>([
 const practiceStyles = new Set<PracticeStyleId>(practiceStyleOptions.map((item) => item.id));
 const detectedLanguages = new Set<DetectedLanguage>(["zh", "en"]);
 const referenceProfiles = new Set<ReferenceProfileId>(["auto", "chinese", "english"]);
+const knowledgeModes = new Set<KnowledgeMode>(["auto", "always", "never"]);
 const modelIds = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
 const clientProviderIds = new Set([
   "openai",
@@ -251,6 +253,7 @@ function sanitizeRequest(body: unknown): AgentRequest {
   const practiceStyle = asString(record.practiceStyle);
   const detectedLanguage = asString(record.detectedLanguage);
   const referenceProfile = asString(record.referenceProfile);
+  const knowledgeMode = asString(record.knowledgeMode);
   const parsedCount = Number(record.exerciseCount);
 
   return {
@@ -290,6 +293,9 @@ function sanitizeRequest(body: unknown): AgentRequest {
       : undefined,
     referenceProfile: referenceProfiles.has(referenceProfile as ReferenceProfileId)
       ? (referenceProfile as ReferenceProfileId)
+      : undefined,
+    knowledgeMode: knowledgeModes.has(knowledgeMode as KnowledgeMode)
+      ? (knowledgeMode as KnowledgeMode)
       : undefined,
     clientProvider: sanitizeClientProvider(record.clientProvider),
     conversationId: trimToLength(asString(record.conversationId), 160) || undefined,

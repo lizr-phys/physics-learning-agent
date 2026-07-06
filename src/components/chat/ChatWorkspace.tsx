@@ -25,7 +25,9 @@ import { getClientProviderOverride } from "@/lib/client-provider";
 import { detectLanguage } from "@/lib/language";
 import {
   getStoredAnswerDepth,
+  getStoredKnowledgeMode,
   saveStoredAnswerDepth,
+  saveStoredKnowledgeMode,
 } from "@/lib/preferences";
 import {
   buildSessionTitle,
@@ -45,6 +47,7 @@ import {
   type AnswerDepth,
   type ChatMessage,
   type CourseId,
+  type KnowledgeMode,
   type LearningMemory,
   type TaskTypeId,
   type ToolContext,
@@ -165,6 +168,9 @@ export function ChatWorkspace() {
   const [model, setModel] = useState(() => getStoredModel());
   const [answerDepth, setAnswerDepth] = useState<AnswerDepth>(() =>
     getStoredAnswerDepth(),
+  );
+  const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>(() =>
+    getStoredKnowledgeMode(),
   );
   const [input, setInput] = useState(
     searchParams.get("prompt") ?? searchParams.get("initialPrompt") ?? "",
@@ -343,6 +349,7 @@ export function ChatWorkspace() {
       setMemory(session.memory ?? createLearningMemory());
       setModel(session.context.model ?? getStoredModel());
       setAnswerDepth(session.context.answerDepth ?? getStoredAnswerDepth());
+      setKnowledgeMode(session.context.knowledgeMode ?? getStoredKnowledgeMode());
       setInput("");
       setError("");
       setPendingContinuation((current) => (current?.sessionId === session.id ? current : null));
@@ -713,6 +720,7 @@ export function ChatWorkspace() {
       detectedLanguage,
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
+      knowledgeMode,
     };
     const toolContextSnapshot = toolContext;
     const intent = classifyAgentIntent({
@@ -755,6 +763,7 @@ export function ChatWorkspace() {
       detectedLanguage: memorySnapshot.recentLanguage,
       practiceStyle: memorySnapshot.practiceStyle,
       referenceProfile: memorySnapshot.referenceProfile,
+      knowledgeMode,
       clientProvider: getClientProviderOverride(),
       conversationId: targetSessionId,
       assistantMessageId,
@@ -794,6 +803,7 @@ export function ChatWorkspace() {
     input,
     isCurrentSessionGenerating,
     knowledgePoint,
+    knowledgeMode,
     messages,
     memory,
     model,
@@ -839,6 +849,7 @@ export function ChatWorkspace() {
       detectedLanguage: memory.recentLanguage,
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
+      knowledgeMode,
       clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
@@ -851,6 +862,7 @@ export function ChatWorkspace() {
       detectedLanguage: memory.recentLanguage,
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
+      knowledgeMode,
     };
 
     await runAssistantRequest({
@@ -874,6 +886,7 @@ export function ChatWorkspace() {
     currentPendingContinuation,
     isCurrentSessionGenerating,
     knowledgePoint,
+    knowledgeMode,
     memory,
     model,
     runAssistantRequest,
@@ -900,6 +913,7 @@ export function ChatWorkspace() {
       requestId: retryRequestId,
       memory,
       answerDepth,
+      knowledgeMode,
       clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
@@ -909,6 +923,7 @@ export function ChatWorkspace() {
       model: model || undefined,
       useRag,
       answerDepth,
+      knowledgeMode,
     };
 
     await runAssistantRequest({
@@ -930,6 +945,7 @@ export function ChatWorkspace() {
     currentPendingContinuation,
     isCurrentSessionGenerating,
     knowledgePoint,
+    knowledgeMode,
     memory,
     model,
     runAssistantRequest,
@@ -1032,9 +1048,14 @@ export function ChatWorkspace() {
             onSubmit={submitMessage}
             onStop={stopGeneration}
             answerDepth={answerDepth}
+            knowledgeMode={knowledgeMode}
             onAnswerDepthChange={(nextDepth) => {
               setAnswerDepth(nextDepth);
               saveStoredAnswerDepth(nextDepth);
+            }}
+            onKnowledgeModeChange={(nextMode) => {
+              setKnowledgeMode(nextMode);
+              saveStoredKnowledgeMode(nextMode);
             }}
           />
           <p className="mt-2 text-center text-xs text-zinc-500">

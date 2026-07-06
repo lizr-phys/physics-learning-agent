@@ -105,23 +105,40 @@ export function buildTaskTemplate(taskType?: TaskTypeId) {
 
 export function buildRagContext(input: AgentRequest) {
   const snippets = input.ragContext?.snippets ?? [];
+  const personalDecision = input.personalKnowledgeDecision;
 
   if (!snippets.length) {
-    return input.useRag
-      ? "Local knowledge retrieval was enabled, but no sufficiently relevant local snippets were found. Answer normally; if useful, say that the local notes did not cover the point."
-      : "Local knowledge retrieval is not enabled.";
+    const personalStatus = personalDecision
+      ? personalDecision.shouldUse
+        ? `Personal knowledge mode: ${personalDecision.mode}. Retrieval was attempted because: ${personalDecision.reason}. No sufficiently relevant personal snippets were found. If the user asked to use personal materials, state briefly that the personal knowledge base did not cover the point before answering with general knowledge.`
+        : `Personal knowledge mode: ${personalDecision.mode}. Personal retrieval was not used because: ${personalDecision.reason}.`
+      : "Personal knowledge mode: not specified.";
+    const sampleStatus = input.useRag
+      ? "Sample local retrieval was enabled, but no sufficiently relevant sample snippets were found."
+      : "Sample local retrieval is not enabled.";
+
+    return `${personalStatus}\n${sampleStatus}`;
   }
 
-  return `Relevant local note snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with basic physics knowledge.
+  const personalCount = snippets.filter((snippet) => snippet.kind === "personal").length;
+  const sampleCount = snippets.filter((snippet) => snippet.kind !== "personal").length;
+
+  return `Relevant retrieval snippets are provided below. Use them when they are helpful, but do not copy long passages or invent page numbers. If the snippets are insufficient, say so briefly and supplement with basic physics knowledge.
+
+Retrieval status:
+- Personal knowledge mode: ${personalDecision?.mode ?? "auto"}
+- Personal snippets found: ${personalCount}
+- Sample snippets found: ${sampleCount}
+- Personal retrieval reason: ${personalDecision?.reason ?? "Not recorded"}
 
 ${snippets
   .map(
     (snippet, index) =>
-      `[${index + 1}] source: ${snippet.source}\ntitle: ${snippet.heading}\ncontent: ${snippet.content}`,
+      `[${index + 1}] type: ${snippet.kind === "personal" ? "personal knowledge base" : "sample note"}\nsource: ${snippet.source}\ntitle: ${snippet.heading}\ncontent: ${snippet.content}`,
   )
   .join("\n\n")}
 
-If local snippets are used, end with a short "References" list containing document names and snippet headings only.`;
+If snippets are used, end with a short "References" list containing document names and snippet headings only. Never invent page numbers or source titles.`;
 }
 
 function truncateContext(content: string, maxLength: number) {

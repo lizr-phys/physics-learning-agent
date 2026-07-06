@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   CourseId,
   DetectedLanguage,
+  KnowledgeMode,
   LearningMemory,
   LearningProfile,
   PracticeStyleId,
@@ -16,7 +17,11 @@ import type {
   TaskTypeId,
   ToolContext,
 } from "@/types/learning";
-import { practiceStyleOptions, taskTypeOptions } from "@/types/learning";
+import {
+  knowledgeModeOptions,
+  practiceStyleOptions,
+  taskTypeOptions,
+} from "@/types/learning";
 
 export type StoredChatSession = {
   id: string;
@@ -35,6 +40,7 @@ export type StoredChatSession = {
     practiceStyle?: PracticeStyleId;
     detectedLanguage?: DetectedLanguage;
     referenceProfile?: ReferenceProfileId;
+    knowledgeMode?: KnowledgeMode;
   };
   toolContext?: ToolContext;
   memory: LearningMemory;
@@ -54,6 +60,7 @@ const validTaskTypes = new Set<string>(taskTypeOptions.map((item) => item.id));
 const validPracticeStyles = new Set<string>(practiceStyleOptions.map((item) => item.id));
 const validLanguages = new Set<string>(["zh", "en"]);
 const validReferenceProfiles = new Set<string>(["auto", "chinese", "english"]);
+const validKnowledgeModes = new Set<string>(knowledgeModeOptions.map((item) => item.id));
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -85,6 +92,7 @@ export function createEmptySession(
       practiceStyle: context.practiceStyle,
       detectedLanguage: context.detectedLanguage,
       referenceProfile: context.referenceProfile,
+      knowledgeMode: context.knowledgeMode,
     },
     memory: createLearningMemory(),
   };
@@ -110,6 +118,9 @@ function normalizeContext(context?: Partial<StoredChatSession["context"]>) {
       : undefined,
     referenceProfile: validReferenceProfiles.has(String(context?.referenceProfile))
       ? context?.referenceProfile
+      : undefined,
+    knowledgeMode: validKnowledgeModes.has(String(context?.knowledgeMode))
+      ? context?.knowledgeMode
       : undefined,
   } satisfies StoredChatSession["context"];
 }

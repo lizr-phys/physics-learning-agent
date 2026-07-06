@@ -1,8 +1,9 @@
 "use client";
 
-import type { AnswerDepth } from "@/types/learning";
+import type { AnswerDepth, KnowledgeMode } from "@/types/learning";
 
 const answerDepthKey = "pla.preferences.answerDepth.v1";
+const knowledgeModeKey = "pla.preferences.knowledgeMode.v1";
 const onboardingKey = "pla.onboarding.dismissed.v1";
 
 export function getStoredAnswerDepth(): AnswerDepth {
@@ -22,6 +23,21 @@ export function getStoredAnswerDepth(): AnswerDepth {
 
 export function saveStoredAnswerDepth(value: AnswerDepth) {
   window.localStorage.setItem(answerDepthKey, value);
+  window.dispatchEvent(new Event("pla:user-data-changed"));
+}
+
+export function getStoredKnowledgeMode(): KnowledgeMode {
+  if (typeof window === "undefined") {
+    return "auto";
+  }
+
+  const value = window.localStorage.getItem(knowledgeModeKey);
+
+  return value === "always" || value === "never" ? value : "auto";
+}
+
+export function saveStoredKnowledgeMode(value: KnowledgeMode) {
+  window.localStorage.setItem(knowledgeModeKey, value);
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
