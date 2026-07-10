@@ -123,7 +123,7 @@ function compactRetrievalQuery(input: AgentRequest) {
     input.memory?.currentGoal,
   ].filter(Boolean);
 
-  return parts.join("\n").slice(0, 1200);
+  return parts.join("\n").slice(0, 1_200);
 }
 
 export function resolveKnowledgeMode(value?: KnowledgeMode): KnowledgeMode {

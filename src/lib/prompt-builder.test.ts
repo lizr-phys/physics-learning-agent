@@ -68,6 +68,7 @@ describe("prompt builder", () => {
             source: "Personal Library / oscillator-notes.md",
             heading: "Harmonic oscillator",
             kind: "personal",
+            locator: "page 4",
             content: "The oscillator boundary condition selects normalizable states.",
           },
         ],
@@ -78,5 +79,7 @@ describe("prompt builder", () => {
     expect(prompt).toContain("Personal snippets found: 1");
     expect(prompt).toContain("personal knowledge base");
     expect(prompt).toContain("oscillator-notes.md");
+    expect(prompt).toContain("locator: page 4");
+    expect(prompt).toContain("cite it inline as [1]");
   });
 });

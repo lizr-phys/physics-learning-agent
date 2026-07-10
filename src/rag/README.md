@@ -1,39 +1,79 @@
-# Retrieval-Augmented Learning Notes
+# Retrieval Architecture
 
-This directory contains the lightweight retrieval layer used by Physics Learning Agent.
+Physics Learning Agent uses a lightweight, account-scoped retrieval pipeline for user-owned study materials. The current implementation runs without an external vector database, while preserving the metadata and scoring interfaces needed for a later PostgreSQL/pgvector deployment.
 
-## Current implementation
+## Ingestion pipeline
 
-- `sample-docs/` stores small Markdown examples for local development.
-- `chunk.ts` uses LangChain document splitters for Markdown, LaTeX, and plain text.
-- `retrieve.ts` performs simple keyword scoring and returns source, heading, and content.
-- Authenticated users can upload text-like files from the Personal Knowledge page. Those files are indexed separately under `PLA_DATA_DIR` and retrieved during chat.
+```mermaid
+flowchart LR
+  Upload["User upload"] --> Detect["Format and metadata detection"]
+  Detect --> Text["LangChain text splitters"]
+  Detect --> Office["Structured office parser"]
+  Text --> Chunks["Metadata-rich chunks"]
+  Office --> Chunks
+  Chunks --> Store["Account-scoped chunk store"]
+```
 
-The current implementation uses LangChain for document abstraction and text splitting, but it does not require a vector database and does not assume that DeepSeek provides embeddings.
+The pipeline currently indexes:
 
-## Indexed file types
+- Markdown, TXT, TeX, and CSV through LangChain text splitters
+- text-based PDF documents
+- DOCX and PPTX course materials
+- XLSX, RTF, ODT, ODP, and ODS documents
 
-The personal knowledge base currently indexes:
+Scanned PDFs are stored but require a separate OCR step before they become searchable. Old binary DOC and PPT formats are not parsed.
 
-- Markdown
-- TXT
-- TeX
-- CSV
+Each chunk can retain:
 
-PDF, DOCX, and PPTX files can be stored in the catalog, but full text extraction is not enabled yet. Add dedicated parsers before relying on those formats for retrieval.
+- document and user identifiers
+- source format
+- course and topic
+- detected language
+- section heading
+- page, slide, or sheet locator when the source format provides one
+- chunk index and character offsets
 
-## Extension path
+## Retrieval pipeline
 
-Recommended next steps:
+```mermaid
+flowchart LR
+  Query["Question + active course context"] --> Tokenize["Chinese and English tokenization"]
+  Tokenize --> BM25["BM25 lexical score"]
+  Query --> Phrase["Exact phrase and heading score"]
+  Query --> Metadata["Course and topic score"]
+  Vector["Optional vector score"] --> Merge["Score fusion"]
+  BM25 --> Merge
+  Phrase --> Merge
+  Metadata --> Merge
+  Merge --> Diversity["Duplicate suppression and diversity selection"]
+  Diversity --> Prompt["Citation-aware prompt context"]
+```
 
-1. Add robust PDF, DOCX, and PPTX text extraction.
-2. Preserve document metadata such as course, topic, page, section, and source type.
-3. Add embeddings with a provider that performs well on both Chinese and English technical text.
-4. Add LangChain retrievers backed by a vector store such as LanceDB, Chroma, pgvector, or Supabase Vector.
-5. Combine vector retrieval with keyword retrieval for formulas, symbols, and textbook terminology.
-6. Add a reranker and retrieval evaluation set for common physics questions.
-7. Display citations using document names, sections, and chunk headings. Do not invent page numbers.
+`search.ts` combines BM25, exact phrase matches, heading relevance, and course/topic metadata. Chinese text is indexed with character bigrams and trigrams rather than treating a complete sentence as one token. An optional vector-score map is accepted by the same scorer so a pgvector-backed candidate source can be added without changing prompt construction.
 
-## Copyright note
+The LangGraph workflow decides whether the personal library is needed, retrieves only documents owned by the signed-in user, and passes source headings and available page/slide locators into the prompt. Answers are instructed to cite retrieved claims with numbered references and never invent page numbers.
 
-Do not commit copyrighted textbooks or protected course materials to a public repository. The intended use is local, user-owned notes, lecture summaries, problem solutions, and materials the user has permission to process.
+## Retrieval evaluation
+
+`evaluation.ts` provides Hit Rate at K and Mean Reciprocal Rank measurements. The test suite includes bilingual physics queries, metadata disambiguation, automatic knowledge-use decisions, document extraction, and citation prompt checks.
+
+Run the retrieval tests with:
+
+```bash
+npx vitest run src/rag src/agent/knowledge-mode.test.ts src/lib/personal-knowledge.test.ts
+```
+
+## Tencent Cloud migration path
+
+The local file store is appropriate for development and small private tests. A mainland production deployment should move the same logical records to:
+
+1. TencentDB for PostgreSQL for users, conversations, documents, chunks, and retrieval logs.
+2. `pgvector` for dense embeddings and HNSW search.
+3. Tencent Cloud COS for original PDF, DOCX, and PPTX files.
+4. TencentDB for Redis with a background worker for parsing, embedding, and reindexing jobs.
+
+The current chunk metadata maps directly to a future `document_chunks` table. Dense vector results can be fused through the existing `vectorScores` input instead of replacing lexical retrieval.
+
+## Copyright and privacy
+
+Do not commit copyrighted textbooks or protected course materials to the public repository. Upload only user-owned notes, authorized handouts, original problem solutions, and materials the user has permission to process. Retrieval is scoped by account; source files and chunks must never be shared across users.

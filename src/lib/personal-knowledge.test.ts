@@ -7,6 +7,7 @@ import {
   addPersonalDocument,
   deletePersonalDocument,
   listPersonalDocuments,
+  reindexPersonalDocument,
   retrievePersonalKnowledge,
 } from "@/lib/personal-knowledge";
 
@@ -31,6 +32,8 @@ describe("personal knowledge base", () => {
       fileName: "green-functions.md",
       mimeType: "text/markdown",
       description: "Mathematical methods notes",
+      course: "math-physics",
+      topic: "green-functions",
       data: Buffer.from(
         [
           "# Green functions",
@@ -49,10 +52,16 @@ describe("personal knowledge base", () => {
 
     expect(results[0]?.source).toContain("green-functions.md");
     expect(results[0]?.content).toContain("boundary conditions");
+    expect(results[0]?.metadata?.course).toBe("math-physics");
 
     const documents = await listPersonalDocuments("user-1");
     expect(documents).toHaveLength(1);
     expect("storedFileName" in documents[0]).toBe(false);
+    expect(documents[0]?.topic).toBe("green-functions");
+
+    const reindexed = await reindexPersonalDocument("user-1", document.id);
+    expect(reindexed?.indexStatus).toBe("indexed");
+    expect(reindexed?.chunkCount).toBeGreaterThan(0);
 
     expect(await deletePersonalDocument("user-1", document.id)).toBe(true);
     expect(await listPersonalDocuments("user-1")).toHaveLength(0);

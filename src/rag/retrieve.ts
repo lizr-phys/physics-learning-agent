@@ -3,7 +3,8 @@ import "server-only";
 import { promises as fs } from "fs";
 import path from "path";
 
-import { chunkMarkdownDocument, tokenize } from "@/rag/chunk";
+import { chunkMarkdownDocument } from "@/rag/chunk";
+import { searchRagChunks, type RagSearchOptions } from "@/rag/search";
 import type { RagChunk, RagDocument, RagSearchResult } from "@/rag/types";
 
 let cachedChunks: RagChunk[] | null = null;
@@ -31,35 +32,14 @@ export async function getRagChunks() {
   return cachedChunks;
 }
 
-function scoreChunk(queryTokens: string[], chunk: RagChunk) {
-  if (!queryTokens.length) {
-    return 0;
-  }
-
-  const tokenSet = new Set(chunk.tokens);
-  const headingTokens = new Set(tokenize(chunk.heading));
-  let score = 0;
-
-  for (const token of queryTokens) {
-    if (tokenSet.has(token)) {
-      score += 1;
-    }
-
-    if (headingTokens.has(token)) {
-      score += 2;
-    }
-  }
-
-  return score / Math.sqrt(chunk.tokens.length + 1);
-}
-
-export async function retrieveRagSnippets(query: string, limit = 4): Promise<RagSearchResult[]> {
+export async function retrieveRagSnippets(
+  query: string,
+  options: number | RagSearchOptions = 4,
+): Promise<RagSearchResult[]> {
   const chunks = await getRagChunks();
-  const queryTokens = tokenize(query);
-
-  return chunks
-    .map((chunk) => ({ ...chunk, score: scoreChunk(queryTokens, chunk) }))
-    .filter((chunk) => chunk.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  return searchRagChunks(
+    chunks,
+    query,
+    typeof options === "number" ? { limit: options } : options,
+  );
 }

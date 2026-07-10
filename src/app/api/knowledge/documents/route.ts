@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { courseOptions } from "@/data/courses";
 import { getUserFromRequest } from "@/lib/auth-server";
 import { addPersonalDocument, listPersonalDocuments } from "@/lib/personal-knowledge";
+import type { CourseId } from "@/types/learning";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+const courseIds = new Set(courseOptions.map((course) => course.id));
 
 export async function GET(request: NextRequest) {
   const user = await getUserFromRequest(request);
@@ -31,6 +35,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
     }
 
+    const courseValue = formData.get("course");
+    const course =
+      typeof courseValue === "string" && courseIds.has(courseValue as Exclude<CourseId, "general">)
+        ? (courseValue as CourseId)
+        : undefined;
+
     const document = await addPersonalDocument({
       userId: user.id,
       fileName: file.name,
@@ -39,6 +49,8 @@ export async function POST(request: NextRequest) {
         typeof formData.get("description") === "string"
           ? (formData.get("description") as string)
           : undefined,
+      course,
+      topic: typeof formData.get("topic") === "string" ? (formData.get("topic") as string) : undefined,
       data: Buffer.from(await file.arrayBuffer()),
     });
 

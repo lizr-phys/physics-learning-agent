@@ -51,7 +51,7 @@ flowchart LR
   Chat --> Agent["LangGraph agent workflow"]
   Practice --> Agent
   Map --> Agent
-  KB --> Retriever["Local retriever"]
+  KB --> Retriever["Structured document retrieval"]
   Retriever --> Agent
   Settings --> Router["Provider router"]
   Router --> Models["OpenAI / DeepSeek / Qwen / Kimi / GLM / Claude / Gemini / Custom"]
@@ -62,7 +62,7 @@ flowchart LR
 | Chat workspace | Long-form physics tutoring, follow-up questions, context memory, streaming answers |
 | Practice Problems | Original problem sets with difficulty, style, language, hidden answers, and `.tex` export |
 | Knowledge Map | Course topics, prerequisites, related topics, formulas, typical problems, and pitfalls |
-| Personal Knowledge Base | User-owned notes and materials indexed for local retrieval |
+| Personal Knowledge Base | User-owned notes and course materials parsed into metadata-rich, citation-ready chunks |
 | Agent Workflow | LangGraph nodes for input understanding, context resolution, memory update, retrieval planning, retrieval execution, and generation preparation |
 | Workspace Persistence | Conversations, active session, practice history, learning memory, and safe preferences saved per signed-in user |
 | Model Providers | Server-side default model plus browser-side user keys for multiple providers |
@@ -127,14 +127,18 @@ flowchart LR
 - Local account flow for small-group or personal deployments
 - Upload user-owned notes, problem sets, handouts, or course materials
 - LangChain document splitters for Markdown, LaTeX, and plain text indexing
-- Markdown, text, TeX, and CSV extraction for retrieval
-- PDF, DOCX, and PPTX files are stored as source documents and can be extended with richer parsers later
+- Structured extraction for text-based PDF, DOCX, PPTX, XLSX, RTF, and OpenDocument files
+- Course and topic metadata for context-aware retrieval
+- BM25, phrase, heading, and metadata score fusion with duplicate suppression
+- Page, slide, sheet, and section locators when the source format exposes them
+- Reindexing for existing files as the retrieval pipeline evolves
 - Chat can use the personal library in three modes:
   - `Auto`: retrieve only when the message clearly refers to uploaded materials or follows up on personal-library context
   - `Always`: retrieve from the signed-in user's personal library on every turn
   - `Off`: answer without personal-library retrieval
 - Retrieval snippets are injected into the answer context only for the signed-in user who owns the documents
-- No vector database is required for the current implementation
+- Retrieved claims use citation-aware prompt instructions and supplied source locators
+- No vector database is required for local development; the scorer accepts optional dense-vector scores for a future pgvector backend
 
 ### Workspace data persistence
 
@@ -243,6 +247,8 @@ flowchart TB
     Memory["learning memory"]
     RetrievalPlan["retrieval planner"]
     LC["LangChain document splitters"]
+    Parser["Structured document parser"]
+    Search["Hybrid lexical retriever"]
     PromptBuilder["prompt builder"]
     PostProcess["post-processing and safety rules"]
   end
@@ -269,7 +275,10 @@ flowchart TB
   Graph --> Data
   KBAPI --> Docs
   KBAPI --> LC
+  KBAPI --> Parser
   LC --> Chunks
+  Parser --> Chunks
+  Chunks --> Search
   AuthAPI --> Sessions
   UserDataAPI --> WorkspaceData
 ```
@@ -284,22 +293,24 @@ flowchart TB
 | `src/data` | Course metadata, knowledge topics, recommendations, and prompt-related data |
 | `src/lib` | Provider clients, prompt builder, session storage, user-data sync, personal knowledge indexing, recommendations, and utilities |
 | `src/types` | Shared TypeScript types |
-| `src/rag` | LangChain-backed chunking, lightweight retrieval utilities, and sample notes |
+| `src/rag` | Document extraction, LangChain-backed chunking, hybrid retrieval, evaluation, and sample notes |
 
 ## Personal Knowledge Base
 
 ```mermaid
 flowchart LR
   Upload["Upload document"] --> Store["Store source file"]
-  Store --> Extract["Extract text when supported"]
-  Extract --> LangChain["LangChain splitter"]
-  LangChain --> Chunk["Searchable chunks"]
-  Chunk --> Search["Keyword retrieval"]
-  Search --> Context["Inject relevant snippets into prompt"]
+  Store --> Extract["Format-aware extraction"]
+  Extract --> Chunk["Metadata-rich chunks"]
+  Chunk --> Search["BM25 + phrase + metadata retrieval"]
+  Search --> Rerank["Diversity selection"]
+  Rerank --> Context["Citation-aware prompt context"]
   Context --> Answer["Grounded answer"]
 ```
 
-The current knowledge base is intentionally lightweight. It uses LangChain for document abstraction and splitting, then applies local keyword retrieval over generated chunks. Chat requests can automatically decide whether personal retrieval is needed, while still giving users explicit control through Auto, Always, and Off modes. The implementation is suitable for personal notes, course summaries, handouts, problem sets, and self-authored explanations. A production-grade retrieval stack can later add LangChain loaders, embeddings, vector indexes, reranking, and citation-aware answer generation.
+The personal knowledge base is designed for notes, lecture slides, problem sets, course handouts, and self-authored explanations. Text formats use LangChain splitters; office and PDF formats use structure-aware extraction that preserves available page, slide, sheet, and heading metadata. Retrieval combines bilingual tokenization, BM25, phrase and heading relevance, course/topic context, and duplicate suppression before snippets enter the LangGraph workflow.
+
+The local store is intended for development and small private tests. A mainland production deployment can move users, conversations, document metadata, and chunks to TencentDB for PostgreSQL, add `pgvector` HNSW retrieval through the existing vector-score fusion interface, place original files in Tencent Cloud COS, and run ingestion jobs through Redis-backed workers.
 
 ## Model Providers
 
@@ -376,12 +387,13 @@ npm run build
 
 ## Roadmap
 
-- Richer document extraction for PDF, DOCX, and PPTX
-- Embedding-based retrieval with a pluggable vector store
-- Citation-aware answers for user-owned notes
+- TencentDB for PostgreSQL and COS persistence adapters
+- Embedding-based retrieval through pgvector with bilingual reranking
+- OCR for scanned Chinese and English course materials
+- Retrieval diagnostics and user-visible citation inspection
 - Better export formats for practice sets and study records
 - Structured problem-set authoring tools for instructors and study groups
-- More structured test coverage for streaming, retrieval, and provider adapters
+- Larger retrieval and answer-grounding evaluation sets
 
 ## Copyright and Source-style Notes
 

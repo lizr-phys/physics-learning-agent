@@ -172,6 +172,7 @@ export type RagCitation = {
   source: string;
   heading: string;
   kind?: "personal" | "sample";
+  locator?: string;
 };
 
 export type RagContext = {

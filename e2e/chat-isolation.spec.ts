@@ -72,11 +72,8 @@ async function openSidebarIfNeeded(
   }
 }
 
-function activeSidebarLocator(
-  locator: Locator,
-  projectName: string,
-) {
-  return projectName.includes("mobile") ? locator.last() : locator.first();
+function activeSidebarLocator(locator: Locator) {
+  return locator.filter({ visible: true });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -96,7 +93,6 @@ test("new session aborts and isolates the previous stream", async ({ page }, tes
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTestId("new-session"),
-    testInfo.project.name,
   ).click();
   await expect(page.getByTestId("assistant-message")).toHaveCount(0);
   await expect(page.getByTestId("stop-generation")).toHaveCount(0);
@@ -106,7 +102,6 @@ test("new session aborts and isolates the previous stream", async ({ page }, tes
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(question)),
-    testInfo.project.name,
   ).click();
   await expect(page.getByTestId("assistant-message")).toContainText("old session segment 1");
   await expect(page.getByTestId("assistant-message")).not.toContainText("old session segment 3");
@@ -121,7 +116,6 @@ test("deleting the active streaming session prevents it from returning", async (
   await openSidebarIfNeeded(page, testInfo.project.name);
   const title = activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(question)),
-    testInfo.project.name,
   );
   await title.locator("..").getByLabel("Conversation menu").click();
   page.once("dialog", (dialog) => dialog.accept());
@@ -145,7 +139,6 @@ test("rapid session switching never mixes assistant content", async ({ page }, t
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTestId("new-session"),
-    testInfo.project.name,
   ).click();
   await page.getByTestId("chat-input").fill(questionB);
   await page.getByTestId("send-message").click();
@@ -154,7 +147,6 @@ test("rapid session switching never mixes assistant content", async ({ page }, t
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(questionA)),
-    testInfo.project.name,
   ).click();
   await expect(page.getByTestId("assistant-message")).toContainText("Session A response");
   await expect(page.getByTestId("assistant-message")).not.toContainText("Session B response");
@@ -162,7 +154,6 @@ test("rapid session switching never mixes assistant content", async ({ page }, t
   await openSidebarIfNeeded(page, testInfo.project.name);
   await activeSidebarLocator(
     page.getByTitle(expectedSessionTitle(questionB)),
-    testInfo.project.name,
   ).click();
   await expect(page.getByTestId("assistant-message")).toContainText("Session B response");
   await expect(page.getByTestId("assistant-message")).not.toContainText("Session A response");

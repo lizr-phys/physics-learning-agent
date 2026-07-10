@@ -173,12 +173,20 @@ async function retrieveKnowledge(state: WorkflowState) {
       ? await retrievePersonalKnowledge(
           state.options.userId,
           state.personalKnowledgeDecision.retrievalQuery ?? state.contextInput.message,
-          4,
+          {
+            limit: 4,
+            course: state.course,
+            topic: state.knowledgePoint,
+          },
         )
       : [];
   const sampleRagResults =
     state.contextInput.useRag && isPhysicsIntent(state.intent)
-      ? await retrieveRagSnippets(state.contextInput.message, 4)
+      ? await retrieveRagSnippets(state.contextInput.message, {
+          limit: 4,
+          course: state.course,
+          topic: state.knowledgePoint,
+        })
       : [];
 
   const ragSnippets: WorkflowSnippet[] = [
@@ -191,6 +199,7 @@ async function retrieveKnowledge(state: WorkflowState) {
       heading: result.heading,
       content: result.content,
       kind: result.kind,
+      locator: result.locator,
     }));
 
   return {

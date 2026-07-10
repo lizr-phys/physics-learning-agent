@@ -134,11 +134,11 @@ Retrieval status:
 ${snippets
   .map(
     (snippet, index) =>
-      `[${index + 1}] type: ${snippet.kind === "personal" ? "personal knowledge base" : "sample note"}\nsource: ${snippet.source}\ntitle: ${snippet.heading}\ncontent: ${snippet.content}`,
+      `[${index + 1}] type: ${snippet.kind === "personal" ? "personal knowledge base" : "sample note"}\nsource: ${snippet.source}\ntitle: ${snippet.heading}\nlocator: ${snippet.locator ?? "No page or slide locator available"}\ncontent: ${snippet.content}`,
   )
   .join("\n\n")}
 
-If snippets are used, end with a short "References" list containing document names and snippet headings only. Never invent page numbers or source titles.`;
+When a factual claim relies on a snippet, cite it inline as [1], [2], and so on. If snippets are used, end with a short "References" list containing only the document name, snippet heading, and supplied locator. Never invent page numbers, locators, or source titles. Do not cite a snippet that does not support the claim.`;
 }
 
 function truncateContext(content: string, maxLength: number) {
