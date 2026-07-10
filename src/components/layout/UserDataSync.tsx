@@ -21,6 +21,11 @@ type UserDataResponse = {
   data: ClientUserDataSnapshot;
 };
 
+type UserDataSaveResponse = {
+  ok: true;
+  updatedAt: number;
+};
+
 async function readJson<T>(response: Response): Promise<T> {
   const data = (await response.json()) as T & { error?: string };
 
@@ -35,6 +40,7 @@ export function UserDataSync() {
   const userIdRef = useRef<string | null>(null);
   const suppressEventsRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
+  const retryTimerRef = useRef<number | null>(null);
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
 
@@ -52,15 +58,27 @@ export function UserDataSync() {
       isSavingRef.current = true;
 
       try {
-        await fetch("/api/user-data", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(collectClientUserDataSnapshot()),
-        });
+        await readJson<UserDataSaveResponse>(
+          await fetch("/api/user-data", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(collectClientUserDataSnapshot()),
+          }),
+        );
+      } catch {
+        pendingSaveRef.current = true;
+
+        if (!retryTimerRef.current && userIdRef.current) {
+          retryTimerRef.current = window.setTimeout(() => {
+            retryTimerRef.current = null;
+            pendingSaveRef.current = false;
+            scheduleSave();
+          }, 5000);
+        }
       } finally {
         isSavingRef.current = false;
 
-        if (pendingSaveRef.current) {
+        if (pendingSaveRef.current && !retryTimerRef.current) {
           pendingSaveRef.current = false;
           scheduleSave();
         }
@@ -82,17 +100,24 @@ export function UserDataSync() {
     }
 
     async function bootstrap() {
+      let auth: AuthResponse;
+
       try {
-        const auth = await readJson<AuthResponse>(
+        auth = await readJson<AuthResponse>(
           await fetch("/api/auth/me", { cache: "no-store" }),
         );
+      } catch {
+        userIdRef.current = null;
+        return;
+      }
 
-        userIdRef.current = auth.user?.id ?? null;
+      userIdRef.current = auth.user?.id ?? null;
 
-        if (!auth.user) {
-          return;
-        }
+      if (!auth.user) {
+        return;
+      }
 
+      try {
         const remote = await readJson<UserDataResponse>(
           await fetch("/api/user-data", { cache: "no-store" }),
         );
@@ -102,8 +127,14 @@ export function UserDataSync() {
         suppressEventsRef.current = false;
         await saveSnapshot();
       } catch {
-        userIdRef.current = null;
         suppressEventsRef.current = false;
+
+        if (!retryTimerRef.current) {
+          retryTimerRef.current = window.setTimeout(() => {
+            retryTimerRef.current = null;
+            void bootstrap();
+          }, 5000);
+        }
       }
     }
 
@@ -132,6 +163,9 @@ export function UserDataSync() {
     return () => {
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
+      }
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
       }
 
       window.removeEventListener("pla:user-data-changed", scheduleSave);

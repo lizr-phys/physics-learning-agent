@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { courseOptions } from "@/data/courses";
 import { getUserFromRequest } from "@/lib/auth-server";
-import { addPersonalDocument, listPersonalDocuments } from "@/lib/personal-knowledge";
+import {
+  addPersonalDocument,
+  listPersonalDocuments,
+  maxPersonalUploadBytes,
+} from "@/lib/personal-knowledge";
 import type { CourseId } from "@/types/learning";
 
 export const runtime = "nodejs";
@@ -28,6 +32,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const declaredLength = Number(request.headers.get("content-length"));
+
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > maxPersonalUploadBytes + 1024 * 1024
+    ) {
+      return NextResponse.json(
+        { error: "File is too large. The current local prototype accepts files up to 12 MB." },
+        { status: 413 },
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
 

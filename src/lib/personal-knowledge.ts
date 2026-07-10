@@ -3,6 +3,7 @@ import path from "path";
 import { randomBytes } from "crypto";
 
 import { detectCourseFromText, detectKnowledgeFromText } from "@/agent/exercise-parser";
+import { withKeyedLock } from "@/lib/async-lock";
 import { detectLanguage } from "@/lib/language";
 import {
   extractDocumentChunks,
@@ -38,7 +39,7 @@ type PersonalChunk = RagChunk & {
   documentId: string;
 };
 
-const maxUploadBytes = 12 * 1024 * 1024;
+export const maxPersonalUploadBytes = 12 * 1024 * 1024;
 
 function dataRoot() {
   return process.env.PLA_DATA_DIR || path.join(process.cwd(), ".pla-data");
@@ -146,7 +147,7 @@ export async function addPersonalDocument(input: {
   topic?: string;
   data: Buffer;
 }) {
-  if (input.data.byteLength > maxUploadBytes) {
+  if (input.data.byteLength > maxPersonalUploadBytes) {
     throw new Error("File is too large. The current local prototype accepts files up to 12 MB.");
   }
 
@@ -236,134 +237,140 @@ export async function addPersonalDocument(input: {
     indexedAt,
     createdAt: Date.now(),
   };
-  const [documents, existingChunks] = await Promise.all([
-    readDocuments(input.userId),
-    readChunks(input.userId),
-  ]);
+  await withKeyedLock(`personal-knowledge:${input.userId}`, async () => {
+    const [documents, existingChunks] = await Promise.all([
+      readDocuments(input.userId),
+      readChunks(input.userId),
+    ]);
 
-  await Promise.all([
-    writeDocuments(input.userId, [document, ...documents]),
-    writeChunks(input.userId, [
-      ...existingChunks.filter((chunk) => chunk.documentId !== id),
-      ...documentChunks,
-    ]),
-  ]);
+    await Promise.all([
+      writeDocuments(input.userId, [document, ...documents]),
+      writeChunks(input.userId, [
+        ...existingChunks.filter((chunk) => chunk.documentId !== id),
+        ...documentChunks,
+      ]),
+    ]);
+  });
 
   return toSafeDocument(document);
 }
 
 export async function deletePersonalDocument(userId: string, documentId: string) {
-  const documents = await readDocuments(userId);
-  const document = documents.find((item) => item.id === documentId);
+  return withKeyedLock(`personal-knowledge:${userId}`, async () => {
+    const documents = await readDocuments(userId);
+    const document = documents.find((item) => item.id === documentId);
 
-  if (!document) {
-    return false;
-  }
+    if (!document) {
+      return false;
+    }
 
-  const chunks = await readChunks(userId);
+    const chunks = await readChunks(userId);
 
-  await Promise.all([
-    writeDocuments(
-      userId,
-      documents.filter((item) => item.id !== documentId),
-    ),
-    writeChunks(
-      userId,
-      chunks.filter((chunk) => chunk.documentId !== documentId),
-    ),
-    fs.rm(path.join(uploadsDir(userId), document.storedFileName), { force: true }),
-  ]);
+    await Promise.all([
+      writeDocuments(
+        userId,
+        documents.filter((item) => item.id !== documentId),
+      ),
+      writeChunks(
+        userId,
+        chunks.filter((chunk) => chunk.documentId !== documentId),
+      ),
+      fs.rm(path.join(uploadsDir(userId), document.storedFileName), { force: true }),
+    ]);
 
-  return true;
+    return true;
+  });
 }
 
 export async function reindexPersonalDocument(userId: string, documentId: string) {
-  const documents = await readDocuments(userId);
-  const document = documents.find((item) => item.id === documentId);
+  return withKeyedLock(`personal-knowledge:${userId}`, async () => {
+    const documents = await readDocuments(userId);
+    const document = documents.find((item) => item.id === documentId);
 
-  if (!document) {
-    return null;
-  }
-
-  if (!supportsDocumentExtraction(document.fileName)) {
-    const unsupportedDocument: PersonalDocument = {
-      ...document,
-      indexStatus: "stored-only",
-      statusMessage: "Text extraction is not available for this file type.",
-      chunkCount: 0,
-      indexedAt: undefined,
-    };
-    await writeDocuments(
-      userId,
-      documents.map((item) => (item.id === documentId ? unsupportedDocument : item)),
-    );
-    return toSafeDocument(unsupportedDocument);
-  }
-
-  const data = await fs.readFile(path.join(uploadsDir(userId), document.storedFileName));
-  let nextDocument: PersonalDocument;
-  let nextChunks: PersonalChunk[] = [];
-
-  try {
-    const extraction = await extractDocumentChunks({
-      fileName: document.fileName,
-      data,
-      metadata: {
-        documentId,
-        userId,
-        sourceType: document.sourceType,
-        course: document.course,
-        topic: document.topic,
-        language: document.language,
-        description: document.description,
-      },
-    });
-    nextChunks = extraction.chunks.map((chunk) => ({
-      ...chunk,
-      id: `${documentId}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
-      userId,
-      documentId,
-    }));
-    nextDocument = {
-      ...document,
-      sourceType: extraction.sourceType,
-      extractionMethod: extraction.extractionMethod,
-      indexStatus: nextChunks.length ? "indexed" : "failed",
-      statusMessage: nextChunks.length
-        ? `Indexed ${nextChunks.length} structured chunks from ${extraction.sourceType.toUpperCase()}.`
-        : "No searchable text could be extracted from this file.",
-      chunkCount: nextChunks.length,
-      indexedAt: nextChunks.length ? Date.now() : undefined,
-    };
-
-    if (extraction.warnings.length) {
-      nextDocument.statusMessage += " Some document elements could not be extracted.";
+    if (!document) {
+      return null;
     }
-  } catch (error) {
-    nextDocument = {
-      ...document,
-      indexStatus: "failed",
-      statusMessage: `Indexing failed: ${
-        error instanceof Error ? error.message : "unknown extraction error"
-      }`,
-      chunkCount: 0,
-      indexedAt: undefined,
-    };
-  }
 
-  const existingChunks = await readChunks(userId);
-  await Promise.all([
-    writeDocuments(
-      userId,
-      documents.map((item) => (item.id === documentId ? nextDocument : item)),
-    ),
-    writeChunks(userId, [
-      ...existingChunks.filter((chunk) => chunk.documentId !== documentId),
-      ...nextChunks,
-    ]),
-  ]);
+    if (!supportsDocumentExtraction(document.fileName)) {
+      const unsupportedDocument: PersonalDocument = {
+        ...document,
+        indexStatus: "stored-only",
+        statusMessage: "Text extraction is not available for this file type.",
+        chunkCount: 0,
+        indexedAt: undefined,
+      };
+      await writeDocuments(
+        userId,
+        documents.map((item) => (item.id === documentId ? unsupportedDocument : item)),
+      );
+      return toSafeDocument(unsupportedDocument);
+    }
 
-  return toSafeDocument(nextDocument);
+    const data = await fs.readFile(path.join(uploadsDir(userId), document.storedFileName));
+    let nextDocument: PersonalDocument;
+    let nextChunks: PersonalChunk[] = [];
+
+    try {
+      const extraction = await extractDocumentChunks({
+        fileName: document.fileName,
+        data,
+        metadata: {
+          documentId,
+          userId,
+          sourceType: document.sourceType,
+          course: document.course,
+          topic: document.topic,
+          language: document.language,
+          description: document.description,
+        },
+      });
+      nextChunks = extraction.chunks.map((chunk) => ({
+        ...chunk,
+        id: `${documentId}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
+        userId,
+        documentId,
+      }));
+      nextDocument = {
+        ...document,
+        sourceType: extraction.sourceType,
+        extractionMethod: extraction.extractionMethod,
+        indexStatus: nextChunks.length ? "indexed" : "failed",
+        statusMessage: nextChunks.length
+          ? `Indexed ${nextChunks.length} structured chunks from ${extraction.sourceType.toUpperCase()}.`
+          : "No searchable text could be extracted from this file.",
+        chunkCount: nextChunks.length,
+        indexedAt: nextChunks.length ? Date.now() : undefined,
+      };
+
+      if (extraction.warnings.length) {
+        nextDocument.statusMessage += " Some document elements could not be extracted.";
+      }
+    } catch (error) {
+      nextDocument = {
+        ...document,
+        indexStatus: "failed",
+        statusMessage: `Indexing failed: ${
+          error instanceof Error ? error.message : "unknown extraction error"
+        }`,
+        chunkCount: 0,
+        indexedAt: undefined,
+      };
+    }
+
+    const existingChunks = await readChunks(userId);
+    await Promise.all([
+      writeDocuments(
+        userId,
+        documents.map((item) => (item.id === documentId ? nextDocument : item)),
+      ),
+      writeChunks(userId, [
+        ...existingChunks.filter((chunk) => chunk.documentId !== documentId),
+        ...nextChunks,
+      ]),
+    ]);
+
+    return toSafeDocument(nextDocument);
+  });
 }
 
 export async function retrievePersonalKnowledge(

@@ -14,7 +14,8 @@
   <a href="#learning-workflows">Workflows</a> |
   <a href="#architecture">Architecture</a> |
   <a href="#personal-knowledge-base">Knowledge Base</a> |
-  <a href="#getting-started">Getting Started</a>
+  <a href="#getting-started">Getting Started</a> |
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
@@ -24,7 +25,12 @@
   <img alt="LangChain" src="https://img.shields.io/badge/LangChain-document_retrieval-black?style=flat-square">
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-agent_workflow-black?style=flat-square">
   <img alt="LaTeX" src="https://img.shields.io/badge/LaTeX-KaTeX-black?style=flat-square">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-black?style=flat-square">
+  <a href="https://github.com/lizr-phys/physics-learning-agent/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/lizr-phys/physics-learning-agent/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-black?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/workspace.png" alt="Physics Learning Agent conversation workspace" width="1100" />
 </p>
 
 Physics Learning Agent is a chat-style study workspace for undergraduate physics. It combines conversational tutoring, structured course knowledge, original practice problem generation, personal document retrieval, and multi-provider model access in a restrained interface designed for long reading sessions.
@@ -295,6 +301,8 @@ flowchart TB
 | `src/types` | Shared TypeScript types |
 | `src/rag` | Document extraction, LangChain-backed chunking, hybrid retrieval, evaluation, and sample notes |
 
+For a detailed request lifecycle, state model, retrieval design, and deployment boundary, see [Architecture](docs/architecture.md). A printable LaTeX version is available in [project-architecture.tex](docs/project-architecture.tex).
+
 ## Personal Knowledge Base
 
 ```mermaid
@@ -320,7 +328,7 @@ The local store is intended for development and small private tests. A mainland 
 | OpenAI-compatible | Works with OpenAI-style `/chat/completions` providers |
 | Anthropic Claude | Uses the Claude messages API |
 | Google Gemini | Uses the Gemini generation API |
-| Custom endpoint | For compatible local or hosted model gateways |
+| Custom endpoint | For compatible hosted gateways, or explicitly trusted private endpoints in self-hosted environments |
 
 The application separates provider configuration from the learning workflow. This makes it possible to keep a default model for deployment while allowing advanced users to test their own providers from the settings page.
 
@@ -346,6 +354,10 @@ Create `.env.local`:
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_THINKING=disabled
+DEEPSEEK_TIMEOUT_MS=120000
+PLA_DATA_DIR=.pla-data
+PLA_ALLOW_PRIVATE_MODEL_ENDPOINTS=false
 ```
 
 The server-side DeepSeek configuration is optional if users only rely on browser-provided keys in the settings page, but a server-side default is recommended for a smoother local setup.
@@ -372,7 +384,9 @@ npm run build
 | `npm run build` | Build the production application |
 | `npm run start` | Start the production server |
 | `npm run lint` | Run lint checks |
-| `npm run test:run` | Run the test suite, if configured in the current checkout |
+| `npm run test:run` | Run the unit and module integration tests |
+| `npm run test:e2e` | Run Playwright browser tests on desktop and mobile viewports |
+| `npm run test:all` | Run lint, unit tests, production build, and browser tests |
 
 ## Security and Privacy
 
@@ -381,9 +395,17 @@ npm run build
 - Anonymous conversation history and study state are stored in the browser.
 - Signed-in workspace data is saved under `PLA_DATA_DIR`, including conversations, practice history, learning memory, and safe preferences.
 - API keys entered through Bring Your Own Key mode are not written to the account workspace snapshot.
+- Custom provider URLs are validated server-side; production mode blocks private, loopback, link-local, metadata, and reserved network destinations by default.
+- Authentication and generation endpoints use bounded request bodies and lightweight in-process rate limits.
 - The personal knowledge base is designed for user-owned learning materials.
 - Do not upload copyrighted textbooks or private course materials to a public deployment unless you have the right to do so.
 - The built-in local account system is intended for personal or small-group deployments, not as a hardened enterprise identity system.
+
+## Deployment Boundary
+
+The included persistence layer is designed for local development and small, single-process private deployments. It uses atomic JSON writes, keyed in-process locks, local uploads, and an in-memory rate limiter. These choices keep setup simple and make the full workflow inspectable, but they are not a substitute for shared production infrastructure.
+
+For a multi-instance deployment, replace the local stores with a transactional database, object storage, shared sessions and rate limits, and background document-ingestion workers. The existing interfaces are structured so PostgreSQL, `pgvector`, COS/S3-compatible storage, and Redis-backed jobs can be introduced without changing the learning workflow or UI contracts.
 
 ## Roadmap
 
@@ -401,4 +423,4 @@ The project can generate exercises in the style of common textbook or open-cours
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE).

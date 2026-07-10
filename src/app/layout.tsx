@@ -15,9 +15,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Physics Learning Agent",
+  applicationName: "Physics Learning Agent",
+  title: {
+    default: "Physics Learning Agent",
+    template: "%s | Physics Learning Agent",
+  },
   description:
-    "A minimal chat-style learning workspace for undergraduate physics.",
+    "A LangGraph-orchestrated workspace for undergraduate physics, combining bilingual tutoring, original practice generation, and private document-grounded retrieval.",
+  keywords: [
+    "undergraduate physics",
+    "physics learning",
+    "LangGraph",
+    "RAG",
+    "practice problems",
+    "knowledge base",
+  ],
+  openGraph: {
+    title: "Physics Learning Agent",
+    description:
+      "Bilingual physics tutoring, original practice generation, and private document-grounded retrieval in a focused learning workspace.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

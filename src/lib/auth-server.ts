@@ -4,6 +4,8 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual, createHash } fr
 import { promisify } from "util";
 import type { NextRequest, NextResponse } from "next/server";
 
+import { withKeyedLock } from "@/lib/async-lock";
+
 const scrypt = promisify(scryptCallback);
 
 export const sessionCookieName = "pla_session";
@@ -147,24 +149,27 @@ export async function registerUser(input: {
     throw new Error("Password must be at least 8 characters and include a letter and a number.");
   }
 
-  const users = await readUsers();
-
-  if (users.some((user) => user.email === email)) {
-    throw new Error("An account with this email already exists.");
-  }
-
   const { hash, salt } = await hashPassword(password);
-  const user: UserRecord = {
-    id: createId("user"),
-    email,
-    name,
-    passwordHash: hash,
-    passwordSalt: salt,
-    createdAt: Date.now(),
-  };
 
-  await writeUsers([...users, user]);
-  return toSafeUser(user);
+  return withKeyedLock("auth:users", async () => {
+    const users = await readUsers();
+
+    if (users.some((user) => user.email === email)) {
+      throw new Error("An account with this email already exists.");
+    }
+
+    const user: UserRecord = {
+      id: createId("user"),
+      email,
+      name,
+      passwordHash: hash,
+      passwordSalt: salt,
+      createdAt: Date.now(),
+    };
+
+    await writeUsers([...users, user]);
+    return toSafeUser(user);
+  });
 }
 
 export async function authenticateUser(emailInput: string, password: string) {
@@ -182,17 +187,20 @@ export async function authenticateUser(emailInput: string, password: string) {
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
-  const sessions = await readSessions();
-  const activeSessions = sessions.filter((session) => session.expiresAt > now);
 
-  activeSessions.push({
-    tokenHash: hashToken(token),
-    userId,
-    createdAt: now,
-    expiresAt: now + thirtyDaysInSeconds * 1000,
+  await withKeyedLock("auth:sessions", async () => {
+    const sessions = await readSessions();
+    const activeSessions = sessions.filter((session) => session.expiresAt > now);
+
+    activeSessions.push({
+      tokenHash: hashToken(token),
+      userId,
+      createdAt: now,
+      expiresAt: now + thirtyDaysInSeconds * 1000,
+    });
+
+    await writeSessions(activeSessions);
   });
-
-  await writeSessions(activeSessions);
   return token;
 }
 
@@ -247,6 +255,9 @@ export async function deleteSession(token?: string | null) {
   }
 
   const tokenHash = hashToken(token);
-  const sessions = await readSessions();
-  await writeSessions(sessions.filter((session) => session.tokenHash !== tokenHash));
+
+  await withKeyedLock("auth:sessions", async () => {
+    const sessions = await readSessions();
+    await writeSessions(sessions.filter((session) => session.tokenHash !== tokenHash));
+  });
 }
