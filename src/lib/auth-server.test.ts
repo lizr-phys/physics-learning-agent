@@ -41,4 +41,42 @@ describe("local auth store", () => {
     expect(sessionUser?.id).toBe(user.id);
     await expect(authenticateUser("student@example.com", "wrong-password")).rejects.toThrow();
   });
+
+  it("serializes concurrent registrations without losing users or duplicating email addresses", async () => {
+    const [first, second] = await Promise.all([
+      registerUser({
+        email: "first@example.com",
+        name: "First Student",
+        password: "physics123",
+      }),
+      registerUser({
+        email: "second@example.com",
+        name: "Second Student",
+        password: "physics123",
+      }),
+    ]);
+
+    await expect(authenticateUser(first.email, "physics123")).resolves.toMatchObject({
+      id: first.id,
+    });
+    await expect(authenticateUser(second.email, "physics123")).resolves.toMatchObject({
+      id: second.id,
+    });
+
+    const duplicateAttempts = await Promise.allSettled([
+      registerUser({
+        email: "duplicate@example.com",
+        name: "Duplicate One",
+        password: "physics123",
+      }),
+      registerUser({
+        email: "duplicate@example.com",
+        name: "Duplicate Two",
+        password: "physics123",
+      }),
+    ]);
+
+    expect(duplicateAttempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(duplicateAttempts.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
 });

@@ -1,6 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 
+import { withKeyedLock } from "@/lib/async-lock";
+
 import { courseOptions } from "@/data/courses";
 import {
   answerDepthOptions,
@@ -444,6 +446,8 @@ export async function writeUserData(userId: string, input: unknown): Promise<Use
     ...(asRecord(input)),
     updatedAt: Date.now(),
   });
-  await writeJsonFile(userDataPath(userId), snapshot);
+  await withKeyedLock(`workspace:${userId}`, () =>
+    writeJsonFile(userDataPath(userId), snapshot),
+  );
   return snapshot;
 }

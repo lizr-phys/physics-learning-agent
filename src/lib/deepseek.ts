@@ -3,6 +3,10 @@ import "server-only";
 import { getModelConfig } from "@/agent/model-config";
 import { getResponseSuffix } from "@/agent/response-post-processor";
 import { buildUserPrompt, PHYSICS_TUTOR_SYSTEM_PROMPT } from "@/lib/prompt-builder";
+import {
+  assertSafeProviderBaseUrl,
+  validateProviderBaseUrl,
+} from "@/lib/provider-url-policy";
 import type {
   AgentIntent,
   AgentRequest,
@@ -50,6 +54,7 @@ type RequestProviderConfig = {
   timeoutMs: number;
   type: "openai-compatible" | "anthropic" | "gemini";
   label: string;
+  clientProvided: boolean;
 };
 
 const allowedModels = new Set([
@@ -118,6 +123,7 @@ function getConfig() {
     timeoutMs: Number(process.env.DEEPSEEK_TIMEOUT_MS ?? 120000),
     type: "openai-compatible" as const,
     label: "DeepSeek",
+    clientProvided: false,
   };
 }
 
@@ -125,19 +131,7 @@ function normalizeCustomBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim();
 
   try {
-    const url = new URL(trimmed);
-
-    if (url.username || url.password) {
-      throw new Error("Credentials are not allowed in the Base URL.");
-    }
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      throw new Error("Base URL must use http or https.");
-    }
-
-    if (url.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
-      throw new Error("HTTP Base URLs are only allowed for localhost development.");
-    }
+    const url = validateProviderBaseUrl(trimmed);
 
     const pathName = url.pathname
       .replace(/\/+$/, "")
@@ -172,6 +166,7 @@ function getClientProviderConfig(provider: ClientProviderConfig) {
     timeoutMs: Number(process.env.DEEPSEEK_TIMEOUT_MS ?? 120000),
     type: provider.type,
     label: provider.label ?? provider.provider,
+    clientProvided: true,
   };
 }
 
@@ -262,7 +257,7 @@ function extractStreamEventFromLine(line: string) {
 
 async function assertProviderResponse(response: Response, providerLabel: string) {
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = (await response.text()).slice(0, 2000);
     throw new DeepSeekError(
       `${providerLabel} request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
       "request-failed",
@@ -637,6 +632,18 @@ async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: Abo
       ? { thinking: { type: thinkingMode } }
       : {};
 
+  if (config.clientProvided && baseUrl) {
+    try {
+      await assertSafeProviderBaseUrl(baseUrl);
+    } catch (error) {
+      throw new DeepSeekError(
+        error instanceof Error ? error.message : "The custom provider endpoint is not allowed.",
+        "invalid-provider",
+        400,
+      );
+    }
+  }
+
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     signal,
@@ -655,9 +662,9 @@ async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: Abo
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = (await response.text()).slice(0, 2000);
     throw new DeepSeekError(
-      `DeepSeek request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+      `${config.label} request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
       "request-failed",
       response.status,
     );
@@ -675,7 +682,7 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
 
     if (!response.body) {
       abort.clear();
-      throw new DeepSeekError("DeepSeek returned an empty response.", "empty-response", 502);
+      throw new DeepSeekError(`${resolveRequestConfig(input).label} returned an empty response.`, "empty-response", 502);
     }
 
     // The timeout only protects connection establishment. Once streaming starts,
@@ -722,7 +729,7 @@ export async function askDeepSeek(input: AgentRequest) {
     const content = data.choices?.[0]?.message?.content?.trim();
 
     if (!content) {
-      throw new DeepSeekError("DeepSeek returned an empty response.", "empty-response", 502);
+      throw new DeepSeekError(`${resolveRequestConfig(input).label} returned an empty response.`, "empty-response", 502);
     }
 
     return content;

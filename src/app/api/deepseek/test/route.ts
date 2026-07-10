@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { askDeepSeek, DeepSeekError, getDeepSeekPublicConfig } from "@/lib/deepseek";
+import { consumeRateLimit, getRequestClientKey } from "@/lib/rate-limit";
+import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
 import type { ClientProviderConfig } from "@/types/learning";
 
 export const runtime = "nodejs";
@@ -70,6 +72,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const rateLimit = consumeRateLimit(
+    `provider-test:${getRequestClientKey(request)}`,
+    20,
+    10 * 60 * 1000,
+  );
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        status: "rate-limited",
+        message: "Too many connection tests. Please wait before trying again.",
+        config,
+      },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
+
   try {
     const content = await askDeepSeek({
       message: 'Reply with exactly: "connection ok"',
@@ -106,9 +126,26 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const config = getDeepSeekPublicConfig();
+  const rateLimit = consumeRateLimit(
+    `provider-test:${getRequestClientKey(request)}`,
+    20,
+    10 * 60 * 1000,
+  );
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        status: "rate-limited",
+        message: "Too many connection tests. Please wait before trying again.",
+        config,
+      },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonRequest<Record<string, unknown>>(request, 32 * 1024);
     const clientProvider = sanitizeClientProvider(body.clientProvider);
 
     if (!clientProvider) {
@@ -144,6 +181,13 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json(
+        { ok: false, status: error.code, message: error.message, config },
+        { status: error.status },
+      );
+    }
+
     if (error instanceof DeepSeekError) {
       return NextResponse.json(
         {

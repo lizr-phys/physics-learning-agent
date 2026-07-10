@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getUserFromRequest } from "@/lib/auth-server";
+import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
 import { readUserData, writeUserData } from "@/lib/user-data-server";
 
 export const runtime = "nodejs";
@@ -25,11 +26,15 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await readJsonRequest(request, 8 * 1024 * 1024);
     const data = await writeUserData(user.id, body);
-    return NextResponse.json({ data });
-  } catch {
-    return NextResponse.json({ error: "Unable to save workspace data." }, { status: 400 });
+    return NextResponse.json({ ok: true, updatedAt: data.updatedAt });
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
+    return NextResponse.json({ error: "Unable to save workspace data." }, { status: 500 });
   }
 }
 

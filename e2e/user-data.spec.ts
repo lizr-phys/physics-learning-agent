@@ -61,6 +61,7 @@ test("signed-in users can persist and reload workspace data", async ({ request }
   });
 
   expect(saveResponse.ok()).toBe(true);
+  await expect(saveResponse.json()).resolves.toMatchObject({ ok: true });
 
   const loadResponse = await request.get("/api/user-data");
   const body = await loadResponse.json();

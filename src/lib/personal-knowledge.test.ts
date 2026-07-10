@@ -66,4 +66,24 @@ describe("personal knowledge base", () => {
     expect(await deletePersonalDocument("user-1", document.id)).toBe(true);
     expect(await listPersonalDocuments("user-1")).toHaveLength(0);
   });
+
+  it("preserves concurrent uploads for the same user", async () => {
+    await Promise.all(
+      ["lagrange.md", "hamilton.md", "oscillations.md"].map((fileName) =>
+        addPersonalDocument({
+          userId: "user-concurrent",
+          fileName,
+          mimeType: "text/markdown",
+          course: "theoretical-mechanics",
+          data: Buffer.from(`# ${fileName}\n\nCanonical mechanics notes for ${fileName}.`, "utf8"),
+        }),
+      ),
+    );
+
+    const documents = await listPersonalDocuments("user-concurrent");
+    expect(documents).toHaveLength(3);
+    expect(new Set(documents.map((document) => document.fileName))).toEqual(
+      new Set(["lagrange.md", "hamilton.md", "oscillations.md"]),
+    );
+  });
 });

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prepareAgentRequest } from "@/agent/workflow";
 import { getUserFromRequest } from "@/lib/auth-server";
 import { DeepSeekError, streamDeepSeek } from "@/lib/deepseek";
+import { consumeRateLimit, getRequestClientKey } from "@/lib/rate-limit";
+import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
 import {
   difficultyOptions,
   taskTypeOptions,
@@ -241,7 +243,7 @@ function sanitizeClientProvider(value: unknown): ClientProviderConfig | undefine
 
 function sanitizeRequest(body: unknown): AgentRequest {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  const message = asString(record.message);
+  const message = trimToLength(asString(record.message), 16_000);
   const course = asString(record.course);
   const taskType = asString(record.taskType);
   const knowledgePoint = asString(record.knowledgePoint);
@@ -306,14 +308,30 @@ function sanitizeRequest(body: unknown): AgentRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const user = await getUserFromRequest(request);
+    const rateLimit = consumeRateLimit(
+      `chat:${user?.id ?? getRequestClientKey(request)}`,
+      120,
+      10 * 60 * 1000,
+    );
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many generation requests. Please wait before trying again." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
+
+    const body = await readJsonRequest(request, 256 * 1024);
     const input = sanitizeRequest(body);
 
     if (!input.message) {
       return NextResponse.json({ error: "Please enter a question or generation request." }, { status: 400 });
     }
 
-    const user = await getUserFromRequest(request);
     const prepared = await prepareAgentRequest(input, { userId: user?.id });
     const stream = await streamDeepSeek(prepared.input, request.signal);
 
@@ -329,8 +347,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: "The request body is not valid JSON." }, { status: 400 });
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
     }
 
     if (error instanceof DeepSeekError) {
