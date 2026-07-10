@@ -2,8 +2,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
 
-import { chunkMarkdownDocument, tokenize } from "@/rag/chunk";
-import type { RagSearchResult } from "@/rag/types";
+import { detectCourseFromText, detectKnowledgeFromText } from "@/agent/exercise-parser";
+import { detectLanguage } from "@/lib/language";
+import {
+  extractDocumentChunks,
+  supportsDocumentExtraction,
+  type DocumentExtractionResult,
+} from "@/rag/document-loader";
+import { searchRagChunks } from "@/rag/search";
+import type { RagChunk, RagSearchResult } from "@/rag/types";
+import type { CourseId, DetectedLanguage } from "@/types/learning";
 
 export type PersonalDocument = {
   id: string;
@@ -13,23 +21,23 @@ export type PersonalDocument = {
   mimeType: string;
   size: number;
   description?: string;
+  course?: CourseId;
+  topic?: string;
+  language?: DetectedLanguage;
+  sourceType?: string;
+  extractionMethod?: DocumentExtractionResult["extractionMethod"];
   indexStatus: "indexed" | "stored-only" | "failed";
   statusMessage: string;
   chunkCount: number;
+  indexedAt?: number;
   createdAt: number;
 };
 
-type PersonalChunk = {
-  id: string;
+type PersonalChunk = RagChunk & {
   userId: string;
   documentId: string;
-  source: string;
-  heading: string;
-  content: string;
-  tokens: string[];
 };
 
-const indexedExtensions = new Set([".md", ".markdown", ".txt", ".tex", ".csv"]);
 const maxUploadBytes = 12 * 1024 * 1024;
 
 function dataRoot() {
@@ -85,16 +93,6 @@ function sanitizeFileName(fileName: string) {
   return baseName || "document.txt";
 }
 
-function isProbablyText(buffer: Buffer) {
-  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
-  if (!sample.length) {
-    return false;
-  }
-
-  const controlBytes = sample.filter((byte) => byte === 0 || (byte < 9 && byte !== 10 && byte !== 13));
-  return controlBytes.length / sample.length < 0.01;
-}
-
 async function readDocuments(userId: string) {
   return readJsonFile<PersonalDocument[]>(documentsPath(userId), []);
 }
@@ -119,9 +117,15 @@ function toSafeDocument(document: PersonalDocument) {
     mimeType: document.mimeType,
     size: document.size,
     description: document.description,
+    course: document.course,
+    topic: document.topic,
+    language: document.language,
+    sourceType: document.sourceType,
+    extractionMethod: document.extractionMethod,
     indexStatus: document.indexStatus,
     statusMessage: document.statusMessage,
     chunkCount: document.chunkCount,
+    indexedAt: document.indexedAt,
     createdAt: document.createdAt,
   };
 }
@@ -138,6 +142,8 @@ export async function addPersonalDocument(input: {
   fileName: string;
   mimeType: string;
   description?: string;
+  course?: CourseId;
+  topic?: string;
   data: Buffer;
 }) {
   if (input.data.byteLength > maxUploadBytes) {
@@ -151,6 +157,15 @@ export async function addPersonalDocument(input: {
   const extension = path.extname(fileName).toLowerCase();
   const storedFileName = `${id}-${fileName}`;
   const filePath = path.join(uploadsDir(input.userId), storedFileName);
+  const metadataText = [fileName, input.description, input.topic].filter(Boolean).join("\n");
+  const course =
+    input.course && input.course !== "general"
+      ? input.course
+      : detectCourseFromText(metadataText);
+  const topic =
+    input.topic?.trim().slice(0, 240) ||
+    (course ? detectKnowledgeFromText(metadataText, course) : undefined);
+  const language = detectLanguage(metadataText || fileName);
 
   await fs.writeFile(filePath, input.data);
 
@@ -158,33 +173,47 @@ export async function addPersonalDocument(input: {
   let statusMessage =
     "Stored in your personal library. Text extraction is not available for this file type yet.";
   let documentChunks: PersonalChunk[] = [];
+  let extractionMethod: PersonalDocument["extractionMethod"];
+  let sourceType = extension.slice(1) || "unknown";
+  let indexedAt: number | undefined;
 
-  if (indexedExtensions.has(extension) && isProbablyText(input.data)) {
-    const content = input.data.toString("utf8").replace(/\u0000/g, "").trim();
-
-    if (content) {
-      const chunks = await chunkMarkdownDocument(
-        {
-          source: fileName,
-          content: `# ${fileName}\n\n${input.description ? `${input.description}\n\n` : ""}${content}`,
+  if (supportsDocumentExtraction(fileName)) {
+    try {
+      const extraction = await extractDocumentChunks({
+        fileName,
+        data: input.data,
+        metadata: {
+          documentId: id,
+          userId: input.userId,
+          sourceType,
+          course,
+          topic,
+          language,
+          description: input.description?.trim().slice(0, 500) || undefined,
         },
-        1000,
-      );
-
-      documentChunks = chunks.map((chunk) => ({
+      });
+      extractionMethod = extraction.extractionMethod;
+      sourceType = extraction.sourceType;
+      documentChunks = extraction.chunks.map((chunk) => ({
         ...chunk,
-        id: `${id}:${chunk.id}`,
+        id: `${id}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
         userId: input.userId,
         documentId: id,
-        source: fileName,
       }));
       indexStatus = documentChunks.length ? "indexed" : "failed";
+      indexedAt = documentChunks.length ? Date.now() : undefined;
       statusMessage = documentChunks.length
-        ? `Indexed ${documentChunks.length} searchable text chunks.`
+        ? `Indexed ${documentChunks.length} structured chunks from ${sourceType.toUpperCase()}.`
         : "The file was stored, but no searchable text could be extracted.";
-    } else {
+
+      if (extraction.warnings.length) {
+        statusMessage += " Some document elements could not be extracted.";
+      }
+    } catch (error) {
       indexStatus = "failed";
-      statusMessage = "The file was stored, but it did not contain readable text.";
+      statusMessage = `The file was stored, but indexing failed: ${
+        error instanceof Error ? error.message : "unknown extraction error"
+      }`;
     }
   }
 
@@ -196,9 +225,15 @@ export async function addPersonalDocument(input: {
     mimeType: input.mimeType || "application/octet-stream",
     size: input.data.byteLength,
     description: input.description?.trim().slice(0, 500) || undefined,
+    course,
+    topic,
+    language,
+    sourceType,
+    extractionMethod,
     indexStatus,
     statusMessage,
     chunkCount: documentChunks.length,
+    indexedAt,
     createdAt: Date.now(),
   };
   const [documents, existingChunks] = await Promise.all([
@@ -242,46 +277,114 @@ export async function deletePersonalDocument(userId: string, documentId: string)
   return true;
 }
 
-function scoreChunk(queryTokens: string[], chunk: PersonalChunk) {
-  if (!queryTokens.length) {
-    return 0;
+export async function reindexPersonalDocument(userId: string, documentId: string) {
+  const documents = await readDocuments(userId);
+  const document = documents.find((item) => item.id === documentId);
+
+  if (!document) {
+    return null;
   }
 
-  const tokenSet = new Set(chunk.tokens);
-  const headingTokens = new Set(tokenize(chunk.heading));
-  let score = 0;
-
-  for (const token of queryTokens) {
-    if (tokenSet.has(token)) {
-      score += 1;
-    }
-
-    if (headingTokens.has(token)) {
-      score += 2;
-    }
+  if (!supportsDocumentExtraction(document.fileName)) {
+    const unsupportedDocument: PersonalDocument = {
+      ...document,
+      indexStatus: "stored-only",
+      statusMessage: "Text extraction is not available for this file type.",
+      chunkCount: 0,
+      indexedAt: undefined,
+    };
+    await writeDocuments(
+      userId,
+      documents.map((item) => (item.id === documentId ? unsupportedDocument : item)),
+    );
+    return toSafeDocument(unsupportedDocument);
   }
 
-  return score / Math.sqrt(chunk.tokens.length + 1);
+  const data = await fs.readFile(path.join(uploadsDir(userId), document.storedFileName));
+  let nextDocument: PersonalDocument;
+  let nextChunks: PersonalChunk[] = [];
+
+  try {
+    const extraction = await extractDocumentChunks({
+      fileName: document.fileName,
+      data,
+      metadata: {
+        documentId,
+        userId,
+        sourceType: document.sourceType,
+        course: document.course,
+        topic: document.topic,
+        language: document.language,
+        description: document.description,
+      },
+    });
+    nextChunks = extraction.chunks.map((chunk) => ({
+      ...chunk,
+      id: `${documentId}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
+      userId,
+      documentId,
+    }));
+    nextDocument = {
+      ...document,
+      sourceType: extraction.sourceType,
+      extractionMethod: extraction.extractionMethod,
+      indexStatus: nextChunks.length ? "indexed" : "failed",
+      statusMessage: nextChunks.length
+        ? `Indexed ${nextChunks.length} structured chunks from ${extraction.sourceType.toUpperCase()}.`
+        : "No searchable text could be extracted from this file.",
+      chunkCount: nextChunks.length,
+      indexedAt: nextChunks.length ? Date.now() : undefined,
+    };
+
+    if (extraction.warnings.length) {
+      nextDocument.statusMessage += " Some document elements could not be extracted.";
+    }
+  } catch (error) {
+    nextDocument = {
+      ...document,
+      indexStatus: "failed",
+      statusMessage: `Indexing failed: ${
+        error instanceof Error ? error.message : "unknown extraction error"
+      }`,
+      chunkCount: 0,
+      indexedAt: undefined,
+    };
+  }
+
+  const existingChunks = await readChunks(userId);
+  await Promise.all([
+    writeDocuments(
+      userId,
+      documents.map((item) => (item.id === documentId ? nextDocument : item)),
+    ),
+    writeChunks(userId, [
+      ...existingChunks.filter((chunk) => chunk.documentId !== documentId),
+      ...nextChunks,
+    ]),
+  ]);
+
+  return toSafeDocument(nextDocument);
 }
 
 export async function retrievePersonalKnowledge(
   userId: string,
   query: string,
-  limit = 4,
+  options: number | { limit?: number; course?: string; topic?: string } = 4,
 ): Promise<RagSearchResult[]> {
   const chunks = await readChunks(userId);
-  const queryTokens = tokenize(query);
+  const normalizedOptions = typeof options === "number" ? { limit: options } : options;
 
-  return chunks
-    .map((chunk) => ({
-      id: chunk.id,
+  return searchRagChunks(
+    chunks.map((chunk) => ({
+      ...chunk,
       source: `Personal Library / ${chunk.source}`,
-      heading: chunk.heading,
-      content: chunk.content,
-      tokens: chunk.tokens,
-      score: scoreChunk(queryTokens, chunk),
-    }))
-    .filter((chunk) => chunk.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+      metadata: {
+        ...chunk.metadata,
+        documentId: chunk.documentId,
+        userId: chunk.userId,
+      },
+    })),
+    query,
+    normalizedOptions,
+  );
 }

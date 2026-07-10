@@ -20,6 +20,23 @@ describe("personal knowledge mode decisions", () => {
     expect(decision.retrievalQuery).toContain("uploaded lecture notes");
   });
 
+  it("recognizes explicit Chinese references to uploaded course materials", () => {
+    const decision = decidePersonalKnowledgeUse({
+      request: {
+        message: "请根据我上传的哈密顿力学课件解释正则方程",
+        course: "theoretical-mechanics",
+      },
+      mode: "auto",
+      intent: "physics_learning",
+      queryType: "physics_core",
+      hasUser: true,
+    });
+
+    expect(decision.shouldUse).toBe(true);
+    expect(decision.confidence).toBe("high");
+    expect(decision.retrievalQuery).toContain("哈密顿力学课件");
+  });
+
   it("does not retrieve for unrelated general questions in Auto mode", () => {
     const decision = decidePersonalKnowledgeUse({
       request: {

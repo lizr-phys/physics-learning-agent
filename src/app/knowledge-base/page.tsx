@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileText, Loader2, LogOut, Trash2, Upload } from "lucide-react";
+import { Database, FileText, Loader2, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
+
+import { courseOptions, getCourseLabel } from "@/data/courses";
+import type { CourseId, DetectedLanguage } from "@/types/learning";
 
 type User = {
   id: string;
@@ -17,9 +20,15 @@ type PersonalDocument = {
   mimeType: string;
   size: number;
   description?: string;
+  course?: CourseId;
+  topic?: string;
+  language?: DetectedLanguage;
+  sourceType?: string;
+  extractionMethod?: "langchain-text" | "officeparser-structure";
   indexStatus: "indexed" | "stored-only" | "failed";
   statusMessage: string;
   chunkCount: number;
+  indexedAt?: number;
   createdAt: number;
 };
 
@@ -67,9 +76,12 @@ export default function KnowledgeBasePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [description, setDescription] = useState("");
+  const [course, setCourse] = useState<CourseId | "">("");
+  const [topic, setTopic] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [reindexingId, setReindexingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -162,6 +174,8 @@ export default function KnowledgeBasePage() {
     const formData = new FormData();
     formData.set("file", file);
     formData.set("description", description);
+    formData.set("course", course);
+    formData.set("topic", topic);
     setIsUploading(true);
 
     try {
@@ -205,6 +219,28 @@ export default function KnowledgeBasePage() {
       setNotice("Document deleted.");
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Delete failed.");
+    }
+  }
+
+  async function reindexDocument(document: PersonalDocument) {
+    setError("");
+    setNotice("");
+    setReindexingId(document.id);
+
+    try {
+      const data = await readJson<{ document: PersonalDocument }>(
+        await fetch(`/api/knowledge/documents/${encodeURIComponent(document.id)}`, {
+          method: "PATCH",
+        }),
+      );
+      setDocuments((current) =>
+        current.map((item) => (item.id === document.id ? data.document : item)),
+      );
+      setNotice(data.document.statusMessage);
+    } catch (reindexError) {
+      setError(reindexError instanceof Error ? reindexError.message : "Reindexing failed.");
+    } finally {
+      setReindexingId("");
     }
   }
 
@@ -315,13 +351,12 @@ export default function KnowledgeBasePage() {
             <h2 className="text-lg font-semibold text-zinc-950">How personal retrieval works</h2>
             <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-600">
               <p>
-                Uploaded text notes are stored locally on the server, split into searchable chunks,
-                and retrieved during chat when a question matches your material.
+                Uploaded materials are stored locally on the server, split into structured chunks,
+                and retrieved during chat when a question matches your material and study context.
               </p>
               <p>
-                The current MVP indexes Markdown, TXT, TeX, and CSV files. PDF, DOCX, and PPTX
-                files can be stored in the catalog, but full text extraction should be added before
-                relying on them for retrieval.
+                Markdown, TXT, TeX, CSV, text-based PDF, DOCX, PPTX, XLSX, RTF, and OpenDocument
+                files can be indexed. Scanned pages require OCR before they become searchable.
               </p>
               <p>
                 Do not upload copyrighted textbooks to a public deployment unless you have the
@@ -365,7 +400,7 @@ export default function KnowledgeBasePage() {
               <h2 className="text-lg font-semibold text-zinc-950">Upload material</h2>
               <p className="mt-2 text-sm leading-6 text-zinc-600">
                 Use your own notes, lecture summaries, problem sets, or exported text from course
-                slides. Text-like files are indexed immediately.
+                slides. Adding course and topic metadata improves retrieval precision.
               </p>
               <form onSubmit={uploadDocument} className="mt-4 space-y-4">
                 <label className="block text-sm">
@@ -373,8 +408,32 @@ export default function KnowledgeBasePage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".md,.markdown,.txt,.tex,.csv,.pdf,.doc,.docx,.ppt,.pptx"
+                    accept=".md,.markdown,.txt,.tex,.csv,.pdf,.docx,.pptx,.xlsx,.rtf,.odt,.odp,.ods"
                     className="mt-2 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-950 file:px-3 file:py-2 file:text-sm file:text-white"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="font-medium text-zinc-800">Course</span>
+                  <select
+                    value={course}
+                    onChange={(event) => setCourse(event.target.value as CourseId | "")}
+                    className="mt-2 h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 outline-none focus:border-zinc-500"
+                  >
+                    <option value="">Detect from the document</option>
+                    {courseOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="font-medium text-zinc-800">Topic</span>
+                  <input
+                    value={topic}
+                    onChange={(event) => setTopic(event.target.value)}
+                    className="mt-2 h-10 w-full rounded-lg border border-zinc-300 px-3 outline-none focus:border-zinc-500"
+                    placeholder="Optional chapter or topic"
                   />
                 </label>
                 <label className="block text-sm">
@@ -442,6 +501,16 @@ export default function KnowledgeBasePage() {
                           <span className="rounded-full border border-zinc-200 px-2 py-1">
                             {statusLabel(document.indexStatus)}
                           </span>
+                          {document.course ? (
+                            <span className="rounded-full border border-zinc-200 px-2 py-1">
+                              {getCourseLabel(document.course)}
+                            </span>
+                          ) : null}
+                          {document.topic ? (
+                            <span className="rounded-full border border-zinc-200 px-2 py-1">
+                              {document.topic}
+                            </span>
+                          ) : null}
                           <span className="rounded-full border border-zinc-200 px-2 py-1">
                             {document.chunkCount} chunks
                           </span>
@@ -453,14 +522,28 @@ export default function KnowledgeBasePage() {
                           </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void deleteDocument(document)}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-400 hover:text-zinc-950"
-                      >
-                        <Trash2 size={15} />
-                        Delete
-                      </button>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void reindexDocument(document)}
+                          disabled={reindexingId === document.id}
+                          className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-400 hover:text-zinc-950 disabled:text-zinc-400"
+                        >
+                          <RefreshCw
+                            size={15}
+                            className={reindexingId === document.id ? "animate-spin" : ""}
+                          />
+                          Reindex
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteDocument(document)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-400 hover:text-zinc-950"
+                        >
+                          <Trash2 size={15} />
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     {document.description ? (
                       <p className="mt-3 text-xs leading-5 text-zinc-500">
@@ -474,8 +557,8 @@ export default function KnowledgeBasePage() {
                   <Database className="mx-auto text-zinc-400" size={28} />
                   <p className="mt-3 text-sm font-medium text-zinc-950">No documents yet</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    Upload a small Markdown, TXT, TeX, or CSV note to create your first searchable
-                    personal knowledge source.
+                    Upload a note, text-based PDF, DOCX, PPTX, or problem set to create your first
+                    searchable personal knowledge source.
                   </p>
                 </div>
               )}
