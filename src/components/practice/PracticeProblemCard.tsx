@@ -1,14 +1,17 @@
 "use client";
 
-import { ChevronDown, MessageSquare } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleHelp, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
+import type { PracticeAssessmentStatus } from "@/types/learning";
 
 type PracticeProblemCardProps = {
   problem: ParsedPracticeProblem;
   onAsk: (problem: ParsedPracticeProblem) => void;
+  assessment?: PracticeAssessmentStatus;
+  onAssess: (problemIndex: number, status?: PracticeAssessmentStatus) => void;
   headingId?: string;
 };
 
@@ -33,6 +36,8 @@ function FoldSection({ title, content }: { title: string; content?: string }) {
 export function PracticeProblemCard({
   problem,
   onAsk,
+  assessment,
+  onAssess,
   headingId,
 }: PracticeProblemCardProps) {
   const [problemOpen, setProblemOpen] = useState(true);
@@ -83,6 +88,42 @@ export function PracticeProblemCard({
             >
               <MessageSquare size={13} />
               Ask about this problem
+            </button>
+            <span className="ml-auto text-xs text-zinc-500">Self-assessment</span>
+            <button
+              type="button"
+              onClick={() =>
+                onAssess(problem.index, assessment === "solved" ? undefined : "solved")
+              }
+              aria-pressed={assessment === "solved"}
+              data-testid={`practice-assessment-solved-${problem.index}`}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors ${
+                assessment === "solved"
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              <CheckCircle2 size={13} />
+              Solved
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onAssess(
+                  problem.index,
+                  assessment === "needs-work" ? undefined : "needs-work",
+                )
+              }
+              aria-pressed={assessment === "needs-work"}
+              data-testid={`practice-assessment-needs-work-${problem.index}`}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors ${
+                assessment === "needs-work"
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              <CircleHelp size={13} />
+              Needs work
             </button>
           </div>
         </div>

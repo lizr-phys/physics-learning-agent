@@ -14,6 +14,7 @@ import {
   type CourseId,
   type DifficultyId,
   type KnowledgeMode,
+  type PracticeAssessment,
   type PracticeOutputMode,
   type PracticeStyleId,
   type TaskTypeId,
@@ -32,6 +33,7 @@ export type StoredPracticeGeneration = {
   prompt: string;
   content: string;
   status: "complete" | "interrupted" | "error";
+  problemAssessments?: Record<string, PracticeAssessment>;
   createdAt: number;
   updatedAt: number;
 };
@@ -146,6 +148,19 @@ function sanitizeMessage(value: unknown) {
     record.status === "error"
       ? record.status
       : undefined;
+  const feedbackRecord = asRecord(record.feedback);
+  const verdict =
+    feedbackRecord.verdict === "helpful" ||
+    feedbackRecord.verdict === "needs-improvement"
+      ? feedbackRecord.verdict
+      : undefined;
+  const issue =
+    feedbackRecord.issue === "unclear" ||
+    feedbackRecord.issue === "formula-error" ||
+    feedbackRecord.issue === "citation-error" ||
+    feedbackRecord.issue === "other"
+      ? feedbackRecord.issue
+      : undefined;
 
   return {
     id: asString(record.id, 160) || undefined,
@@ -154,7 +169,40 @@ function sanitizeMessage(value: unknown) {
     createdAt: asNumber(record.createdAt, Date.now()),
     status,
     requestId: asString(record.requestId, 160) || undefined,
+    feedback:
+      role === "assistant" && verdict
+        ? {
+            verdict,
+            issue: verdict === "needs-improvement" ? issue : undefined,
+            updatedAt: asNumber(feedbackRecord.updatedAt, Date.now()),
+          }
+        : undefined,
   };
+}
+
+function sanitizePracticeAssessments(value: unknown) {
+  const record = asRecord(value);
+  const entries = Object.entries(record)
+    .filter(([key]) => /^\d{1,3}$/.test(key))
+    .slice(0, 40)
+    .flatMap(([key, rawAssessment]) => {
+      const assessment = asRecord(rawAssessment);
+      const status = assessment.status;
+
+      if (status !== "solved" && status !== "needs-work") {
+        return [];
+      }
+
+      return [[
+        key,
+        {
+          status,
+          updatedAt: asNumber(assessment.updatedAt, Date.now()),
+        },
+      ]] as const;
+    });
+
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function sanitizeToolContext(value: unknown) {
@@ -367,6 +415,7 @@ function sanitizePracticeGeneration(value: unknown): StoredPracticeGeneration | 
     prompt,
     content,
     status,
+    problemAssessments: sanitizePracticeAssessments(record.problemAssessments),
     createdAt: asNumber(record.createdAt, Date.now()),
     updatedAt: asNumber(record.updatedAt, Date.now()),
   };

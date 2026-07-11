@@ -158,3 +158,19 @@ test("rapid session switching never mixes assistant content", async ({ page }, t
   await expect(page.getByTestId("assistant-message")).toContainText("Session B response");
   await expect(page.getByTestId("assistant-message")).not.toContainText("Session A response");
 });
+
+test("answer feedback stays attached to its assistant message", async ({ page }) => {
+  await page.getByTestId("chat-input").fill("Session A: explain Green's functions.");
+  await page.getByTestId("send-message").click();
+  await expect(page.getByTestId("stop-generation")).toHaveCount(0);
+
+  const helpful = page.getByTestId("feedback-helpful");
+  await helpful.click();
+  await expect(helpful).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(page.getByTestId("feedback-helpful")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});

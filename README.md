@@ -65,8 +65,8 @@ flowchart LR
 
 | Area | What it provides |
 | --- | --- |
-| Chat workspace | Long-form physics tutoring, follow-up questions, context memory, streaming answers |
-| Practice Problems | Original problem sets with difficulty, style, language, hidden answers, and `.tex` export |
+| Chat workspace | Long-form physics tutoring, follow-up questions, context memory, streaming answers, and answer feedback |
+| Practice Problems | Original problem sets with difficulty, style, language, hidden answers, self-assessment, and `.tex` export |
 | Knowledge Map | Course topics, prerequisites, related topics, formulas, typical problems, and pitfalls |
 | Personal Knowledge Base | User-owned notes and course materials parsed into metadata-rich, citation-ready chunks |
 | Agent Workflow | LangGraph nodes for input understanding, context resolution, memory update, retrieval planning, retrieval execution, and generation preparation |
@@ -85,6 +85,7 @@ flowchart LR
 - Normal handling of non-physics questions, with a light final note that the workspace is optimized for physics learning
 - Account-scoped persistence for conversations, active session, learning memory, and safe model preferences
 - Personal knowledge modes for chat: automatic retrieval, always-on retrieval, or retrieval disabled
+- A compact useful / needs-improvement signal attached to each completed answer
 
 ### Physics-aware answer generation
 
@@ -125,6 +126,7 @@ flowchart LR
   - full solutions
   - hints with answers hidden by default
 - Per-problem folded cards for hints, solutions, and final answers
+- Per-problem `Solved` and `Needs work` self-assessment stored with the generated set
 - One-click follow-up from a generated problem into chat with context attached
 - Export generated problem sets as editable LaTeX source
 
@@ -149,9 +151,19 @@ flowchart LR
 ### Workspace data persistence
 
 - Signed-in users get a server-side workspace snapshot under `PLA_DATA_DIR`
-- Persisted data includes chat conversations, active conversation, learning memory, answer-depth preference, onboarding state, non-secret provider preferences, and generated practice history
+- Persisted data includes chat conversations, answer feedback, active conversation, learning memory, answer-depth preference, onboarding state, non-secret provider preferences, generated practice history, and per-problem self-assessment
 - Browser storage remains available for anonymous use and is merged into the account snapshot after sign-in
 - Provider API keys are intentionally excluded from persistent workspace data
+
+### Pilot quality loop
+
+- Completed answers can be marked as useful or needing improvement, with optional issue categories for clarity, formulas, or sources
+- Generated problems can be marked as solved or needing more work without exposing the answer by default
+- Anonymous feedback remains in browser storage; signed-in feedback follows the existing account-scoped workspace snapshot
+- A deterministic offline baseline checks intent routing, course resolution, and bundled-note retrieval without spending model tokens
+- Evaluation fixtures are designed to grow from anonymized pilot failure patterns rather than one-off prompt tuning
+
+The project does not send these learning signals directly to a model provider and does not include hidden analytics collection. A production pilot can aggregate consented, anonymized signals in a separate analytics pipeline later.
 
 ### Bring Your Own Key model access
 
@@ -385,6 +397,7 @@ npm run build
 | `npm run start` | Start the production server |
 | `npm run lint` | Run lint checks |
 | `npm run test:run` | Run the unit and module integration tests |
+| `npm run test:quality` | Run the offline pilot-quality baseline for routing, course resolution, and retrieval |
 | `npm run test:e2e` | Run Playwright browser tests on desktop and mobile viewports |
 | `npm run test:all` | Run lint, unit tests, production build, and browser tests |
 

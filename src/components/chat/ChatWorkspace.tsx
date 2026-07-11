@@ -44,6 +44,7 @@ import {
 import {
   taskTypeOptions,
   type AgentRequest,
+  type AnswerFeedback,
   type AnswerDepth,
   type ChatMessage,
   type CourseId,
@@ -973,6 +974,39 @@ export function ChatWorkspace() {
     }
   }, [sessionId]);
 
+  const handleAnswerFeedback = useCallback(
+    (messageId: string, feedback?: AnswerFeedback) => {
+      const targetSessionId = currentSessionIdRef.current;
+
+      if (!targetSessionId) {
+        return;
+      }
+
+      const currentSession = getStoredSessions().find(
+        (item) => item.id === targetSessionId,
+      );
+
+      if (!currentSession) {
+        return;
+      }
+
+      const nextMessages = currentSession.messages.map((message) =>
+        message.id === messageId ? { ...message, feedback } : message,
+      );
+
+      upsertStoredSession({
+        ...currentSession,
+        messages: nextMessages,
+        updatedAt: Date.now(),
+      });
+
+      if (currentSessionIdRef.current === targetSessionId) {
+        setMessages(nextMessages);
+      }
+    },
+    [],
+  );
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void submitMessage();
@@ -993,6 +1027,7 @@ export function ChatWorkspace() {
         <ChatWindow
           messages={messages}
           onPickPrompt={setInput}
+          onFeedback={handleAnswerFeedback}
         />
         <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pb-6">
           {isCurrentSessionGenerating ? (

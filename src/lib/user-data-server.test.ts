@@ -41,6 +41,11 @@ describe("user data server persistence", () => {
               content: "A Green function represents the response to a point source.",
               createdAt: 2,
               status: "complete",
+              feedback: {
+                verdict: "needs-improvement",
+                issue: "formula-error",
+                updatedAt: 5,
+              },
             },
           ],
           context: {
@@ -67,6 +72,9 @@ describe("user data server persistence", () => {
           prompt: "Generate practice problems.",
           content: "### Problem 1\n\nSolve a grounded-plane boundary-value problem.",
           status: "complete",
+          problemAssessments: {
+            "1": { status: "solved", updatedAt: 5 },
+          },
           createdAt: 3,
           updatedAt: 4,
         },
@@ -95,6 +103,20 @@ describe("user data server persistence", () => {
     expect(loaded.practiceHistory[0]).toMatchObject({
       id: "practice-1",
       status: "complete",
+      problemAssessments: {
+        "1": { status: "solved", updatedAt: 5 },
+      },
+    });
+    expect(
+      (
+        loaded.sessions[0] as {
+          messages: Array<{ feedback?: { verdict: string; issue?: string } }>;
+        }
+      ).messages[1].feedback,
+    ).toEqual({
+      verdict: "needs-improvement",
+      issue: "formula-error",
+      updatedAt: 5,
     });
   });
 });

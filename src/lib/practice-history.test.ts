@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getStoredPracticeGenerations,
   saveStoredPracticeGenerations,
+  updateStoredPracticeAssessment,
   upsertStoredPracticeGeneration,
 } from "@/lib/practice-history";
 
@@ -62,5 +63,25 @@ describe("practice history", () => {
 
     expect(history).toHaveLength(1);
     expect(history[0].content).toContain("normalized eigenstates");
+  });
+
+  it("persists and clears per-problem self-assessments", () => {
+    upsertStoredPracticeGeneration({
+      id: "practice-2",
+      title: "Electrostatic boundary values",
+      prompt: "Generate problems.",
+      content: "### Problem 1\n\nSolve the boundary-value problem.",
+      status: "complete",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    updateStoredPracticeAssessment("practice-2", 1, "needs-work");
+    expect(getStoredPracticeGenerations()[0].problemAssessments?.["1"].status).toBe(
+      "needs-work",
+    );
+
+    updateStoredPracticeAssessment("practice-2", 1);
+    expect(getStoredPracticeGenerations()[0].problemAssessments).toBeUndefined();
   });
 });
