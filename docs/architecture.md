@@ -30,7 +30,7 @@ The application deliberately keeps orchestration and model execution separate. L
 5. The provider adapter sends the request to the server default or a user-selected provider.
 6. Provider-specific SSE is normalized into a plain text stream plus explicit `done`, `length`, and `error` control events.
 7. The client accepts chunks only while all three generation identifiers still match. Switching, creating, or deleting a conversation aborts the active request and stale chunks are ignored.
-8. Completed or interrupted content is persisted to the target conversation. Signed-in workspaces are synchronized to the local account store.
+8. Completed or interrupted content is persisted to the target conversation. Answer feedback is stored on that assistant message, and signed-in workspaces are synchronized to the local account store.
 
 ## LangGraph workflow
 
@@ -82,6 +82,8 @@ Anonymous state remains in browser storage. Signed-in state is copied to account
 
 Writes are atomic and in-process read-modify-write operations are serialized by logical resource key. This is suitable for local development and a single Node process. A multi-instance production deployment should replace the JSON stores with a transactional database and shared session/rate-limit infrastructure.
 
+Answer feedback is embedded in the assistant message it evaluates. Practice self-assessment is stored by generated-set ID and problem index. Anonymous users keep both in browser storage; signed-in users reuse the same workspace synchronization path. This keeps the pilot feedback loop inspectable without introducing a second analytics store.
+
 ## Provider routing and endpoint policy
 
 The server default uses environment variables. Bring Your Own Key supports OpenAI-compatible providers, Anthropic, and Gemini while keeping temporary keys in browser `sessionStorage`.
@@ -101,8 +103,9 @@ Custom OpenAI-compatible URLs are validated on the server. Production requests r
 ```bash
 npm run lint
 npm run test:run
+npm run test:quality
 npm run build
 npm run test:e2e
 ```
 
-Unit tests cover classification, prompt construction, memory, generation guards, retrieval, document parsing, persistence, request bounds, endpoint policy, and concurrency. Playwright covers desktop/mobile conversation isolation, practice rendering, knowledge-base flows, account data, KaTeX, and layout overflow.
+Unit tests cover classification, prompt construction, memory, generation guards, retrieval, document parsing, persistence, request bounds, endpoint policy, and concurrency. The pilot-quality baseline provides named Chinese and English cases for intent routing, course resolution, and bundled-note retrieval. Playwright covers desktop/mobile conversation isolation, feedback persistence, practice self-assessment, practice rendering, knowledge-base flows, account data, KaTeX, and layout overflow.

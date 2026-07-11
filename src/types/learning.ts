@@ -85,6 +85,13 @@ export const practiceOutputModeOptions = [
 
 export type PracticeOutputMode = (typeof practiceOutputModeOptions)[number]["id"];
 
+export type PracticeAssessmentStatus = "solved" | "needs-work";
+
+export type PracticeAssessment = {
+  status: PracticeAssessmentStatus;
+  updatedAt: number;
+};
+
 export const practiceStyleOptions = [
   { id: "auto", label: "Auto" },
   { id: "chinese-textbook", label: "Chinese textbook exercises" },
@@ -141,6 +148,18 @@ export type LearningProfile = {
   updatedAt: number;
 };
 
+export type AnswerFeedbackIssue =
+  | "unclear"
+  | "formula-error"
+  | "citation-error"
+  | "other";
+
+export type AnswerFeedback = {
+  verdict: "helpful" | "needs-improvement";
+  issue?: AnswerFeedbackIssue;
+  updatedAt: number;
+};
+
 export type ChatMessage = {
   id?: string;
   role: ChatRole;
@@ -148,6 +167,7 @@ export type ChatMessage = {
   createdAt?: number;
   status?: "streaming" | "complete" | "interrupted" | "error";
   requestId?: string;
+  feedback?: AnswerFeedback;
 };
 
 export type ToolContext = {

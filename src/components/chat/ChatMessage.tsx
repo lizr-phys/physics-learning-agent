@@ -5,16 +5,22 @@ import { memo } from "react";
 
 import { ContentOutline } from "@/components/common/ContentOutline";
 import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
-import type { ChatMessage as ChatMessageType } from "@/types/learning";
+import { MessageFeedback } from "@/components/chat/MessageFeedback";
+import type {
+  AnswerFeedback,
+  ChatMessage as ChatMessageType,
+} from "@/types/learning";
 
 type ChatMessageProps = {
   message: ChatMessageType;
   showOutline?: boolean;
+  onFeedback?: (messageId: string, feedback?: AnswerFeedback) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({
   message,
   showOutline = false,
+  onFeedback,
 }: ChatMessageProps) {
   if (message.role === "user") {
     return (
@@ -41,6 +47,12 @@ export const ChatMessage = memo(function ChatMessage({
               content={message.content}
               streaming={message.status === "streaming"}
             />
+            {message.id && message.status !== "streaming" && onFeedback ? (
+              <MessageFeedback
+                feedback={message.feedback}
+                onChange={(feedback) => onFeedback(message.id!, feedback)}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="text-sm text-zinc-500">Waiting for the model...</div>

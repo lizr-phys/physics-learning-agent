@@ -270,7 +270,7 @@ function hasLearningContext(input: AgentRequest) {
 }
 
 export function classifyQuery(input: AgentRequest): QueryType {
-  const text = input.message.toLowerCase();
+  const text = input.message.toLowerCase().replace(/[‐‑‒–—-]/g, " ");
 
   // Strong non-physics intents must win over stale course or knowledge context.
   if (includesAny(text, codingTerms)) {

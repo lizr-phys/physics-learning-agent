@@ -19,6 +19,7 @@ const exerciseTerms = [
   "quiz",
   "generate",
   "make it harder",
+  "harder",
 ];
 
 const planningTerms = [
@@ -87,7 +88,7 @@ export function classifyAgentIntent(input: AgentRequest): AgentIntent {
 
   if (
     input.taskType === "study-plan" ||
-    includesAny(text, planningTerms) ||
+    (includesAny(text, planningTerms) && physicsLike) ||
     (includesAny(text, physicsStudyActionTerms) && physicsLike)
   ) {
     return "study_planning";

@@ -28,6 +28,7 @@ import {
 import {
   createPracticeGenerationId,
   getStoredPracticeGenerations,
+  updateStoredPracticeAssessment,
   upsertStoredPracticeGeneration,
   type StoredPracticeGeneration,
 } from "@/lib/practice-history";
@@ -52,6 +53,8 @@ import {
   type DetectedLanguage,
   type DifficultyId,
   type PracticeOutputMode,
+  type PracticeAssessment,
+  type PracticeAssessmentStatus,
   type PracticeStyleId,
   type ToolContext,
 } from "@/types/learning";
@@ -100,6 +103,9 @@ export function AgentGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   const [linkedSessionId, setLinkedSessionId] = useState("");
   const [practiceRecordId, setPracticeRecordId] = useState("");
+  const [problemAssessments, setProblemAssessments] = useState<
+    Record<string, PracticeAssessment>
+  >({});
   const [pendingRequest, setPendingRequest] = useState<AgentRequest | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const generatedAtRef = useRef(0);
@@ -147,6 +153,7 @@ export function AgentGenerator() {
       setAnswerDepth(latest.answerDepth ?? getStoredAnswerDepth());
       setExtraInput(latest.prompt);
       setContent(latest.content);
+      setProblemAssessments(latest.problemAssessments ?? {});
       generatedAtRef.current = latest.createdAt;
     });
 
@@ -226,6 +233,9 @@ export function AgentGenerator() {
   }) {
     const now = Date.now();
     const createdAt = generatedAtRef.current || now;
+    const existing = getStoredPracticeGenerations().find(
+      (item) => item.id === options.recordId,
+    );
 
     upsertStoredPracticeGeneration({
       id: options.recordId,
@@ -240,6 +250,7 @@ export function AgentGenerator() {
       prompt: options.promptText,
       content: options.resultContent,
       status: options.status,
+      problemAssessments: existing?.problemAssessments,
       createdAt,
       updatedAt: now,
     });
@@ -288,6 +299,7 @@ export function AgentGenerator() {
     setIsLoading(true);
     setError("");
     setContent("");
+    setProblemAssessments({});
     setLinkedSessionId("");
     setPendingRequest(null);
     generatedAtRef.current = Date.now();
@@ -532,6 +544,16 @@ ${existingContent}`,
     const nextId = createPracticeGenerationId();
     setPracticeRecordId(nextId);
     return nextId;
+  }
+
+  function assessProblem(problemIndex: number, status?: PracticeAssessmentStatus) {
+    if (!practiceRecordId) {
+      return;
+    }
+
+    setProblemAssessments(
+      updateStoredPracticeAssessment(practiceRecordId, problemIndex, status),
+    );
   }
 
   function downloadLatex() {
@@ -820,6 +842,8 @@ ${existingContent}`,
               <PracticeResultList
                 content={content}
                 onAsk={askPracticeProblem}
+                assessments={problemAssessments}
+                onAssess={assessProblem}
               />
             )}
 

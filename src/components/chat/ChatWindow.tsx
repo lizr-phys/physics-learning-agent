@@ -4,16 +4,21 @@ import { memo } from "react";
 
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { WelcomePrompts } from "@/components/chat/WelcomePrompts";
-import type { ChatMessage as ChatMessageType } from "@/types/learning";
+import type {
+  AnswerFeedback,
+  ChatMessage as ChatMessageType,
+} from "@/types/learning";
 
 type ChatWindowProps = {
   messages: ChatMessageType[];
   onPickPrompt: (prompt: string) => void;
+  onFeedback: (messageId: string, feedback?: AnswerFeedback) => void;
 };
 
 export const ChatWindow = memo(function ChatWindow({
   messages,
   onPickPrompt,
+  onFeedback,
 }: ChatWindowProps) {
   if (!messages.length) {
     return <WelcomePrompts onPick={onPickPrompt} />;
@@ -28,6 +33,7 @@ export const ChatWindow = memo(function ChatWindow({
           key={message.id ?? `${message.role}-${index}`}
           message={message}
           showOutline={index === lastAssistantIndex}
+          onFeedback={onFeedback}
         />
       ))}
     </div>

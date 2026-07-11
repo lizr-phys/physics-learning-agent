@@ -90,6 +90,24 @@ test("practice output mode is explicit and the answer stays folded", async ({ pa
   ).toBeVisible();
 });
 
+test("practice self-assessment persists with the generated set", async ({ page }) => {
+  await page.goto("/practice");
+  await page
+    .getByTestId("generator-prompt")
+    .fill("Generate 3 English textbook-style problems on the harmonic oscillator.");
+  await page.getByTestId("generator-submit").click();
+
+  const solved = page.getByTestId("practice-assessment-solved-1");
+  await solved.click();
+  await expect(solved).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(page.getByTestId("practice-assessment-solved-1")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 test("a practice problem carries context into chat", async ({ page }) => {
   await page.goto("/practice");
   await page
