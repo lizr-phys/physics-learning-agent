@@ -340,6 +340,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
         "X-Content-Type-Options": "nosniff",
         "X-Agent-Intent": prepared.input.intent ?? "general_question",
         "X-Conversation-Id": prepared.input.conversationId ?? "",

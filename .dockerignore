@@ -1,0 +1,12 @@
+.git
+.github
+.next
+.pla-data
+.env
+.env.*
+!.env.example
+node_modules
+playwright-report
+test-results
+coverage
+*.log
