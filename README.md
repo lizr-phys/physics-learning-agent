@@ -14,6 +14,7 @@
   <a href="#learning-workflows">Workflows</a> |
   <a href="#architecture">Architecture</a> |
   <a href="#personal-knowledge-base">Knowledge Base</a> |
+  <a href="#pilot-deployment">Pilot Deployment</a> |
   <a href="#getting-started">Getting Started</a> |
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -413,6 +414,19 @@ npm run build
 - The personal knowledge base is designed for user-owned learning materials.
 - Do not upload copyrighted textbooks or private course materials to a public deployment unless you have the right to do so.
 - The built-in local account system is intended for personal or small-group deployments, not as a hardened enterprise identity system.
+
+## Pilot Deployment
+
+The repository includes a single-host deployment baseline for controlled user testing:
+
+- a multi-stage standalone Next.js image;
+- Docker Compose with a persistent `PLA_DATA_DIR` volume;
+- Caddy-managed HTTPS and a shared outer pilot gate;
+- unbuffered proxying for streamed answers;
+- a readiness endpoint at `/api/health`;
+- backup, restore, upgrade, rollback, and tester-runbook guidance.
+
+See the [Pilot Deployment Guide](docs/pilot-deployment.md). The included stack is intentionally limited to one application replica because the current account, workspace, and document stores use local files and in-process coordination.
 
 ## Deployment Boundary
 

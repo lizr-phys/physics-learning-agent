@@ -1,0 +1,103 @@
+name: Pilot feedback
+description: Report a learning-flow issue or share structured feedback from a pilot session.
+title: "[Pilot] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing Physics Learning Agent. Do not include API keys, account passwords, private notes, or copyrighted course material in this report.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Chat
+        - Practice Problems
+        - Knowledge Map
+        - Personal Knowledge Base
+        - API Settings
+        - Account and workspace sync
+        - Mobile layout
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: course
+    attributes:
+      label: Course context
+      options:
+        - General Physics
+        - Mathematical Methods for Physics
+        - Theoretical Mechanics
+        - Electrodynamics
+        - Quantum Mechanics
+        - Thermodynamics and Statistical Physics
+        - Non-physics request
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to do?
+      description: Paraphrase the request rather than pasting private study material.
+      placeholder: I was trying to generate five boundary-value problems at intermediate difficulty...
+    validations:
+      required: true
+
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Include the visible behavior, error message, or quality concern.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Blocked the task
+        - Completed with a substantial workaround
+        - Completed with a minor issue
+        - Quality suggestion
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: issue_type
+    attributes:
+      label: Observed issue types
+      options:
+        - label: Incorrect physics or mathematics
+        - label: Missing assumptions, boundary conditions, or units
+        - label: LaTeX or Markdown rendering problem
+        - label: Retrieval or citation problem
+        - label: Streaming stopped or content was incomplete
+        - label: Session history or saved data problem
+        - label: Mobile layout problem
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      placeholder: Chrome on Windows 11, or WeChat browser on Android
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Submission check
+      options:
+        - label: I removed API keys, passwords, personal information, and private learning materials from this report.
+          required: true
