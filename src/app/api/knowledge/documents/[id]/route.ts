@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getUserFromRequest } from "@/lib/auth-server";
-import { deletePersonalDocument, reindexPersonalDocument } from "@/lib/personal-knowledge";
+import { deletePersonalDocument, readPersonalProblem, reindexPersonalDocument } from "@/lib/personal-knowledge";
+import { imageRequestOwner } from "@/lib/image-request-owner";
+import { ImageInputError } from "@/lib/image-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { user } = await imageRequestOwner(request);
+    if (!user) return NextResponse.json({ error: "Sign in to view photo problems." }, { status: 401 });
+    const result = await readPersonalProblem(user.id, (await context.params).id);
+    return NextResponse.json(result ?? { error: "Photo problem not found." }, { status: result ? 200 : 404, headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) { return NextResponse.json({ error: error instanceof ImageInputError ? error.message : "The photo problem could not be loaded." }, { status: error instanceof ImageInputError ? error.status : 503 }); }
+}
 
 export async function PATCH(
   request: NextRequest,

@@ -12,6 +12,10 @@ export type RagDocumentMetadata = {
   topic?: string;
   language?: "zh" | "en";
   description?: string;
+  contentHash?: string;
+  documentHash?: string;
+  version?: number;
+  splitterVersion?: string;
 };
 
 export type RagChunkMetadata = RagDocumentMetadata & {
@@ -25,6 +29,7 @@ export type RagChunkMetadata = RagDocumentMetadata & {
   endIndex?: number;
   isTableChunk?: boolean;
   tokenVersion?: number;
+  sectionPath?: string[];
 };
 
 export type RagChunk = {
@@ -37,6 +42,7 @@ export type RagChunk = {
 };
 
 export type RagSearchResult = RagChunk & {
+  sourceId: string;
   score: number;
   locator?: string;
   scoreBreakdown?: {

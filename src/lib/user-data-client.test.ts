@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLearningMemory, createLearningProfile } from "@/agent/memory-manager";
 import { saveStoredPracticeGenerations } from "@/lib/practice-history";
 import { saveStoredAnswerDepth, saveStoredKnowledgeMode } from "@/lib/preferences";
-import { saveStoredSessions, setActiveSessionId, type StoredChatSession } from "@/lib/storage";
+import { saveStoredSessions, setActiveSessionId, deleteStoredSession, type StoredChatSession } from "@/lib/storage";
+import { switchWorkspace, getWorkspaceIdentity, isWorkspaceCurrent } from "@/lib/workspace-storage";
 import {
   applyClientUserDataSnapshot,
   collectClientUserDataSnapshot,
@@ -79,6 +80,35 @@ describe("client user data sync", () => {
     expect(snapshot.practiceHistory).toHaveLength(1);
   });
 
+  it("isolates guest and both accounts and rejects an old auth epoch", () => {
+    saveStoredSessions([session("guest-only", 1)]);
+    switchWorkspace("account-a");
+    expect(collectClientUserDataSnapshot().sessions).toEqual([]);
+    saveStoredSessions([session("a-only", 2)]);
+    const old = getWorkspaceIdentity();
+    switchWorkspace(null);
+    expect(collectClientUserDataSnapshot().sessions[0].id).toBe("guest-only");
+    switchWorkspace("account-b");
+    expect(isWorkspaceCurrent(old)).toBe(false);
+    applyClientUserDataSnapshot({ sessions: [], practiceHistory: [] });
+    expect(collectClientUserDataSnapshot().sessions).toEqual([]);
+    switchWorkspace("account-a");
+    expect(collectClientUserDataSnapshot().sessions[0].id).toBe("a-only");
+  });
+
+  it("retains all 80 remote sessions", () => {
+    applyClientUserDataSnapshot({ sessions: Array.from({length: 80}, (_, i) => session(`s-${i}`, i)), practiceHistory: [] });
+    expect(collectClientUserDataSnapshot().sessions).toHaveLength(80);
+  });
+
+  it("does not resurrect a deleted session from an old device snapshot", () => {
+    const old = session("deleted", 1);
+    saveStoredSessions([old]);
+    deleteStoredSession(old.id);
+    applyClientUserDataSnapshot({ sessions: [old], practiceHistory: [] });
+    expect(collectClientUserDataSnapshot().sessions).toEqual([]);
+  });
+
   it("merges remote workspace data without dropping newer local data", () => {
     saveStoredSessions([session("same", 10, "Newer local"), session("local-only", 3)]);
     setActiveSessionId("local-only");
@@ -131,11 +161,14 @@ describe("client user data sync", () => {
       "local-only",
     ]);
     expect(snapshot.sessions.find((item) => item.id === "same")?.title).toBe("Newer local");
-    expect(snapshot.activeSessionId).toBe("remote-only");
+    // Incoming data is retained without navigating an already selected browser tab.
+    expect(snapshot.activeSessionId).toBe("local-only");
     expect(snapshot.practiceHistory.map((item) => item.id)).toEqual([
       "practice-same",
       "practice-remote",
+      expect.stringMatching(/^practice-same\.conflict\./),
     ]);
+    expect(snapshot.practiceHistory[2].content).toBe("remote content");
     expect(snapshot.practiceHistory.find((item) => item.id === "practice-same")?.content).toBe(
       "local content",
     );

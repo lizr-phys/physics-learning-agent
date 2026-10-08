@@ -35,7 +35,7 @@ export function FirstUseGuide() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pt-5">
-      <div className="relative rounded-xl border border-zinc-200 bg-zinc-50 p-4 pr-10">
+      <div className="relative border-b border-zinc-100 py-3 pr-10">
         <button
           type="button"
           onClick={close}
@@ -44,10 +44,7 @@ export function FirstUseGuide() {
         >
           <X size={15} />
         </button>
-        <p className="text-sm font-medium text-zinc-950">Ask directly, or use the tools on the left.</p>
-        <p className="mt-1 text-xs leading-5 text-zinc-600">
-          Try: explain the physical meaning of Green&apos;s functions, generate harmonic oscillator problems, or practice electrostatic boundary-value problems.
-        </p>
+        <p className="text-xs text-zinc-500">Paste a screenshot or attach a photo to ask about diagrams and handwritten work.</p>
       </div>
     </div>
   );

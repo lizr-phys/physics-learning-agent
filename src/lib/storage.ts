@@ -1,5 +1,10 @@
 "use client";
 
+import { runWorkspaceTransaction, workspaceKey, workspaceStorage } from "@/lib/workspace-storage";
+import { getWorkspaceMetadata, saveWorkspaceMetadata } from "@/lib/workspace-metadata";
+import { assertWorkspaceCapacity, mergeWorkspaceSnapshots } from "@/lib/workspace-sync";
+import { readSessionJournal, removeSessionJournal, writeSessionJournal } from "@/lib/session-journal";
+
 import {
   createLearningMemory,
   createLearningProfile,
@@ -41,6 +46,8 @@ export type StoredChatSession = {
     detectedLanguage?: DetectedLanguage;
     referenceProfile?: ReferenceProfileId;
     knowledgeMode?: KnowledgeMode;
+    knowledgeDocumentIds?: string[];
+    knowledgeCourseOnly?: boolean;
   };
   toolContext?: ToolContext;
   memory: LearningMemory;
@@ -55,6 +62,7 @@ export const defaultSessionTitle = "New conversation";
 const legacyDefaultTitles = new Set(["\u65b0\u5b66\u4e60\u4f1a\u8bdd"]);
 const toolSourceLabels: Record<ToolContext["source"], string> = {
   practice: "Practice",
+  knowledge: "Photo problem",
 };
 const validTaskTypes = new Set<string>(taskTypeOptions.map((item) => item.id));
 const validPracticeStyles = new Set<string>(practiceStyleOptions.map((item) => item.id));
@@ -125,20 +133,27 @@ function normalizeContext(context?: Partial<StoredChatSession["context"]>) {
   } satisfies StoredChatSession["context"];
 }
 
-export function getStoredSessions(): StoredChatSession[] {
+export function getStoredSessions(ownerId?: string | null): StoredChatSession[] {
   if (!canUseStorage()) {
     return [];
   }
 
   try {
-    const raw = window.localStorage.getItem(storageKey);
+    const raw = workspaceStorage(ownerId).getItem(storageKey);
     const parsed = raw ? (JSON.parse(raw) as StoredChatSession[]) : [];
-
-    return parsed
+    const metadataRaw = workspaceStorage(ownerId).getItem("sync.v2");
+    const metadata = metadataRaw ? JSON.parse(metadataRaw) : { tombstones: { sessions: {}, practiceHistory: {} } };
+    let merged = { sessions: parsed, practiceHistory: [], updatedAt: 0,
+      tombstones: metadata.tombstones ?? { sessions: {}, practiceHistory: {} } };
+    for (const record of readSessionJournal(ownerId)) {
+      merged = mergeWorkspaceSnapshots(merged, { sessions: [record.session], updatedAt: record.session.updatedAt });
+    }
+    return merged.sessions
+      .filter((session) => !Object.hasOwn(merged.tombstones.sessions, session.id))
       .filter((session) => session.id && session.title)
       .map((session) => {
         const toolContext =
-          session.toolContext?.source === "practice" ? session.toolContext : undefined;
+          session.toolContext?.source === "practice" || session.toolContext?.source === "knowledge" ? session.toolContext : undefined;
 
         return {
           ...session,
@@ -190,7 +205,17 @@ export function compactEmptyManualSessions(preferredSessionId?: string) {
   const nextSessions = compactEmptyManualSessionList(sessions, preferredSessionId);
 
   if (nextSessions.length !== sessions.length) {
-    saveStoredSessions(nextSessions);
+    runWorkspaceTransaction(() => {
+      for (const session of sessions) {
+        if (!nextSessions.some((item) => item.id === session.id)) {
+          const metadata = getWorkspaceMetadata();
+          Object.defineProperty(metadata.tombstones.sessions, session.id, { value: { deletedAt: Date.now(), operationId: crypto.randomUUID() },
+            enumerable: true, configurable: true, writable: true });
+          saveWorkspaceMetadata(metadata); removeSessionJournal(session.id);
+        }
+      }
+      saveStoredSessions(nextSessions);
+    });
   }
   return nextSessions;
 }
@@ -202,23 +227,24 @@ export function saveStoredSessions(sessions: StoredChatSession[]) {
 
   const sorted = sessions
     .filter((session) => session.id && session.title)
+    .filter((session) => !Object.hasOwn(getWorkspaceMetadata().tombstones.sessions, session.id))
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 60);
+    ;
 
-  window.localStorage.setItem(storageKey, JSON.stringify(sorted));
+  assertWorkspaceCapacity({ sessions: sorted });
+
+  workspaceStorage().setItem(storageKey, JSON.stringify(sorted));
   window.dispatchEvent(new Event("pla:sessions-changed"));
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function upsertStoredSession(session: StoredChatSession) {
-  const sessions = getStoredSessions();
-  const existingIndex = sessions.findIndex((item) => item.id === session.id);
-  const nextSessions =
-    existingIndex >= 0
-      ? sessions.map((item) => (item.id === session.id ? session : item))
-      : [session, ...sessions];
-
-  saveStoredSessions(nextSessions);
+  if (Object.hasOwn(getWorkspaceMetadata().tombstones.sessions, session.id)) return;
+  runWorkspaceTransaction(() => {
+    writeSessionJournal(session);
+    // Independent writers retain their own latest row even if a stale tab overwrites this compatible base array.
+    saveStoredSessions(getStoredSessions());
+  });
 }
 
 export function renameStoredSession(sessionId: string, nextTitle: string) {
@@ -228,16 +254,20 @@ export function renameStoredSession(sessionId: string, nextTitle: string) {
     return;
   }
 
-  saveStoredSessions(
-    getStoredSessions().map((session) =>
-      session.id === sessionId ? { ...session, title, updatedAt: Date.now() } : session,
-    ),
-  );
+  const session = getStoredSessions().find((item) => item.id === sessionId);
+  if (session) upsertStoredSession({ ...session, title, updatedAt: Date.now() });
 }
 
 export function deleteStoredSession(sessionId: string) {
-  const remaining = removeSessionFromList(getStoredSessions(), sessionId);
-  saveStoredSessions(remaining);
+  let remaining: StoredChatSession[] = [];
+  runWorkspaceTransaction(() => {
+    const metadata = getWorkspaceMetadata();
+    Object.defineProperty(metadata.tombstones.sessions, sessionId, { value: { deletedAt: Date.now(), operationId: crypto.randomUUID() },
+      enumerable: true, configurable: true, writable: true });
+    saveWorkspaceMetadata(metadata); removeSessionJournal(sessionId);
+    remaining = removeSessionFromList(getStoredSessions(), sessionId);
+    saveStoredSessions(remaining);
+  });
   return remaining.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
@@ -250,18 +280,29 @@ export function getActiveSessionId() {
     return "";
   }
 
-  return window.localStorage.getItem(activeSessionKey) ?? "";
+  const selected = getTabActiveSessionId();
+  if (selected !== null && !Object.hasOwn(getWorkspaceMetadata().tombstones.sessions, selected)) return selected;
+  return workspaceStorage().getItem(activeSessionKey) ?? "";
 }
 
-export function setActiveSessionId(sessionId: string) {
+export function getTabActiveSessionId() {
+  return canUseStorage() ? window.sessionStorage?.getItem(workspaceKey(activeSessionKey)) ?? null : null;
+}
+
+export function setActiveSessionId(sessionId: string, options: { updateTab?: boolean } = {}) {
   if (!canUseStorage()) {
     return;
   }
 
   if (sessionId) {
-    window.localStorage.setItem(activeSessionKey, sessionId);
+    workspaceStorage().setItem(activeSessionKey, sessionId);
   } else {
-    window.localStorage.removeItem(activeSessionKey);
+    workspaceStorage().removeItem(activeSessionKey);
+  }
+
+  if (options.updateTab !== false) {
+    window.sessionStorage?.setItem(workspaceKey(activeSessionKey), sessionId);
+    window.dispatchEvent(new Event("pla:user-data-changed"));
   }
 
   window.dispatchEvent(new Event("pla:active-session-changed"));
@@ -269,14 +310,14 @@ export function setActiveSessionId(sessionId: string) {
 
 export function getStoredLearningProfile() {
   if (!canUseStorage()) {
-    return createLearningProfile();
+    return { ...createLearningProfile(), updatedAt: 0 };
   }
 
   try {
-    const raw = window.localStorage.getItem(learningProfileKey);
-    return raw ? (JSON.parse(raw) as LearningProfile) : createLearningProfile();
+    const raw = workspaceStorage().getItem(learningProfileKey);
+    return raw ? (JSON.parse(raw) as LearningProfile) : { ...createLearningProfile(), updatedAt: 0 };
   } catch {
-    return createLearningProfile();
+    return { ...createLearningProfile(), updatedAt: 0 };
   }
 }
 
@@ -285,7 +326,7 @@ export function saveStoredLearningProfile(profile: LearningProfile) {
     return;
   }
 
-  window.localStorage.setItem(learningProfileKey, JSON.stringify(profile));
+  workspaceStorage().setItem(learningProfileKey, JSON.stringify(profile));
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 

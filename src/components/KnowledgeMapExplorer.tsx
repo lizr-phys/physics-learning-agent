@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Bot, PenLine, Route } from "lucide-react";
+import { Bot, PenLine } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { courseOptions } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeItem } from "@/data/knowledge";
 import { buildChatHref } from "@/lib/routes";
-import {
-  ensureBlockMath,
-  MarkdownRenderer,
-} from "@/components/common/MarkdownRenderer";
+import { ensureBlockMath } from "@/lib/markdown-math";
+import { MarkdownRenderer } from "@/components/common/LazyMarkdownRenderer";
 import type { CourseId } from "@/types/learning";
 
 const hanTextPattern = /[\u3400-\u9fff]/u;
@@ -47,51 +45,24 @@ export function KnowledgeMapExplorer() {
   }
 
   return (
-    <div className="space-y-6 px-4 py-8 md:px-6">
-      <section className="border-b border-zinc-200 pb-6">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">Knowledge Map</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
-          Browse the undergraduate physics knowledge structure. Select a course, inspect the topic sequence, and use the details panel for definitions, prerequisites, formulas, typical problems, and pitfalls.
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 md:px-6">
+      <section>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Knowledge Map</h1>
+        <p className="mt-2 text-sm leading-6 text-zinc-600">
+          Explore concepts, formulas and their connections.
         </p>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[220px_320px_1fr]">
-        <aside className="rounded-md border border-zinc-200 bg-white p-3">
-          <div className="mb-2 flex items-center gap-2 px-2 py-1 text-sm font-semibold text-zinc-950">
-            <Route size={15} />
-            Course
-          </div>
-          <div className="space-y-1">
-            {courseOptions.map((item) => {
-              const active = item.id === course;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => selectCourse(item.id)}
-                  className={
-                    active
-                      ? "w-full rounded-md bg-zinc-950 px-3 py-2 text-left text-sm text-white"
-                      : "w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
-                  }
-                >
-                  <span className="block font-medium">{item.label}</span>
-                  <span className={active ? "text-xs text-zinc-300" : "text-xs text-zinc-500"}>
-                    {getKnowledgeByCourse(item.id).length} topics
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
-        <section className="rounded-md border border-zinc-200 bg-white p-3">
-          <div className="border-b border-zinc-200 px-2 pb-3">
-            <h2 className="text-sm font-semibold text-zinc-950">{selectedCourse?.label}</h2>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">{selectedCourse?.contextSummary}</p>
-          </div>
-          <div className="mt-3 max-h-[680px] space-y-1 overflow-y-auto pr-1">
+      <label className="block max-w-md text-sm text-zinc-700">
+        <span className="sr-only">Course</span>
+        <select aria-label="Course" value={course} onChange={event => selectCourse(event.target.value as CourseId)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3">
+          {courseOptions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+      </label>
+      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <section className="min-w-0">
+          <h2 className="px-2 text-xs font-medium text-zinc-500">{courseItems.length} topics</h2>
+          <div className="mt-3 max-h-60 space-y-1 overflow-y-auto pr-1 lg:max-h-[680px]">
             {courseItems.map((item) => {
               const active = item.id === selectedItem.id;
 
@@ -108,16 +79,13 @@ export function KnowledgeMapExplorer() {
                 >
                   <span className="text-xs text-zinc-500">#{item.studyOrder}</span>
                   <span className="ml-2 text-sm font-medium text-zinc-950">{item.title}</span>
-                  <span className="mt-1 line-clamp-2 block text-xs leading-5 text-zinc-500">
-                    {item.description}
-                  </span>
                 </button>
               );
             })}
           </div>
         </section>
 
-        <section className="rounded-md border border-zinc-200 bg-white p-5">
+        <section className="min-w-0 border-t border-zinc-200 pt-5 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
           <div className="flex flex-col gap-4 border-b border-zinc-200 pb-5 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-xs font-medium text-zinc-500">{selectedCourse?.label}</p>
@@ -147,6 +115,9 @@ export function KnowledgeMapExplorer() {
               </div>
             </section>
 
+            <details className="text-sm text-zinc-600">
+            <summary className="cursor-pointer py-1">Notes, prerequisites and typical problems</summary>
+            <div className="mt-4 space-y-4">
             <section>
               <h3 className="text-sm font-semibold text-zinc-950">Textbook-Style Note</h3>
               <div className="mt-2 text-sm leading-6 text-zinc-600">
@@ -175,6 +146,8 @@ export function KnowledgeMapExplorer() {
                 <MarkdownRenderer content={visibleTypicalProblems.map((problem) => `- ${problem}`).join("\n")} />
               </div>
             </section>
+            </div>
+            </details>
 
             {selectedItem.keyFormulas?.length ? (
               <section>
@@ -188,19 +161,19 @@ export function KnowledgeMapExplorer() {
             ) : null}
 
             {visibleMisunderstandings.length ? (
-              <section>
-                <h3 className="text-sm font-semibold text-zinc-950">Common Pitfalls</h3>
+              <details>
+                <summary className="cursor-pointer text-sm font-semibold text-zinc-950">Common Pitfalls</summary>
                 <div className="mt-2 text-sm leading-6 text-zinc-600">
                   <MarkdownRenderer
                     content={visibleMisunderstandings.map((item) => `- ${item}`).join("\n")}
                   />
                 </div>
-              </section>
+              </details>
             ) : null}
 
             <div className="flex flex-wrap gap-2">
               {visibleTags.map((tag) => (
-                <span key={tag} className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600">
+                <span key={tag} className="text-xs text-zinc-500">
                   {tag}
                 </span>
               ))}

@@ -1,26 +1,33 @@
 "use client";
 
+import { workspaceStorage, getWorkspaceIdentity, isWorkspaceCurrent, type WorkspaceIdentity } from "@/lib/workspace-storage";
+
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { ImageAttachmentInput } from "@/components/common/ImageAttachments";
+import type { ImageAttachment } from "@/types/learning";
+import { KnowledgeScopeControl } from "@/components/chat/KnowledgeScopeControl";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ContextBanner } from "@/components/chat/ContextBanner";
 import { FirstUseGuide } from "@/components/chat/FirstUseGuide";
 import { GenerationStatus } from "@/components/common/GenerationStatus";
-import { buildConversationSummary } from "@/agent/context-manager";
 import { matchesGeneration, type ActiveGenerationDescriptor } from "@/agent/generation-guard";
 import { classifyAgentIntent } from "@/agent/intent-classifier";
 import {
   createLearningMemory,
-  updateLearningMemory,
+  commitLearningMemory,
   updateLearningProfile,
 } from "@/agent/memory-manager";
 import { courseOptions } from "@/data/courses";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
+import { buildContinuationMessage, withAssistantMessage, isAbortLikeError } from "@/lib/chat-generation";
+import { createDraftCheckpoint } from "@/lib/draft-checkpoint";
+import { WorkspaceQuotaError } from "@/lib/workspace-sync";
 import { getClientProviderOverride } from "@/lib/client-provider";
 import { detectLanguage } from "@/lib/language";
 import {
@@ -50,6 +57,9 @@ import {
   type CourseId,
   type KnowledgeMode,
   type LearningMemory,
+  type GenerationDiagnostics,
+  type RagContext,
+  type RetrievalStatus,
   type TaskTypeId,
   type ToolContext,
 } from "@/types/learning";
@@ -71,7 +81,7 @@ function getStoredModel() {
     return "";
   }
 
-  return window.localStorage.getItem("pla.deepseek.model") ?? "";
+  return workspaceStorage().getItem("pla.deepseek.model") || "deepseek-flash";
 }
 
 function createMessageId(prefix: string) {
@@ -89,6 +99,7 @@ function debugStream(event: string, detail: Record<string, unknown>) {
 }
 
 type ActiveGeneration = ActiveGenerationDescriptor & {
+  workspace: WorkspaceIdentity;
   abortController: AbortController;
   startedAt: number;
 };
@@ -104,56 +115,13 @@ type PendingContinuation = {
 
 type SessionContextSnapshot = StoredChatSession["context"];
 
-function buildContinuationMessage(originalMessage: string, partialContent: string) {
-  return `The previous answer stopped at the following point. Do not repeat existing content. Continue from the interruption point while preserving the structure, numbering, notation, language, and LaTeX format.
-
-Original user request:
-${originalMessage}
-
-Generated content:
-${partialContent}`;
-}
-
-function withAssistantMessage(
-  messagesBeforeAssistant: ChatMessage[],
-  assistantMessageId: string,
-  content: string,
-  status: ChatMessage["status"] = "streaming",
-  requestId?: string,
-) {
-  const assistantMessage: ChatMessage = {
-    id: assistantMessageId,
-    role: "assistant",
-    content,
-    createdAt: Date.now(),
-    status,
-    requestId,
-  };
-  const existingIndex = messagesBeforeAssistant.findIndex(
-    (message) => message.id === assistantMessageId,
-  );
-
-  if (existingIndex < 0) {
-    return [...messagesBeforeAssistant, assistantMessage];
-  }
-
-  return messagesBeforeAssistant.map((message, index) =>
-    index === existingIndex ? { ...message, ...assistantMessage } : message,
-  );
-}
-
-function isAbortLikeError(error: unknown) {
-  if (error instanceof AgentStreamError) {
-    return error.reason === "abort";
-  }
-
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 export function ChatWorkspace() {
   const searchParams = useSearchParams();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLElement | null>(null);
+  const [footerHeight, setFooterHeight] = useState(160);
   const activeGenerationRef = useRef<ActiveGeneration | null>(null);
+  const draftCheckpointRef = useRef<{flush:()=>void;discard:()=>void} | null>(null);
   const currentSessionIdRef = useRef("");
   const isNearBottomRef = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -166,7 +134,12 @@ export function ChatWorkspace() {
     searchParams.get("knowledgePoint") ?? searchParams.get("knowledgeId") ?? "",
   );
   const [useRag, setUseRag] = useState(false);
+  const [knowledgeDocumentIds, setKnowledgeDocumentIds] = useState<string[]>([]);
+  const [knowledgeCourseOnly, setKnowledgeCourseOnly] = useState(false);
   const [model, setModel] = useState(() => getStoredModel());
+  const [draftImages,setDraftImages]=useState<ImageAttachment[]>([]);
+  const [imagesBusy,setImagesBusy]=useState(false);
+  const [imageDraftEpoch,setImageDraftEpoch]=useState(0);
   const [answerDepth, setAnswerDepth] = useState<AnswerDepth>(() =>
     getStoredAnswerDepth(),
   );
@@ -180,12 +153,20 @@ export function ChatWorkspace() {
   const [toolContext, setToolContext] = useState<ToolContext | undefined>();
   const [memory, setMemory] = useState<LearningMemory>(() => createLearningMemory());
   const [error, setError] = useState("");
+  const [generationStage, setGenerationStage] = useState<string>();
   const [pendingContinuation, setPendingContinuation] = useState<PendingContinuation | null>(null);
   const [activeGeneration, setActiveGeneration] = useState<ActiveGeneration | null>(null);
 
   const isCurrentSessionGenerating = activeGeneration?.sessionId === sessionId;
   const currentPendingContinuation =
     pendingContinuation?.sessionId === sessionId ? pendingContinuation : null;
+
+  useEffect(() => {
+    if (!footerRef.current) return;
+    const observer = new ResizeObserver(entries => setFooterHeight(entries[0].contentRect.height));
+    observer.observe(footerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     currentSessionIdRef.current = sessionId;
@@ -203,7 +184,7 @@ export function ChatWorkspace() {
 
   const isRequestStillActive = useCallback(
     (requestId: string, targetSessionId: string, assistantMessageId: string) =>
-      matchesGeneration(activeGenerationRef.current, {
+      Boolean(activeGenerationRef.current && isWorkspaceCurrent(activeGenerationRef.current.workspace)) && matchesGeneration(activeGenerationRef.current, {
         requestId,
         sessionId: targetSessionId,
         assistantMessageId,
@@ -214,6 +195,8 @@ export function ChatWorkspace() {
   const cancelActiveGeneration = useCallback(
     (reason: string) => {
       const active = activeGenerationRef.current;
+      draftCheckpointRef.current?.flush();
+      draftCheckpointRef.current = null;
 
       if (active) {
         debugStream("stream:abort", {
@@ -226,18 +209,24 @@ export function ChatWorkspace() {
           (item) => item.id === active.sessionId,
         );
 
-        if (session) {
+        if (session && isWorkspaceCurrent(active.workspace)) {
           const interruptedMessages = session.messages.map((message) =>
             message.id === active.assistantMessageId &&
             message.status === "streaming"
-              ? { ...message, status: "interrupted" as const }
+              ? { ...message, status: "interrupted" as const,
+                  generation: { ...(message.generation ?? {}), requestId: active.requestId, terminal: "cancelled" as const, reason,
+                    startedAt: active.startedAt, durationMs: Date.now() - active.startedAt, outputChars: message.content.length },
+                  generationAttempts: [...(message.generationAttempts ?? []).filter(attempt => attempt.requestId !== active.requestId),
+                    { ...(message.generation ?? {}), requestId: active.requestId, terminal: "cancelled" as const, reason,
+                      startedAt: active.startedAt, durationMs: Date.now() - active.startedAt, outputChars: message.content.length }],
+                }
               : message,
           );
-          upsertStoredSession({
-            ...session,
-            messages: interruptedMessages,
-            updatedAt: Date.now(),
-          });
+          try {
+            upsertStoredSession({ ...session, messages: interruptedMessages, updatedAt: Date.now() });
+          } catch {
+            setError("The response remains on screen, but could not be saved. Copy or export it before leaving.");
+          }
 
           if (currentSessionIdRef.current === active.sessionId) {
             setMessages(interruptedMessages);
@@ -322,14 +311,24 @@ export function ChatWorkspace() {
         memory: options.memorySnapshot,
       };
 
-      upsertStoredSession(session);
-      return true;
+      try {
+        upsertStoredSession(session);
+        return true;
+      } catch (storageError) {
+        const message = storageError instanceof WorkspaceQuotaError ? storageError.message
+          : "The response could not be saved. Copy or export it before leaving, then free browser storage and retry.";
+        setError(message);
+        window.dispatchEvent(new CustomEvent("pla:storage-failed", { detail: message }));
+        return false;
+      }
     },
     [],
   );
 
   const loadSession = useCallback(
     (session: StoredChatSession) => {
+      const switchingConversation = currentSessionIdRef.current !== session.id;
+      if (switchingConversation) {setDraftImages([]);setImagesBusy(false);setImageDraftEpoch(value=>value+1);}
       if (activeGenerationRef.current && activeGenerationRef.current.sessionId !== session.id) {
         cancelActiveGeneration("session-switch");
       }
@@ -340,19 +339,20 @@ export function ChatWorkspace() {
       });
       markShouldFollowOutput();
       setSessionIdSafe(session.id);
-      setActiveSessionId(session.id);
+      if (switchingConversation) setActiveSessionId(session.id);
       setMessages(session.messages);
       setCourse(session.context.course);
       setTaskType(session.context.taskType);
       setKnowledgePoint(session.context.knowledgePoint ?? "");
       setUseRag(Boolean(session.context.useRag));
+      setKnowledgeDocumentIds(session.context.knowledgeDocumentIds ?? []);
+      setKnowledgeCourseOnly(Boolean(session.context.knowledgeCourseOnly));
       setToolContext(session.toolContext);
       setMemory(session.memory ?? createLearningMemory());
       setModel(session.context.model ?? getStoredModel());
       setAnswerDepth(session.context.answerDepth ?? getStoredAnswerDepth());
       setKnowledgeMode(session.context.knowledgeMode ?? getStoredKnowledgeMode());
-      setInput("");
-      setError("");
+      if (switchingConversation) { setInput(""); setError(""); }
       setPendingContinuation((current) => (current?.sessionId === session.id ? current : null));
     },
     [cancelActiveGeneration, markShouldFollowOutput, setSessionIdSafe],
@@ -388,6 +388,7 @@ export function ChatWorkspace() {
 
   useEffect(() => {
     function handleNewSession() {
+      setDraftImages([]);setImagesBusy(false);setImageDraftEpoch(value=>value+1);
       cancelActiveGeneration("new-session");
       markShouldFollowOutput();
       setSessionIdSafe("");
@@ -409,6 +410,14 @@ export function ChatWorkspace() {
       }
     }
 
+    function handleWorkspaceLoaded() {
+      if (activeGenerationRef.current) return;
+      const activeId = currentSessionIdRef.current || getActiveSessionId();
+      const session = getStoredSessions().find(item => item.id === activeId);
+      if (session) loadSession(session);
+      else if (currentSessionIdRef.current) handleNewSession();
+    }
+
     function handleDeleteSession(event: Event) {
       const deletedSessionId = (event as CustomEvent<string>).detail;
 
@@ -418,6 +427,7 @@ export function ChatWorkspace() {
       }
 
       if (currentSessionIdRef.current === deletedSessionId) {
+        setDraftImages([]); setImagesBusy(false); setImageDraftEpoch(value => value + 1);
         markShouldFollowOutput();
         setSessionIdSafe("");
         setMessages([]);
@@ -429,11 +439,21 @@ export function ChatWorkspace() {
       }
     }
 
+    function flushDraft() { draftCheckpointRef.current?.flush(); }
+    window.addEventListener("pagehide", flushDraft);
+    document.addEventListener("visibilitychange", flushDraft);
     window.addEventListener("pla:new-session", handleNewSession);
+    window.addEventListener("pla:workspace-will-change", handleNewSession);
+    window.addEventListener("pla:workspace-loaded", handleWorkspaceLoaded);
     window.addEventListener("pla:load-session", handleLoadSession);
     window.addEventListener("pla:delete-session", handleDeleteSession);
     return () => {
+      window.removeEventListener("pagehide", flushDraft);
+      document.removeEventListener("visibilitychange", flushDraft);
       window.removeEventListener("pla:new-session", handleNewSession);
+      window.removeEventListener("pla:workspace-will-change", handleNewSession);
+      window.removeEventListener("pla:workspace-loaded", handleWorkspaceLoaded);
+      cancelActiveGeneration("unmount");
       window.removeEventListener("pla:load-session", handleLoadSession);
       window.removeEventListener("pla:delete-session", handleDeleteSession);
     };
@@ -444,7 +464,7 @@ export function ChatWorkspace() {
       return;
     }
 
-    const frame = window.requestAnimationFrame(() => scrollToBottom());
+    const frame = window.requestAnimationFrame(() => { if (isNearBottomRef.current) scrollToBottom(); });
     return () => window.cancelAnimationFrame(frame);
   }, [messages, isCurrentSessionGenerating, scrollToBottom]);
 
@@ -463,8 +483,26 @@ export function ChatWorkspace() {
       existingAssistantContent?: string;
       originalRequest?: AgentRequest;
     }) => {
+      let normalizedRequest = options.request;
+      let serverMemory: LearningMemory | undefined;
+      const normalizedContext = { ...options.context };
+      let sources: RagContext["snippets"] | undefined;
+      let retrievalStatus: RetrievalStatus | undefined;
+      const previousAssistant = getStoredSessions().find(session => session.id === options.targetSessionId)?.messages.find(message => message.id === options.assistantMessageId);
+      const previousAttempts = [...new Map([...(previousAssistant?.generationAttempts ?? []), ...(previousAssistant?.generation ? [previousAssistant.generation] : [])].filter(attempt => attempt.requestId !== options.requestId).map(attempt => [attempt.requestId, attempt])).values()];
+      const diagnostics: GenerationDiagnostics = {
+        requestId: options.requestId, provider: options.request.clientProvider?.provider ?? "server-default",
+        model: options.request.clientProvider?.model ?? options.request.model,
+        intent: options.request.intent, terminal: "interrupted", startedAt: Date.now(),
+      };
+      const decorate = (next: ChatMessage[]) => next.map(message => message.id === options.assistantMessageId ? {
+        ...message, sources, retrievalStatus,
+        generation: { ...diagnostics, durationMs: Date.now() - diagnostics.startedAt!, outputChars: message.content.length },
+        generationAttempts: [...previousAttempts, { ...diagnostics, durationMs: Date.now() - diagnostics.startedAt!, outputChars: message.content.length }],
+      } : message);
       const abortController = new AbortController();
       const active: ActiveGeneration = {
+        workspace: getWorkspaceIdentity(),
         sessionId: options.targetSessionId,
         assistantMessageId: options.assistantMessageId,
         requestId: options.requestId,
@@ -473,6 +511,13 @@ export function ChatWorkspace() {
       };
 
       setActiveGenerationSafe(active);
+      const checkpoint = createDraftCheckpoint<ChatMessage[]>(nextMessages => {
+        const persisted = persistTargetSession({ targetSessionId: options.targetSessionId,
+          nextMessages, firstMessage: options.firstMessage, context: normalizedContext,
+          toolContextSnapshot: options.toolContextSnapshot, memorySnapshot: options.memorySnapshot, allowCreate: false });
+        if (!persisted) abortController.abort();
+      }, () => isWorkspaceCurrent(active.workspace) && isRequestStillActive(options.requestId, options.targetSessionId, options.assistantMessageId));
+      draftCheckpointRef.current = checkpoint;
       debugStream("stream:start", {
         sessionId: options.targetSessionId,
         requestId: options.requestId,
@@ -481,6 +526,7 @@ export function ChatWorkspace() {
       markShouldFollowOutput();
       setError("");
       setPendingContinuation(null);
+      setGenerationStage(undefined);
 
       try {
         const generated = await requestAgentStream(
@@ -504,34 +550,43 @@ export function ChatWorkspace() {
             const assistantContent = options.appendToExistingAssistant
               ? `${options.existingAssistantContent ?? ""}${partial}`
               : partial;
-            const nextMessages = withAssistantMessage(
+            const nextMessages = decorate(withAssistantMessage(
               options.messagesBeforeAssistant,
               options.assistantMessageId,
               assistantContent,
               "streaming",
               options.requestId,
-            );
-            const persisted = persistTargetSession({
-              targetSessionId: options.targetSessionId,
-              nextMessages,
-              firstMessage: options.firstMessage,
-              context: options.context,
-              toolContextSnapshot: options.toolContextSnapshot,
-              memorySnapshot: options.memorySnapshot,
-              allowCreate: false,
-            });
-
-            if (!persisted) {
-              abortController.abort();
-              setActiveGenerationSafe(null);
-              return;
-            }
+            ));
+            checkpoint.update(nextMessages);
 
             if (currentSessionIdRef.current === options.targetSessionId) {
               setMessages(nextMessages);
             }
           },
-          { signal: abortController.signal, throttleMs: 64, idleTimeoutMs: 120000 },
+          { signal: abortController.signal, throttleMs: 64, idleTimeoutMs: 120000,
+            onEvent: event => {
+              if (!isRequestStillActive(options.requestId, options.targetSessionId, options.assistantMessageId)) return;
+              if (event.type === "delta" && event.text.trim()) diagnostics.firstTokenMs ??= Date.now() - diagnostics.startedAt!;
+              if (event.type === "stage") setGenerationStage(event.stage);
+              if (event.type === "context") {
+                normalizedRequest = { ...normalizedRequest, ...event.context };
+                normalizedContext.course = event.context.course ?? normalizedContext.course;
+                normalizedContext.knowledgePoint = event.context.knowledgePoint;
+                normalizedContext.detectedLanguage = event.context.detectedLanguage;
+                normalizedContext.practiceStyle = event.context.practiceStyle;
+                normalizedContext.referenceProfile = event.context.referenceProfile;
+                setCourse(normalizedContext.course);
+                setKnowledgePoint(normalizedContext.knowledgePoint ?? "");
+              }
+              if (event.type === "sources") {
+                sources = event.sources;
+                if (["disabled", "unauthenticated", "no_match", "retrieved", "failed"].includes(event.status ?? "")) retrievalStatus = event.status as RetrievalStatus;
+              }
+              if (event.type === "complete") { diagnostics.terminal = "complete"; diagnostics.finishReason = event.finishReason; diagnostics.usage = event.usage; }
+              if (event.type === "truncated" || event.type === "interrupted" || event.type === "cancelled") { diagnostics.terminal = event.type; diagnostics.reason = event.reason; if ("usage" in event) diagnostics.usage = event.usage; }
+              if (event.type === "memory") serverMemory = event.memory;
+            },
+          },
         );
 
         if (
@@ -544,39 +599,41 @@ export function ChatWorkspace() {
           return;
         }
 
+        checkpoint.discard();
         const finalAssistantContent = options.appendToExistingAssistant
           ? `${options.existingAssistantContent ?? ""}${generated}`
           : generated;
-        const finalMessages = withAssistantMessage(
+        diagnostics.terminal = "complete";
+        const finalMessages = decorate(withAssistantMessage(
           options.messagesBeforeAssistant,
           options.assistantMessageId,
           finalAssistantContent,
           "complete",
           options.requestId,
-        );
-        const finalMemory = {
-          ...options.memorySnapshot,
-          conversationSummary: buildConversationSummary(
-            finalMessages,
-            options.memorySnapshot,
-          ),
-          updatedAt: Date.now(),
-        };
+        ));
+        const finalMemory = serverMemory ?? commitLearningMemory(normalizedRequest, finalAssistantContent);
         const persisted = persistTargetSession({
           targetSessionId: options.targetSessionId,
           nextMessages: finalMessages,
           firstMessage: options.firstMessage,
-          context: options.context,
+          context: normalizedContext,
           toolContextSnapshot: options.toolContextSnapshot,
           memorySnapshot: finalMemory,
           allowCreate: false,
         });
 
-        if (persisted && currentSessionIdRef.current === options.targetSessionId) {
+        if (currentSessionIdRef.current === options.targetSessionId) {
           setMessages(finalMessages);
           setMemory(finalMemory);
         }
-        clearLastApiError();
+        if (persisted) {
+          try {
+            saveStoredLearningProfile(updateLearningProfile(getStoredLearningProfile(), finalMemory));
+            clearLastApiError();
+          } catch {
+            setError("The answer was saved, but learning preferences could not be saved. Free browser storage and retry saving.");
+          }
+        }
       } catch (requestError) {
         if (
           !isRequestStillActive(
@@ -593,35 +650,39 @@ export function ChatWorkspace() {
           return;
         }
 
+        checkpoint.discard();
         const streamError =
           requestError instanceof AgentStreamError
             ? requestError
             : new AgentStreamError(
                 requestError instanceof Error ? requestError.message : "Request failed.",
               );
+        diagnostics.terminal = streamError.reason === "abort" ? "cancelled" : streamError.reason === "length" ? "truncated" : "interrupted";
+        diagnostics.reason ??= streamError.reason;
         const partialContent = options.appendToExistingAssistant
           ? `${options.existingAssistantContent ?? ""}${streamError.partialContent}`
           : streamError.partialContent;
 
-        if (partialContent) {
-          const partialMessages = withAssistantMessage(
+        let partialSaved = false;
+        {
+          const partialMessages = decorate(withAssistantMessage(
             options.messagesBeforeAssistant,
             options.assistantMessageId,
             partialContent,
             streamError.reason === "abort" ? "interrupted" : "error",
             options.requestId,
-          );
-          const persisted = persistTargetSession({
+          ));
+          partialSaved = persistTargetSession({
             targetSessionId: options.targetSessionId,
             nextMessages: partialMessages,
             firstMessage: options.firstMessage,
-            context: options.context,
+            context: normalizedContext,
             toolContextSnapshot: options.toolContextSnapshot,
             memorySnapshot: options.memorySnapshot,
             allowCreate: false,
           });
 
-          if (persisted && currentSessionIdRef.current === options.targetSessionId) {
+          if (currentSessionIdRef.current === options.targetSessionId) {
             setMessages(partialMessages);
           }
 
@@ -636,17 +697,17 @@ export function ChatWorkspace() {
         }
 
         if (currentSessionIdRef.current === options.targetSessionId) {
-          const message = isAbortLikeError(streamError)
+          const message = !partialSaved ? "The current response is on screen but could not be saved. Copy it before leaving, then free storage and retry."
+            : isAbortLikeError(streamError)
             ? "Generation stopped. The current content has been preserved and can be continued."
             : streamError.message || "Request failed.";
           setError(message);
-          saveLastApiError({
-            message,
-            status: streamError.reason,
-            occurredAt: Date.now(),
-          });
+          try { saveLastApiError({ message, status: streamError.reason, occurredAt: Date.now() }); }
+          catch { /* The save-state warning already reports the storage failure. */ }
         }
       } finally {
+        checkpoint.discard();
+        if (draftCheckpointRef.current === checkpoint) draftCheckpointRef.current = null;
         if (
           isRequestStillActive(
             options.requestId,
@@ -682,9 +743,9 @@ export function ChatWorkspace() {
   }, []);
 
   const submitMessage = useCallback(async () => {
-    const message = input.trim();
+    const message = input.trim() || (draftImages.length ? (memory.recentLanguage === "zh" || navigator.language.startsWith("zh") ? "请帮我理解这些图片。" : "Help me understand these images.") : "");
 
-    if (!message || isCurrentSessionGenerating) {
+    if (!message || isCurrentSessionGenerating || imagesBusy) {
       return;
     }
 
@@ -698,6 +759,7 @@ export function ChatWorkspace() {
       id: createMessageId("user"),
       role: "user",
       content: message,
+      images: draftImages.length ? draftImages : undefined,
       createdAt: now,
     };
     const assistantMessageId = createMessageId("assistant");
@@ -722,6 +784,8 @@ export function ChatWorkspace() {
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
     };
     const toolContextSnapshot = toolContext;
     const intent = classifyAgentIntent({
@@ -731,25 +795,10 @@ export function ChatWorkspace() {
       knowledgePoint: knowledgePoint || undefined,
       toolContext,
     });
-    const memorySnapshot = updateLearningMemory(
-      memory,
-      {
-        message,
-        course,
-        taskType,
-        knowledgePoint: knowledgePoint || undefined,
-        toolContext,
-        detectedLanguage,
-      },
-      intent,
-    );
-    contextSnapshot.practiceStyle = memorySnapshot.practiceStyle;
-    contextSnapshot.referenceProfile = memorySnapshot.referenceProfile;
-    saveStoredLearningProfile(
-      updateLearningProfile(getStoredLearningProfile(), memorySnapshot),
-    );
+    const memorySnapshot = memory;
     const request: AgentRequest = {
       message,
+      images: draftImages.length ? draftImages : undefined,
       intent,
       module: "chat",
       course,
@@ -761,17 +810,16 @@ export function ChatWorkspace() {
       model: model || undefined,
       memory: memorySnapshot,
       answerDepth,
-      detectedLanguage: memorySnapshot.recentLanguage,
-      practiceStyle: memorySnapshot.practiceStyle,
-      referenceProfile: memorySnapshot.referenceProfile,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
       clientProvider: getClientProviderOverride(),
       conversationId: targetSessionId,
       assistantMessageId,
       requestId,
     };
 
-    persistTargetSession({
+    const saved = persistTargetSession({
       targetSessionId,
       nextMessages: initialMessages,
       firstMessage: nextMessages[0]?.content ?? message,
@@ -780,6 +828,8 @@ export function ChatWorkspace() {
       memorySnapshot,
       allowCreate: true,
     });
+    if (!saved) return;
+    setDraftImages([]);setImagesBusy(false);setImageDraftEpoch(value=>value+1);
     setSessionIdSafe(targetSessionId);
     setActiveSessionId(targetSessionId);
     setMessages(initialMessages);
@@ -802,9 +852,13 @@ export function ChatWorkspace() {
     answerDepth,
     course,
     input,
+    draftImages,
+    imagesBusy,
     isCurrentSessionGenerating,
     knowledgePoint,
     knowledgeMode,
+    knowledgeDocumentIds,
+    knowledgeCourseOnly,
     messages,
     memory,
     model,
@@ -837,10 +891,10 @@ export function ChatWorkspace() {
     const continuationHistory: ChatMessage[] = [
       ...(currentPendingContinuation.request.history ?? []),
       assistantHistoryMessage,
-    ].slice(-16);
+    ];
     const continuationRequest: AgentRequest = {
       ...currentPendingContinuation.request,
-      message: buildContinuationMessage(originalMessage, currentPendingContinuation.partialContent),
+      message: buildContinuationMessage(originalMessage),
       history: continuationHistory,
       conversationId: currentPendingContinuation.sessionId,
       assistantMessageId: currentPendingContinuation.assistantMessageId,
@@ -851,6 +905,8 @@ export function ChatWorkspace() {
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
       clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
@@ -864,6 +920,8 @@ export function ChatWorkspace() {
       practiceStyle: memory.practiceStyle,
       referenceProfile: memory.referenceProfile,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
     };
 
     await runAssistantRequest({
@@ -888,6 +946,8 @@ export function ChatWorkspace() {
     isCurrentSessionGenerating,
     knowledgePoint,
     knowledgeMode,
+    knowledgeDocumentIds,
+    knowledgeCourseOnly,
     memory,
     model,
     runAssistantRequest,
@@ -915,6 +975,8 @@ export function ChatWorkspace() {
       memory,
       answerDepth,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
       clientProvider: getClientProviderOverride(),
     };
     const contextSnapshot: SessionContextSnapshot = {
@@ -925,6 +987,8 @@ export function ChatWorkspace() {
       useRag,
       answerDepth,
       knowledgeMode,
+      knowledgeDocumentIds,
+      knowledgeCourseOnly,
     };
 
     await runAssistantRequest({
@@ -947,6 +1011,8 @@ export function ChatWorkspace() {
     isCurrentSessionGenerating,
     knowledgePoint,
     knowledgeMode,
+    knowledgeDocumentIds,
+    knowledgeCourseOnly,
     memory,
     model,
     runAssistantRequest,
@@ -991,7 +1057,7 @@ export function ChatWorkspace() {
       }
 
       const nextMessages = currentSession.messages.map((message) =>
-        message.id === messageId ? { ...message, feedback } : message,
+        message.id === messageId ? { ...message, feedback: feedback ? {...feedback, updatedAt: Math.max(feedback.updatedAt, (message.feedbackDeletedAt ?? 0) + 1)} : undefined, feedbackDeletedAt: feedback ? message.feedbackDeletedAt : Date.now() } : message,
       );
 
       upsertStoredSession({
@@ -1031,7 +1097,7 @@ export function ChatWorkspace() {
         />
         <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pb-6">
           {isCurrentSessionGenerating ? (
-            <GenerationStatus
+            <GenerationStatus stage={generationStage}
               module="chat"
               taskType={taskType}
               hasContent={Boolean(messages.at(-1)?.content)}
@@ -1040,14 +1106,14 @@ export function ChatWorkspace() {
           <ErrorMessage message={error} />
           {currentPendingContinuation ? (
             <div className="flex flex-wrap gap-2">
-              <button
+              {currentPendingContinuation.partialContent ? <button
                 type="button"
                 onClick={() => void continueGeneration()}
                 disabled={isCurrentSessionGenerating}
                 className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 disabled:cursor-not-allowed disabled:text-zinc-400"
               >
                 Continue generation
-              </button>
+              </button> : null}
               <button
                 type="button"
                 onClick={() => void retryGeneration()}
@@ -1065,7 +1131,8 @@ export function ChatWorkspace() {
         <button
           type="button"
           onClick={() => scrollToBottom({ smooth: true })}
-          className="absolute bottom-32 left-1/2 z-30 -translate-x-1/2 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 md:bottom-28"
+          style={{bottom: footerHeight + 12}}
+          className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50"
         >
           <span className="flex items-center gap-1">
             <ArrowDown size={14} />
@@ -1074,9 +1141,12 @@ export function ChatWorkspace() {
         </button>
       ) : null}
 
-      <footer className="z-20 shrink-0 border-t border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <footer ref={footerRef} className="z-20 shrink-0 border-t border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)]">
         <form onSubmit={handleSubmit} className="mx-auto w-full max-w-3xl px-4 py-3">
           <ChatInput
+            attachmentControls={<ImageAttachmentInput key={`${sessionId}-${imageDraftEpoch}`} images={draftImages} onChange={setDraftImages} onBusyChange={setImagesBusy} disabled={isCurrentSessionGenerating} pasteTargetId="chat-message-input"/>}
+            hasImages={draftImages.length>0}
+            attachmentsBusy={imagesBusy}
             value={input}
             isLoading={isCurrentSessionGenerating}
             onChange={setInput}
@@ -1093,9 +1163,9 @@ export function ChatWorkspace() {
               saveStoredKnowledgeMode(nextMode);
             }}
           />
-          <p className="mt-2 text-center text-xs text-zinc-500">
-            Model-generated responses may contain errors. Check formulas and derivations against
-            your course materials.
+          {knowledgeMode !== "never" ? <KnowledgeScopeControl documentIds={knowledgeDocumentIds} courseOnly={knowledgeCourseOnly} onChange={(ids, only) => { setKnowledgeDocumentIds(ids); setKnowledgeCourseOnly(only); }} /> : null}
+          <p className="mt-2 pb-4 text-center text-xs text-zinc-500">
+            Check important results against your course materials.
           </p>
         </form>
       </footer>

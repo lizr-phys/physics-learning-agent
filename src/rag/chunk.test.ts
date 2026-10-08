@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { chunkMarkdownDocument } from "@/rag/chunk";
+import { chunkMarkdownDocument, withStableChunkIdentity } from "@/rag/chunk";
 
 describe("LangChain document chunking", () => {
+  it("keeps an unchanged excerpt identity when earlier chunks are added", () => {
+    const original = { id: "legacy:0", source: "notes.md", heading: "Original section", content: "An unchanged formula $a=b$.", tokens: [] };
+    const first = withStableChunkIdentity([original], { documentId: "doc-stable", version: 1 });
+    const next = withStableChunkIdentity([{ ...original, content: "An inserted earlier section." }, original], { documentId: "doc-stable", version: 2 });
+    expect(next[1].id).toBe(first[0].id);
+    expect(next[1].metadata?.contentHash).toBe(first[0].metadata?.contentHash);
+    expect(next[1].metadata?.version).toBe(2);
+    expect(next[0].id).not.toBe(first[0].id);
+  });
   it("chunks Markdown notes and keeps searchable headings", async () => {
     const chunks = await chunkMarkdownDocument(
       {

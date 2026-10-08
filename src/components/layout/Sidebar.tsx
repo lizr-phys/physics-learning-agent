@@ -296,7 +296,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-200 bg-[#f7f7f8]">
+    <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
       <div className="border-b border-zinc-200 p-4">
         <Link href="/chat" onClick={onNavigate} className="flex items-center gap-2 text-sm font-semibold text-zinc-950">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
@@ -304,7 +304,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </span>
           Physics Learning Agent
         </Link>
-        <p className="mt-1 text-xs text-zinc-500">Undergraduate physics workspace</p>
         <button
           type="button"
           onClick={newSession}

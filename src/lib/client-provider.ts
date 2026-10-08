@@ -1,3 +1,4 @@
+import { workspaceStorage } from "@/lib/workspace-storage";
 import type {
   ClientProviderConfig,
   ClientProviderId,
@@ -36,8 +37,8 @@ export const clientProviderPresets: ClientProviderPreset[] = [
     label: "DeepSeek",
     type: "openai-compatible",
     defaultBaseUrl: "https://api.deepseek.com",
-    defaultModel: "deepseek-chat",
-    description: "DeepSeek OpenAI-compatible chat endpoint.",
+    defaultModel: "deepseek-flash",
+    description: "V4.1 Flash supports text and images (deepseek-flash).",
     baseUrlEditable: true,
   },
   {
@@ -126,7 +127,7 @@ export type ClientProviderPublicConfig = {
 
 export function getClientProviderPublicConfig(): ClientProviderPublicConfig {
   if (!hasBrowserStorage()) {
-    const preset = getClientProviderPreset("openai");
+    const preset = getClientProviderPreset("deepseek");
 
     return {
       enabled: false,
@@ -139,15 +140,15 @@ export function getClientProviderPublicConfig(): ClientProviderPublicConfig {
     };
   }
 
-  const preset = getClientProviderPreset(window.localStorage.getItem(providerKey));
-  const savedBaseUrl = window.localStorage.getItem(baseUrlKey);
-  const savedModel = window.localStorage.getItem(modelKey);
+  const preset = getClientProviderPreset(workspaceStorage().getItem(providerKey) ?? "deepseek");
+  const savedBaseUrl = workspaceStorage().getItem(baseUrlKey);
+  const savedModel = workspaceStorage().getItem(modelKey);
 
   return {
-    enabled: window.localStorage.getItem(enabledKey) === "1",
+    enabled: workspaceStorage().getItem(enabledKey) === "1",
     provider: preset.id,
     type: preset.type,
-    label: window.localStorage.getItem(labelKey) || preset.label,
+    label: workspaceStorage().getItem(labelKey) || preset.label,
     baseUrl: savedBaseUrl ?? preset.defaultBaseUrl ?? "",
     model: savedModel || preset.defaultModel,
     hasSessionKey: Boolean(window.sessionStorage.getItem(apiKeySessionKey)),
@@ -167,11 +168,11 @@ export function saveClientProviderPublicConfig(input: {
 
   const preset = getClientProviderPreset(input.provider);
 
-  window.localStorage.setItem(enabledKey, input.enabled ? "1" : "0");
-  window.localStorage.setItem(providerKey, preset.id);
-  window.localStorage.setItem(labelKey, input.label?.trim() || preset.label);
-  window.localStorage.setItem(baseUrlKey, input.baseUrl?.trim() || preset.defaultBaseUrl || "");
-  window.localStorage.setItem(modelKey, input.model.trim());
+  workspaceStorage().setItem(enabledKey, input.enabled ? "1" : "0");
+  workspaceStorage().setItem(providerKey, preset.id);
+  workspaceStorage().setItem(labelKey, input.label?.trim() || preset.label);
+  workspaceStorage().setItem(baseUrlKey, input.baseUrl?.trim() || preset.defaultBaseUrl || "");
+  workspaceStorage().setItem(modelKey, input.model.trim());
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 

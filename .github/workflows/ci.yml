@@ -24,8 +24,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev
+      - name: Record full dependency audit
+        continue-on-error: true
+        run: npm audit --json > dependency-audit.json
+      - name: Archive dependency audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-audit
+          path: dependency-audit.json
+          retention-days: 14
+          if-no-files-found: ignore
       - run: npm run lint
       - run: npm run test:run
+      - run: npm run test:quality
       - run: npm run build
 
   e2e:
@@ -41,6 +54,14 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Archive browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-failure-evidence
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
   container:
     name: Container smoke test

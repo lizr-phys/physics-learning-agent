@@ -11,8 +11,11 @@ import {
   type DocumentExtractionResult,
 } from "@/rag/document-loader";
 import { searchRagChunks } from "@/rag/search";
+import { formatRagLocator } from "@/rag/search";
+import { chunkSplitterVersion, hashContent, withStableChunkIdentity } from "@/rag/chunk";
 import type { RagChunk, RagSearchResult } from "@/rag/types";
-import type { CourseId, DetectedLanguage } from "@/types/learning";
+import type { CourseId, DetectedLanguage, RagContext } from "@/types/learning";
+import type { PhotoProblemMetadata } from "@/lib/photo-problem";
 
 export type PersonalDocument = {
   id: string;
@@ -32,6 +35,10 @@ export type PersonalDocument = {
   chunkCount: number;
   indexedAt?: number;
   createdAt: number;
+  contentHash?: string;
+  version?: number;
+  splitterVersion?: string;
+  problem?: PhotoProblemMetadata;
 };
 
 type PersonalChunk = RagChunk & {
@@ -40,6 +47,7 @@ type PersonalChunk = RagChunk & {
 };
 
 export const maxPersonalUploadBytes = 12 * 1024 * 1024;
+const chunkCache = new Map<string, { revision: string; chunks: PersonalChunk[] }>();
 
 function dataRoot() {
   return process.env.PLA_DATA_DIR || path.join(process.cwd(), ".pla-data");
@@ -90,7 +98,7 @@ function createId(prefix: string) {
 }
 
 function sanitizeFileName(fileName: string) {
-  const baseName = path.basename(fileName).replace(/[^\w.\- ]+/g, "_").trim();
+  const baseName = path.basename(fileName.replace(/\\/g, "/")).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240);
   return baseName || "document.txt";
 }
 
@@ -103,11 +111,25 @@ async function writeDocuments(userId: string, documents: PersonalDocument[]) {
 }
 
 async function readChunks(userId: string) {
-  return readJsonFile<PersonalChunk[]>(chunksPath(userId), []);
+  const filePath = chunksPath(userId);
+  try {
+    const stat = await fs.stat(filePath);
+    const revision = `${stat.mtimeMs}:${stat.size}:${stat.ino}`;
+    const cached = chunkCache.get(filePath);
+    if (cached?.revision === revision) return cached.chunks;
+    const chunks = await readJsonFile<PersonalChunk[]>(filePath, []);
+    if (chunkCache.size >= 64) chunkCache.delete(chunkCache.keys().next().value!);
+    chunkCache.set(filePath, { revision, chunks });
+    return chunks;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") { chunkCache.delete(filePath); return []; }
+    throw error;
+  }
 }
 
 async function writeChunks(userId: string, chunks: PersonalChunk[]) {
   await writeJsonFile(chunksPath(userId), chunks);
+  chunkCache.delete(chunksPath(userId));
 }
 
 function toSafeDocument(document: PersonalDocument) {
@@ -128,6 +150,10 @@ function toSafeDocument(document: PersonalDocument) {
     chunkCount: document.chunkCount,
     indexedAt: document.indexedAt,
     createdAt: document.createdAt,
+    contentHash: document.contentHash,
+    version: document.version,
+    splitterVersion: document.splitterVersion,
+    problem: document.problem,
   };
 }
 
@@ -146,6 +172,7 @@ export async function addPersonalDocument(input: {
   course?: CourseId;
   topic?: string;
   data: Buffer;
+  problem?: PhotoProblemMetadata;
 }) {
   if (input.data.byteLength > maxPersonalUploadBytes) {
     throw new Error("File is too large. The current local prototype accepts files up to 12 MB.");
@@ -156,7 +183,7 @@ export async function addPersonalDocument(input: {
   const id = createId("doc");
   const fileName = sanitizeFileName(input.fileName);
   const extension = path.extname(fileName).toLowerCase();
-  const storedFileName = `${id}-${fileName}`;
+  const storedFileName = `${id}${extension}`;
   const filePath = path.join(uploadsDir(input.userId), storedFileName);
   const metadataText = [fileName, input.description, input.topic].filter(Boolean).join("\n");
   const course =
@@ -167,6 +194,7 @@ export async function addPersonalDocument(input: {
     input.topic?.trim().slice(0, 240) ||
     (course ? detectKnowledgeFromText(metadataText, course) : undefined);
   const language = detectLanguage(metadataText || fileName);
+  const contentHash = hashContent(input.data);
 
   await fs.writeFile(filePath, input.data);
 
@@ -191,13 +219,13 @@ export async function addPersonalDocument(input: {
           topic,
           language,
           description: input.description?.trim().slice(0, 500) || undefined,
+          contentHash, version: 1, splitterVersion: chunkSplitterVersion,
         },
       });
       extractionMethod = extraction.extractionMethod;
       sourceType = extraction.sourceType;
-      documentChunks = extraction.chunks.map((chunk) => ({
+      documentChunks = withStableChunkIdentity(extraction.chunks, { documentId: id, version: 1, documentHash: contentHash }).map((chunk) => ({
         ...chunk,
-        id: `${id}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
         userId: input.userId,
         documentId: id,
       }));
@@ -236,6 +264,8 @@ export async function addPersonalDocument(input: {
     chunkCount: documentChunks.length,
     indexedAt,
     createdAt: Date.now(),
+    contentHash, version: 1, splitterVersion: chunkSplitterVersion,
+    problem: input.problem,
   };
   await withKeyedLock(`personal-knowledge:${input.userId}`, async () => {
     const [documents, existingChunks] = await Promise.all([
@@ -303,10 +333,13 @@ export async function reindexPersonalDocument(userId: string, documentId: string
         userId,
         documents.map((item) => (item.id === documentId ? unsupportedDocument : item)),
       );
+      await writeChunks(userId, (await readChunks(userId)).filter((chunk) => chunk.documentId !== documentId));
       return toSafeDocument(unsupportedDocument);
     }
 
     const data = await fs.readFile(path.join(uploadsDir(userId), document.storedFileName));
+    const contentHash = hashContent(data);
+    const version = (document.version ?? 0) + 1;
     let nextDocument: PersonalDocument;
     let nextChunks: PersonalChunk[] = [];
 
@@ -322,11 +355,11 @@ export async function reindexPersonalDocument(userId: string, documentId: string
           topic: document.topic,
           language: document.language,
           description: document.description,
+          contentHash, version, splitterVersion: chunkSplitterVersion,
         },
       });
-      nextChunks = extraction.chunks.map((chunk) => ({
+      nextChunks = withStableChunkIdentity(extraction.chunks, { documentId, version, documentHash: contentHash }).map((chunk) => ({
         ...chunk,
-        id: `${documentId}:${chunk.metadata?.chunkIndex ?? chunk.id}`,
         userId,
         documentId,
       }));
@@ -340,6 +373,7 @@ export async function reindexPersonalDocument(userId: string, documentId: string
           : "No searchable text could be extracted from this file.",
         chunkCount: nextChunks.length,
         indexedAt: nextChunks.length ? Date.now() : undefined,
+        contentHash, version, splitterVersion: chunkSplitterVersion,
       };
 
       if (extraction.warnings.length) {
@@ -354,6 +388,7 @@ export async function reindexPersonalDocument(userId: string, documentId: string
         }`,
         chunkCount: 0,
         indexedAt: undefined,
+        contentHash, version, splitterVersion: chunkSplitterVersion,
       };
     }
 
@@ -373,25 +408,62 @@ export async function reindexPersonalDocument(userId: string, documentId: string
   });
 }
 
+export type PersonalRetrievalOptions = {
+  limit?: number;
+  course?: string;
+  topic?: string;
+  documentIds?: string[];
+  courseOnly?: boolean;
+  signal?: AbortSignal;
+};
+
+async function authorizedChunks(userId: string, options: PersonalRetrievalOptions = {}) {
+  options.signal?.throwIfAborted();
+  const [chunks, documents] = await Promise.all([readChunks(userId), readDocuments(userId)]);
+  options.signal?.throwIfAborted();
+  const ownedDocuments = new Map(documents.filter((document) => document.userId === userId
+    && document.indexStatus === "indexed").map((document) => [document.id, document]));
+  const selectedDocuments = options.documentIds?.length ? new Set(options.documentIds) : undefined;
+  const allowed = (chunk: PersonalChunk) => {
+    const document = ownedDocuments.get(chunk.documentId);
+    return chunk.userId === userId && Boolean(document)
+      && (!selectedDocuments || selectedDocuments.has(chunk.documentId))
+      && (!options.courseOnly || Boolean(options.course && options.course !== "general" && document?.course === options.course))
+      && (!document?.version || !chunk.metadata?.version || document.version === chunk.metadata.version);
+  };
+  // Preserve the cached array identity for corpus-statistics reuse in the common all-documents case.
+  return chunks.every(allowed) ? chunks : chunks.filter(allowed);
+}
+
+export async function readPersonalProblem(userId: string, documentId: string) {
+  const document = (await readDocuments(userId)).find(item => item.id === documentId && item.userId === userId && item.problem);
+  if (!document || !/^doc_[0-9a-f]{20}\.md$/.test(document.storedFileName)) return null;
+  const content = await fs.readFile(path.join(uploadsDir(userId), document.storedFileName), "utf8");
+  return { document: toSafeDocument(document), content };
+}
+
 export async function retrievePersonalKnowledge(
   userId: string,
   query: string,
-  options: number | { limit?: number; course?: string; topic?: string } = 4,
+  options: number | PersonalRetrievalOptions = 4,
 ): Promise<RagSearchResult[]> {
-  const chunks = await readChunks(userId);
   const normalizedOptions = typeof options === "number" ? { limit: options } : options;
+  const chunks = await authorizedChunks(userId, normalizedOptions);
+  const documentIds = new Map(chunks.map((chunk) => [chunk.id, chunk.documentId]));
+  const results = searchRagChunks(chunks, query, normalizedOptions).map((chunk) => ({
+    ...chunk, source: `Personal Library / ${chunk.source}`,
+    metadata: { ...chunk.metadata, documentId: documentIds.get(chunk.id), userId },
+  }));
+  normalizedOptions.signal?.throwIfAborted();
+  return results;
+}
 
-  return searchRagChunks(
-    chunks.map((chunk) => ({
-      ...chunk,
-      source: `Personal Library / ${chunk.source}`,
-      metadata: {
-        ...chunk.metadata,
-        documentId: chunk.documentId,
-        userId: chunk.userId,
-      },
-    })),
-    query,
-    normalizedOptions,
-  );
+export async function getPersonalKnowledgeSource(userId: string, sourceId: string): Promise<RagContext["snippets"][number] | null> {
+  const chunks = await authorizedChunks(userId);
+  const chunk = chunks.find((item) => item.id === sourceId);
+  if (!chunk) return null;
+  return { sourceId: chunk.id, documentId: chunk.documentId,
+    source: `Personal Library / ${chunk.source}`, heading: chunk.heading, content: chunk.content,
+    kind: "personal", locator: formatRagLocator(chunk),
+    contentHash: chunk.metadata?.contentHash ?? hashContent(chunk.content), version: chunk.metadata?.version ?? 1 };
 }

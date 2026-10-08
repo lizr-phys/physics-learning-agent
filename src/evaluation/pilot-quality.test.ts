@@ -12,6 +12,8 @@ import {
 import { chunkMarkdownDocument } from "@/rag/chunk";
 import { searchRagChunks } from "@/rag/search";
 import type { RagChunk } from "@/rag/types";
+import { syntheticRetrievalCases, syntheticRetrievalChunks, syntheticRetrievalProvenance } from "@/evaluation/synthetic-retrieval";
+import { evaluateRetriever } from "@/rag/evaluation";
 
 describe("pilot quality baseline", () => {
   describe.each(intentEvaluationCases)("intent: $id", ({ request, expected }) => {
@@ -53,5 +55,29 @@ describe("pilot quality baseline", () => {
         expect(topResult?.source).toBe(expectedSource);
       },
     );
+  });
+
+  describe("synthetic bilingual retrieval contract", () => {
+    const corpora = { zh: syntheticRetrievalChunks.filter((chunk) => chunk.metadata?.language === "zh"),
+      en: syntheticRetrievalChunks.filter((chunk) => chunk.metadata?.language === "en") };
+    it("contains 120 explicitly synthetic cases across six courses", () => {
+      expect(syntheticRetrievalProvenance).toMatchObject({ kind: "synthetic", humanReviewed: false });
+      expect(syntheticRetrievalCases).toHaveLength(120);
+      expect(new Set(syntheticRetrievalCases.map((evaluationCase) => evaluationCase.course))).toHaveLength(6);
+      expect(syntheticRetrievalCases.filter((evaluationCase) => evaluationCase.kind === "no-answer")).toHaveLength(24);
+    });
+    it.each(syntheticRetrievalCases)("$id", (evaluationCase) => {
+      const results = searchRagChunks(evaluationCase.sourceLanguage ? corpora[evaluationCase.sourceLanguage] : syntheticRetrievalChunks,
+        evaluationCase.query, { course: evaluationCase.course, limit: 3 });
+      if (!evaluationCase.relevantChunkIds.length) expect(results).toEqual([]);
+      else expect(results[0]?.id).toBe(evaluationCase.relevantChunkIds[0]);
+    });
+    it("reports positive recall and no-answer false positives with their denominators", async () => {
+      const report = await evaluateRetriever(syntheticRetrievalCases, (query, limit, evaluationCase) =>
+        searchRagChunks(evaluationCase.sourceLanguage ? corpora[evaluationCase.sourceLanguage] : syntheticRetrievalChunks,
+          query, { course: evaluationCase.course, limit }), 3);
+      expect(report).toMatchObject({ caseCount: 120, positiveCaseCount: 96, noAnswerCaseCount: 24,
+        recallAtK: 1, hitRateAtK: 1, meanReciprocalRank: 1, noAnswerFalsePositiveRate: 0, falsePositives: [] });
+    });
   });
 });

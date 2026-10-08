@@ -4,7 +4,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Database, FileText, Loader2, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
 
 import { courseOptions, getCourseLabel } from "@/data/courses";
+import { announceAuthChange } from "@/lib/workspace-storage";
 import type { CourseId, DetectedLanguage } from "@/types/learning";
+import type { PhotoProblemMetadata } from "@/lib/photo-problem";
+import { PhotoProblemCapture } from "@/components/knowledge/PhotoProblemCapture";
+import { PhotoProblemViewer } from "@/components/knowledge/PhotoProblemViewer";
 
 type User = {
   id: string;
@@ -30,6 +34,7 @@ type PersonalDocument = {
   chunkCount: number;
   indexedAt?: number;
   createdAt: number;
+  problem?: PhotoProblemMetadata;
 };
 
 type AuthMode = "login" | "register";
@@ -84,6 +89,8 @@ export default function KnowledgeBasePage() {
   const [reindexingId, setReindexingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [libraryFilter, setLibraryFilter] = useState<"all" | "exam" | "homework">("all");
+  const visibleDocuments = documents.filter(document => libraryFilter === "all" || document.problem?.kind === libraryFilter);
 
   const indexedCount = useMemo(
     () => documents.filter((document) => document.indexStatus === "indexed").length,
@@ -141,7 +148,7 @@ export default function KnowledgeBasePage() {
       setUser(data.user);
       setPassword("");
       setNotice(authMode === "login" ? "Signed in." : "Account created.");
-      window.dispatchEvent(new Event("pla:auth-changed"));
+      announceAuthChange(data.user.id);
       await loadDocuments();
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Authentication failed.");
@@ -156,7 +163,7 @@ export default function KnowledgeBasePage() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     setDocuments([]);
-    window.dispatchEvent(new Event("pla:auth-changed"));
+    announceAuthChange(null);
   }
 
   async function uploadDocument(event: FormEvent<HTMLFormElement>) {
@@ -245,18 +252,13 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 md:px-6">
-      <section className="border-b border-zinc-200 pb-6">
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-          <Database size={16} />
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-6">
+      <section>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">
           Personal Knowledge Base
-        </div>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950">
-          Build a private study library
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
-          Create a local account, upload your own notes or course materials, and let the chat
-          workspace retrieve relevant snippets when answering follow-up questions.
+        <p className="mt-2 text-sm leading-6 text-zinc-600">
+          Add your notes for relevant references in chat.
         </p>
       </section>
 
@@ -266,8 +268,8 @@ export default function KnowledgeBasePage() {
           Loading knowledge base...
         </div>
       ) : !user ? (
-        <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-          <section className="rounded-xl border border-zinc-200 bg-white p-5">
+        <div className="max-w-sm space-y-5">
+          <section>
             <div className="flex rounded-lg border border-zinc-200 p-1 text-sm">
               <button
                 type="button"
@@ -347,32 +349,29 @@ export default function KnowledgeBasePage() {
             </form>
           </section>
 
-          <aside className="rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-            <h2 className="text-lg font-semibold text-zinc-950">How personal retrieval works</h2>
+          <details className="border-t border-zinc-200 pt-4">
+            <summary className="cursor-pointer text-sm text-zinc-600">Supported files and privacy</summary>
             <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-600">
               <p>
-                Uploaded materials are stored locally on the server, split into structured chunks,
-                and retrieved during chat when a question matches your material and study context.
+                Files stay with your account. Matching excerpts are sent to the selected model when you use personal retrieval.
               </p>
               <p>
                 Markdown, TXT, TeX, CSV, text-based PDF, DOCX, PPTX, XLSX, RTF, and OpenDocument
                 files can be indexed. Scanned pages require OCR before they become searchable.
               </p>
               <p>
-                Do not upload copyrighted textbooks to a public deployment unless you have the
-                right to store and process that content.
+                For photos or scanned pages, attach images in Chat. Image uploads are separate from the searchable library.
               </p>
             </div>
-          </aside>
+          </details>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+        <div className="grid items-start gap-8 lg:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="space-y-4">
-            <section className="rounded-xl border border-zinc-200 bg-white p-5">
+            <section>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-zinc-500">Signed in as</p>
-                  <p className="mt-1 text-lg font-semibold text-zinc-950">{user.name}</p>
+                  <p className="text-sm font-semibold text-zinc-950">{user.name}</p>
                   <p className="text-sm text-zinc-500">{user.email}</p>
                 </div>
                 <button
@@ -384,24 +383,12 @@ export default function KnowledgeBasePage() {
                   <LogOut size={16} />
                 </button>
               </div>
-              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border border-zinc-200 p-3">
-                  <p className="text-2xl font-semibold text-zinc-950">{indexedCount}</p>
-                  <p className="mt-1 text-zinc-500">indexed files</p>
-                </div>
-                <div className="rounded-lg border border-zinc-200 p-3">
-                  <p className="text-2xl font-semibold text-zinc-950">{totalChunks}</p>
-                  <p className="mt-1 text-zinc-500">search chunks</p>
-                </div>
-              </div>
+              <p className="mt-3 text-xs text-zinc-500">{indexedCount} indexed files · {totalChunks} search chunks</p>
             </section>
 
-            <section className="rounded-xl border border-zinc-200 bg-white p-5">
-              <h2 className="text-lg font-semibold text-zinc-950">Upload material</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">
-                Use your own notes, lecture summaries, problem sets, or exported text from course
-                slides. Adding course and topic metadata improves retrieval precision.
-              </p>
+            <PhotoProblemCapture onSaved={loadDocuments} />
+            <details className="border-t border-zinc-200 pt-4">
+              <summary className="cursor-pointer text-sm font-semibold text-zinc-950">Upload documents</summary>
               <form onSubmit={uploadDocument} className="mt-4 space-y-4">
                 <label className="block text-sm">
                   <span className="font-medium text-zinc-800">File</span>
@@ -412,6 +399,9 @@ export default function KnowledgeBasePage() {
                     className="mt-2 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-950 file:px-3 file:py-2 file:text-sm file:text-white"
                   />
                 </label>
+                <details className="text-sm text-zinc-600">
+                <summary className="cursor-pointer py-1">Course, topic and description</summary>
+                <div className="mt-3 space-y-3">
                 <label className="block text-sm">
                   <span className="font-medium text-zinc-800">Course</span>
                   <select
@@ -446,6 +436,8 @@ export default function KnowledgeBasePage() {
                     placeholder="Course, chapter, source notes, or usage context"
                   />
                 </label>
+                </div>
+                </details>
                 <button
                   type="submit"
                   disabled={isUploading}
@@ -455,17 +447,20 @@ export default function KnowledgeBasePage() {
                   {isUploading ? "Uploading..." : "Upload and index"}
                 </button>
               </form>
-            </section>
+            </details>
           </aside>
 
-          <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-5">
+          <section className="min-w-0 border-t border-zinc-200 pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
             <div className="flex flex-col gap-2 border-b border-zinc-200 pb-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-950">Library</h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Indexed files are automatically available to chat retrieval.
+                  Indexed files are available to chat retrieval.
                 </p>
               </div>
+              <select aria-label="Library category" value={libraryFilter} onChange={event => setLibraryFilter(event.target.value as typeof libraryFilter)} className="h-9 rounded-lg border border-zinc-300 bg-white px-2 text-xs">
+                <option value="all">All materials</option><option value="exam">Exam photos</option><option value="homework">Homework photos</option>
+              </select>
             </div>
 
             {error ? (
@@ -480,44 +475,45 @@ export default function KnowledgeBasePage() {
             ) : null}
 
             <div className="mt-5 space-y-3">
-              {documents.length ? (
-                documents.map((document) => (
+              {visibleDocuments.length ? (
+                visibleDocuments.map((document) => (
                   <article
                     key={document.id}
-                    className="rounded-xl border border-zinc-200 p-4"
+                    className="border-b border-zinc-200 pb-4"
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <FileText size={16} className="shrink-0 text-zinc-500" />
                           <h3 className="truncate text-sm font-semibold text-zinc-950">
-                            {document.fileName}
+                            {document.problem?.title ?? document.fileName}
                           </h3>
                         </div>
                         <p className="mt-2 text-sm leading-6 text-zinc-600">
                           {document.description || document.statusMessage}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
-                          <span className="rounded-full border border-zinc-200 px-2 py-1">
+                          {document.problem ? <span>{document.problem.kind === "exam" ? "Exam" : "Homework"} photo</span> : null}
+                          <span>
                             {statusLabel(document.indexStatus)}
                           </span>
                           {document.course ? (
-                            <span className="rounded-full border border-zinc-200 px-2 py-1">
+                            <span>
                               {getCourseLabel(document.course)}
                             </span>
                           ) : null}
                           {document.topic ? (
-                            <span className="rounded-full border border-zinc-200 px-2 py-1">
+                            <span>
                               {document.topic}
                             </span>
                           ) : null}
-                          <span className="rounded-full border border-zinc-200 px-2 py-1">
+                          <span>
                             {document.chunkCount} chunks
                           </span>
-                          <span className="rounded-full border border-zinc-200 px-2 py-1">
+                          <span>
                             {formatBytes(document.size)}
                           </span>
-                          <span className="rounded-full border border-zinc-200 px-2 py-1">
+                          <span>
                             {new Date(document.createdAt).toLocaleDateString("en-US")}
                           </span>
                         </div>
@@ -545,6 +541,7 @@ export default function KnowledgeBasePage() {
                         </button>
                       </div>
                     </div>
+                    {document.problem ? <PhotoProblemViewer document={{ ...document, problem: document.problem }} /> : null}
                     {document.description ? (
                       <p className="mt-3 text-xs leading-5 text-zinc-500">
                         {document.statusMessage}
@@ -553,12 +550,11 @@ export default function KnowledgeBasePage() {
                   </article>
                 ))
               ) : (
-                <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center">
+                <div className="py-12 text-center">
                   <Database className="mx-auto text-zinc-400" size={28} />
-                  <p className="mt-3 text-sm font-medium text-zinc-950">No documents yet</p>
+                  <p className="mt-3 text-sm font-medium text-zinc-950">{libraryFilter === "all" ? "No documents yet" : `No ${libraryFilter} photos yet`}</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    Upload a note, text-based PDF, DOCX, PPTX, or problem set to create your first
-                    searchable personal knowledge source.
+                    Upload your first note or course document.
                   </p>
                 </div>
               )}

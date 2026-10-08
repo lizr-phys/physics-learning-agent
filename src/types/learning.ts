@@ -89,6 +89,8 @@ export type PracticeAssessmentStatus = "solved" | "needs-work";
 
 export type PracticeAssessment = {
   status: PracticeAssessmentStatus;
+  attemptDraft?: string;
+  stuckNote?: string;
   updatedAt: number;
 };
 
@@ -107,6 +109,18 @@ export type DetectedLanguage = "zh" | "en";
 
 export type ReferenceProfileId = "auto" | "chinese" | "english";
 
+export type ContextProvenance = Partial<Record<
+  "course" | "knowledgePoint" | "language" | "practiceStyle" | "referenceProfile",
+  { source: "current-input" | "current-selection" | "history" | "default"; updatedAt: number }
+>>;
+
+export type ContextBudget = {
+  charBudget: number;
+  usedChars: number;
+  estimatedTokens: number;
+  omittedMessages: number;
+};
+
 export const knowledgeModeOptions = [
   { id: "auto", label: "Auto" },
   { id: "always", label: "Always use personal knowledge" },
@@ -121,6 +135,7 @@ export type PersonalKnowledgeDecision = {
   confidence: "low" | "medium" | "high";
   reason: string;
   retrievalQuery?: string;
+  status?: "disabled" | "unauthenticated" | "no_match" | "retrieved" | "failed";
 };
 
 export type LearningMemory = {
@@ -135,6 +150,7 @@ export type LearningMemory = {
   exerciseTopics: string[];
   preferredStyle: "balanced" | "step-by-step" | "concise";
   conversationSummary?: string;
+  contextProvenance?: ContextProvenance;
   updatedAt: number;
 };
 
@@ -164,14 +180,46 @@ export type ChatMessage = {
   id?: string;
   role: ChatRole;
   content: string;
+  images?: ImageAttachment[];
   createdAt?: number;
   status?: "streaming" | "complete" | "interrupted" | "error";
   requestId?: string;
   feedback?: AnswerFeedback;
+  feedbackDeletedAt?: number;
+  sources?: RagContext["snippets"];
+  retrievalStatus?: RetrievalStatus;
+  generation?: GenerationDiagnostics;
+  generationAttempts?: GenerationDiagnostics[];
+};
+
+export type ImageAttachment = {
+  id: string;
+  name: string;
+  mimeType: "image/webp";
+  size: number;
+  width: number;
+  height: number;
+};
+
+export type RetrievalStatus = "disabled" | "unauthenticated" | "no_match" | "retrieved" | "failed";
+export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+export type GenerationDiagnostics = {
+  requestId: string;
+  provider?: string;
+  model?: string;
+  intent?: AgentIntent;
+  terminal: "complete" | "truncated" | "interrupted" | "cancelled" | "error";
+  reason?: string;
+  finishReason?: string;
+  startedAt?: number;
+  durationMs?: number;
+  firstTokenMs?: number;
+  outputChars?: number;
+  usage?: TokenUsage;
 };
 
 export type ToolContext = {
-  source: "practice";
+  source: "practice" | "knowledge";
   course?: CourseId;
   knowledgeId?: string;
   knowledgeTitle?: string;
@@ -179,6 +227,7 @@ export type ToolContext = {
   taskTitle?: string;
   userInput?: string;
   generatedContent: string;
+  images?: ImageAttachment[];
   selectedItem?: {
     type: "problem" | "summary";
     title?: string;
@@ -189,6 +238,10 @@ export type ToolContext = {
 };
 
 export type RagCitation = {
+  sourceId?: string;
+  documentId?: string;
+  contentHash?: string;
+  version?: number;
   source: string;
   heading: string;
   kind?: "personal" | "sample";
@@ -197,6 +250,7 @@ export type RagCitation = {
 
 export type RagContext = {
   snippets: Array<RagCitation & { content: string }>;
+  status?: "disabled" | "unauthenticated" | "no_match" | "retrieved" | "failed";
 };
 
 export type ClientProviderKind = "openai-compatible" | "anthropic" | "gemini";
@@ -223,6 +277,10 @@ export type ClientProviderConfig = {
 
 export type AgentRequest = {
   message: string;
+  images?: ImageAttachment[];
+  /** Server-resolved private image bytes. Never accepted from a public request or persisted in a snapshot. */
+  resolvedImages?: Record<string, { mimeType: "image/webp"; data: string }>;
+  practiceTask?: { setId: string; resumeContent?: string };
   intent?: AgentIntent;
   queryType?: QueryType;
   module?: AgentModule;
@@ -230,7 +288,7 @@ export type AgentRequest = {
   taskType?: TaskTypeId;
   knowledgePoint?: string;
   difficulty?: DifficultyId;
-  exerciseCount?: 3 | 5 | 10;
+  exerciseCount?: number;
   includeAnswer?: boolean;
   includeSolution?: boolean;
   includeHint?: boolean;
@@ -246,11 +304,16 @@ export type AgentRequest = {
   detectedLanguage?: DetectedLanguage;
   referenceProfile?: ReferenceProfileId;
   knowledgeMode?: KnowledgeMode;
+  knowledgeDocumentIds?: string[];
+  knowledgeCourseOnly?: boolean;
   personalKnowledgeDecision?: PersonalKnowledgeDecision;
   clientProvider?: ClientProviderConfig;
   conversationId?: string;
   assistantMessageId?: string;
   requestId?: string;
+  authEpoch?: string;
+  contextProvenance?: ContextProvenance;
+  contextBudget?: ContextBudget;
 };
 
 export type AgentResponse = {

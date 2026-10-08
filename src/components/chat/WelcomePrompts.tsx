@@ -14,7 +14,7 @@ type WelcomePromptsProps = {
 function buildRecommendations() {
   return getPersonalizedRecommendations({
     type: "chat",
-    count: 4,
+    count: 3,
     sessions: getStoredSessions(),
     profile: getStoredLearningProfile(),
   });
@@ -32,10 +32,10 @@ export function WelcomePrompts({ onPick }: WelcomePromptsProps) {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-[52vh] max-w-3xl flex-col justify-center px-4 py-10 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">Physics Learning Agent</h1>
+    <div className="mx-auto flex min-h-[42vh] max-w-3xl flex-col justify-center px-4 py-8 text-center">
+      <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">What would you like to understand?</h1>
       <div className="mt-3 flex items-center justify-center gap-3 text-sm text-zinc-500">
-        <span>Choose a direction to start</span>
+        <span>Ask, attach a problem, or choose a topic.</span>
         <button
           type="button"
           onClick={() => setRecommendations(buildRecommendations())}
@@ -45,14 +45,14 @@ export function WelcomePrompts({ onPick }: WelcomePromptsProps) {
           Refresh
         </button>
       </div>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
         {recommendations.length ? (
           recommendations.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => onPick(item.prompt)}
-              className="rounded-xl border border-zinc-200 px-4 py-3 text-left text-sm leading-6 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50"
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-left text-xs leading-5 text-zinc-600 hover:bg-zinc-50"
             >
               {item.title}
             </button>

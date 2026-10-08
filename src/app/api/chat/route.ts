@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prepareAgentRequest } from "@/agent/workflow";
+import { streamAgentTask, taskBudget } from "@/agent/task-workflow";
+import { getModelConfig } from "@/agent/model-config";
+import { sanitizeImageAttachments, IMAGE_LIMITS } from "@/lib/image-attachments";
+import { ImageInputError, resolveRequestImages } from "@/lib/image-store";
+import { imageRequestOwner } from "@/lib/image-request-owner";
+import { acquireGenerationLease, GenerationBudgetError } from "@/lib/generation-budget";
+import type { GenerationBinding, GenerationPayload } from "@/lib/generation-stream";
 import { getUserFromRequest } from "@/lib/auth-server";
-import { DeepSeekError, streamDeepSeek } from "@/lib/deepseek";
+import { DeepSeekError } from "@/lib/deepseek";
 import { consumeRateLimit, getRequestClientKey } from "@/lib/rate-limit";
 import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
 import {
@@ -33,7 +40,7 @@ export const maxDuration = 300;
 const courseIds = new Set<string>(["general", ...courseOptions.map((course) => course.id)]);
 const taskTypeIds = new Set<string>(taskTypeOptions.map((task) => task.id));
 const difficultyIds = new Set<string>(difficultyOptions.map((difficulty) => difficulty.id));
-const exerciseCounts = new Set([3, 5, 10]);
+const exerciseCounts = new Set(Array.from({ length: 20 }, (_, index) => index + 1));
 const agentIntents = new Set<AgentIntent>([
   "physics_learning",
   "exercise_generation",
@@ -58,7 +65,7 @@ const practiceStyles = new Set<PracticeStyleId>(practiceStyleOptions.map((item) 
 const detectedLanguages = new Set<DetectedLanguage>(["zh", "en"]);
 const referenceProfiles = new Set<ReferenceProfileId>(["auto", "chinese", "english"]);
 const knowledgeModes = new Set<KnowledgeMode>(["auto", "always", "never"]);
-const modelIds = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
+const modelIds = new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
 const clientProviderIds = new Set([
   "openai",
   "deepseek",
@@ -93,7 +100,7 @@ function sanitizeToolContext(value: unknown): ToolContext | undefined {
   const source = asString(record.source);
   const generatedContent = asString(record.generatedContent);
 
-  if (source !== "practice" || !generatedContent) {
+  if ((source !== "practice" && source !== "knowledge") || !generatedContent) {
     return undefined;
   }
 
@@ -107,7 +114,7 @@ function sanitizeToolContext(value: unknown): ToolContext | undefined {
       ? {
           type: selectedType as NonNullable<ToolContext["selectedItem"]>["type"],
           title: trimToLength(asString(selectedRecord.title), 200) || undefined,
-          content: trimToLength(asString(selectedRecord.content), 6000) || undefined,
+          content: asString(selectedRecord.content) || undefined,
           index:
             typeof selectedRecord.index === "number" && Number.isFinite(selectedRecord.index)
               ? selectedRecord.index
@@ -118,13 +125,14 @@ function sanitizeToolContext(value: unknown): ToolContext | undefined {
 
   return {
     source: source as ToolContext["source"],
+    images: sanitizeImageAttachments(record.images),
     course: courseIds.has(course) ? (course as CourseId) : undefined,
     knowledgeId: trimToLength(asString(record.knowledgeId), 120) || undefined,
     knowledgeTitle: trimToLength(asString(record.knowledgeTitle), 200) || undefined,
     topic: trimToLength(asString(record.topic), 200) || undefined,
     taskTitle: trimToLength(asString(record.taskTitle), 200) || undefined,
     userInput: trimToLength(asString(record.userInput), 1000) || undefined,
-    generatedContent: trimToLength(generatedContent, 8000),
+    generatedContent,
     selectedItem,
     createdAt:
       typeof record.createdAt === "number" && Number.isFinite(record.createdAt)
@@ -148,13 +156,16 @@ function sanitizeHistory(value: unknown): ChatMessage[] {
       return (
         (message.role === "user" || message.role === "assistant") &&
         typeof message.content === "string" &&
-        message.content.trim().length > 0
+        (message.content.trim().length > 0 || (message.role === "user" && Boolean(sanitizeImageAttachments(message.images)?.length)))
       );
     })
-    .slice(-20)
     .map((item) => ({
+      id: item.id,
       role: item.role,
-      content: trimToLength(item.content, 2000),
+      content: item.content.trim(),
+      images: item.role === "user" ? sanitizeImageAttachments(item.images) : undefined,
+      status: item.status,
+      createdAt: item.createdAt,
     }));
 }
 
@@ -201,7 +212,8 @@ function sanitizeLearningMemory(value: unknown): LearningMemory | undefined {
       ? (asString(record.referenceProfile) as ReferenceProfileId)
       : undefined,
     conversationSummary:
-      trimToLength(asString(record.conversationSummary), 2000) || undefined,
+      asString(record.conversationSummary) || undefined,
+    contextProvenance: record.contextProvenance && typeof record.contextProvenance === "object" ? record.contextProvenance as LearningMemory["contextProvenance"] : undefined,
     updatedAt:
       typeof record.updatedAt === "number" && Number.isFinite(record.updatedAt)
         ? record.updatedAt
@@ -243,7 +255,7 @@ function sanitizeClientProvider(value: unknown): ClientProviderConfig | undefine
 
 function sanitizeRequest(body: unknown): AgentRequest {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  const message = trimToLength(asString(record.message), 16_000);
+  const message = asString(record.message);
   const course = asString(record.course);
   const taskType = asString(record.taskType);
   const knowledgePoint = asString(record.knowledgePoint);
@@ -260,6 +272,7 @@ function sanitizeRequest(body: unknown): AgentRequest {
 
   return {
     message,
+    images: sanitizeImageAttachments(record.images),
     intent: agentIntents.has(intent as AgentIntent) ? (intent as AgentIntent) : undefined,
     module:
       record.module === "practice" ||
@@ -303,12 +316,21 @@ function sanitizeRequest(body: unknown): AgentRequest {
     conversationId: trimToLength(asString(record.conversationId), 160) || undefined,
     assistantMessageId: trimToLength(asString(record.assistantMessageId), 160) || undefined,
     requestId: trimToLength(asString(record.requestId), 160) || undefined,
+    authEpoch: trimToLength(asString(record.authEpoch), 160) || undefined,
+    practiceTask: record.practiceTask && typeof record.practiceTask === "object" && /^[A-Za-z0-9:._-]{1,120}$/.test(asString((record.practiceTask as Record<string, unknown>).setId))
+      ? { setId: asString((record.practiceTask as Record<string, unknown>).setId), resumeContent: asString((record.practiceTask as Record<string, unknown>).resumeContent).slice(0, 120_000) || undefined } : undefined,
+    knowledgeDocumentIds: sanitizeStringList(record.knowledgeDocumentIds, 20, 120),
+    knowledgeCourseOnly: asBoolean(record.knowledgeCourseOnly),
   };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request);
+    const expectedOwner = request.headers.get("X-PLA-Workspace-Owner");
+    if (expectedOwner && expectedOwner !== (user?.id ?? "guest")) {
+      return NextResponse.json({ error: "The signed-in account changed. Reload the workspace before generating.", code: "WORKSPACE_OWNER_CHANGED" }, { status: 409 });
+    }
     const rateLimit = consumeRateLimit(
       `chat:${user?.id ?? getRequestClientKey(request)}`,
       120,
@@ -326,19 +348,49 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await readJsonRequest(request, 256 * 1024);
+    const requestedCount = body && typeof body === "object" ? (body as Record<string, unknown>).exerciseCount : undefined;
+    if (requestedCount !== undefined && (!Number.isSafeInteger(Number(requestedCount)) || Number(requestedCount) < 1 || Number(requestedCount) > 20)) {
+      return NextResponse.json({ error: "Practice count must be an integer between 1 and 20." }, { status: 400 });
+    }
     const input = sanitizeRequest(body);
+    const rawImages = body && typeof body === "object" ? (body as Record<string,unknown>).images : undefined;
+    if (rawImages !== undefined && (!Array.isArray(rawImages) || rawImages.length > IMAGE_LIMITS.perMessage || (input.images?.length ?? 0) !== rawImages.length)) throw new ImageInputError("Attach up to four valid images.");
+    if (!input.message && input.images?.length) input.message = "Help me understand the attached images.";
 
     if (!input.message) {
       return NextResponse.json({ error: "Please enter a question or generation request." }, { status: 400 });
     }
+    if (input.message.length > 16_000) {
+      return NextResponse.json({ error: "This request exceeds 16,000 characters. Shorten it before sending." }, { status: 413 });
+    }
+    input.conversationId ??= crypto.randomUUID();
+    input.assistantMessageId ??= crypto.randomUUID();
+    input.requestId ??= crypto.randomUUID();
+    input.authEpoch ??= "server";
 
-    const prepared = await prepareAgentRequest(input, { userId: user?.id });
-    const stream = await streamDeepSeek(prepared.input, request.signal);
+    const binding: GenerationBinding = { ownerId: user?.id ?? "guest", authEpoch: input.authEpoch, sessionId: input.conversationId, messageId: input.assistantMessageId, requestId: input.requestId };
+    const prepared = await prepareAgentRequest(input, { userId: user?.id, signal: request.signal });
+    const normalized = prepared.input;
+    if (normalized.images?.length || normalized.history?.some(message => message.images?.length) || normalized.toolContext?.images?.length) {
+      const {owner} = await imageRequestOwner(request);
+      if (!owner) throw new ImageInputError("These images are unavailable. Reattach them in this workspace.",404,"IMAGE_NOT_FOUND");
+      normalized.resolvedImages = await resolveRequestImages(normalized,owner);
+    }
+    const initialEvents: GenerationPayload[] = [
+      ...prepared.stages.map(stage => ({ type: "stage" as const, stage })),
+      { type: "context", context: { course: normalized.course, knowledgePoint: normalized.knowledgePoint, taskType: normalized.taskType, detectedLanguage: normalized.detectedLanguage, referenceProfile: normalized.referenceProfile, practiceStyle: normalized.practiceStyle, exerciseCount: normalized.exerciseCount, answerDepth: normalized.answerDepth, knowledgeMode: normalized.knowledgeMode, contextProvenance: normalized.contextProvenance, contextBudget: normalized.contextBudget } },
+      { type: "sources", sources: normalized.ragContext?.snippets ?? [], status: normalized.ragContext?.status ?? normalized.personalKnowledgeDecision?.status },
+    ];
+    const practice = normalized.module === "practice" || normalized.taskType === "practice" || normalized.intent === "exercise_generation";
+    const lease = acquireGenerationLease(user?.id ?? getRequestClientKey(request), { serverDefault: !normalized.clientProvider, reservedOutputTokens: practice ? taskBudget.maxOutputTokens : getModelConfig(normalized).max_tokens });
+    let stream: ReadableStream<Uint8Array>;
+    try { stream = streamAgentTask(prepared, request.signal, { binding, initialEvents, onSettled: usage => lease.release(usage) }); }
+    catch (error) { lease.release(); throw error; }
 
     return new Response(stream, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "private, no-store, no-transform",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
         "X-Content-Type-Options": "nosniff",
@@ -348,6 +400,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ImageInputError) return NextResponse.json({error:error.message,code:error.code},{status:error.status});
+    if (error instanceof GenerationBudgetError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status, headers: error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : undefined });
     if (error instanceof RequestBodyError) {
       return NextResponse.json(
         { error: error.message, code: error.code },

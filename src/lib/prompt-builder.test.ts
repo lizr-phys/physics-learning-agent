@@ -1,8 +1,26 @@
 import { describe, expect, it } from "vitest";
 
-import { buildUserPrompt } from "@/lib/prompt-builder";
+import { buildRagContext, buildUserPrompt } from "@/lib/prompt-builder";
+import { allocateRequestContext, resolveLearningContext } from "@/agent/context-manager";
 
 describe("prompt builder", () => {
+  it("preserves the prepared batch count instead of re-parsing the original total", () => {
+    const prepared = allocateRequestContext({ ...resolveLearningContext({
+      message: "Generate 10 original problems on quantum mechanics.", taskType: "practice",
+    }), exerciseCount: 2 });
+    expect(buildUserPrompt(prepared)).toContain("Practice count: 2");
+    expect(buildUserPrompt(prepared)).not.toContain("Practice count: 10");
+  });
+  it("keeps no-match and retrieval faults distinct", () => {
+    const failed = buildRagContext({ message: "Explain my notes.", ragContext: { snippets: [], status: "failed" } });
+    const noMatch = buildRagContext({ message: "Explain my notes.", ragContext: { snippets: [], status: "no_match" } });
+    expect(failed).toContain("retrieval failed");
+    expect(failed).not.toContain("No sufficiently relevant personal snippets were found");
+    expect(noMatch).toContain("completed without relevant evidence");
+    for (const status of ["disabled", "unauthenticated", "retrieved"] as const) {
+      expect(buildRagContext({ message: "Explain my notes.", ragContext: { snippets: [], status } })).toContain(`status: ${status}`);
+    }
+  });
   it("uses the physics tutoring workflow for a derivation", () => {
     const prompt = buildUserPrompt({
       message: "推导一维谐振子的能级量子化",

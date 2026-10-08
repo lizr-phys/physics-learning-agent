@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Bound parallel parser/graph imports on developer machines and CI workers.
+    maxWorkers: 4,
     include: ["src/**/*.test.ts"],
     coverage: {
       reporter: ["text", "html"],

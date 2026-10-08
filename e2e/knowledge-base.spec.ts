@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("personal documents preserve metadata, retrieve chunks, and reindex", async ({
   request,

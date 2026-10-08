@@ -43,6 +43,21 @@ const corpus = [
 ];
 
 describe("hybrid RAG search", () => {
+  it("rejects course, topic and description-only evidence, including legacy metadata tokens", () => {
+    const unrelated = chunk("unrelated", "Lecture notes", "Bananas are yellow fruit.", {
+      course: "quantum-mechanics", topic: "harmonic oscillator", description: "Harmonic oscillator normalization",
+    });
+    unrelated.tokens = tokenize("quantum-mechanics harmonic oscillator normalization Bananas are yellow fruit.");
+    expect(searchRagChunks([unrelated], "harmonic oscillator normalization", {
+      course: "quantum-mechanics", topic: "harmonic oscillator",
+    })).toEqual([]);
+    expect(searchRagChunks([{ ...unrelated, heading: "" }], "magnetic flux", { course: "quantum-mechanics" })).toEqual([]);
+  });
+
+  it("supports bilingual terminology without treating course tags as sources", () => {
+    expect(searchRagChunks(corpus, "格林函数依赖什么边界条件", { limit: 1 })[0]?.id).toBe("green");
+    expect(searchRagChunks(corpus, "Hamilton equations for canonical momentum", { limit: 1 })[0]?.id).toBe("hamilton");
+  });
   it("tokenizes Chinese physics queries into searchable terms", () => {
     const tokens = tokenize("我想复习哈密顿力学和正则方程");
 

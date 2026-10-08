@@ -1,5 +1,7 @@
 "use client";
 
+import { workspaceStorage } from "@/lib/workspace-storage";
+
 import type { AnswerDepth, KnowledgeMode } from "@/types/learning";
 
 const answerDepthKey = "pla.preferences.answerDepth.v1";
@@ -11,7 +13,7 @@ export function getStoredAnswerDepth(): AnswerDepth {
     return "standard";
   }
 
-  const value = window.localStorage.getItem(answerDepthKey);
+  const value = workspaceStorage().getItem(answerDepthKey);
 
   return value === "concise" ||
     value === "detailed" ||
@@ -22,7 +24,7 @@ export function getStoredAnswerDepth(): AnswerDepth {
 }
 
 export function saveStoredAnswerDepth(value: AnswerDepth) {
-  window.localStorage.setItem(answerDepthKey, value);
+  workspaceStorage().setItem(answerDepthKey, value);
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
@@ -31,26 +33,26 @@ export function getStoredKnowledgeMode(): KnowledgeMode {
     return "auto";
   }
 
-  const value = window.localStorage.getItem(knowledgeModeKey);
+  const value = workspaceStorage().getItem(knowledgeModeKey);
 
   return value === "always" || value === "never" ? value : "auto";
 }
 
 export function saveStoredKnowledgeMode(value: KnowledgeMode) {
-  window.localStorage.setItem(knowledgeModeKey, value);
+  workspaceStorage().setItem(knowledgeModeKey, value);
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function isOnboardingDismissed() {
-  return typeof window !== "undefined" && window.localStorage.getItem(onboardingKey) === "1";
+  return typeof window !== "undefined" && workspaceStorage().getItem(onboardingKey) === "1";
 }
 
 export function dismissOnboarding() {
-  window.localStorage.setItem(onboardingKey, "1");
+  workspaceStorage().setItem(onboardingKey, "1");
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }
 
 export function resetOnboarding() {
-  window.localStorage.removeItem(onboardingKey);
+  workspaceStorage().removeItem(onboardingKey);
   window.dispatchEvent(new Event("pla:user-data-changed"));
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures";
 
 function installStreamingMock() {
   const originalFetch = window.fetch.bind(window);
@@ -39,6 +39,8 @@ function installStreamingMock() {
           start(controller) {
             let index = 0;
             timer = window.setInterval(() => {
+              // Tests can hold the late tail until the navigation action completes.
+              if (index >= 2 && (window as unknown as { holdMockStreamTail?: boolean }).holdMockStreamTail) return;
               if (index >= parts.length) {
                 window.clearInterval(timer);
                 controller.close();
@@ -84,6 +86,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("new session aborts and isolates the previous stream", async ({ page }, testInfo) => {
+  await page.evaluate(() => { (window as unknown as { holdMockStreamTail?: boolean }).holdMockStreamTail = true; });
   const question = "Derive the energy quantization of the one-dimensional harmonic oscillator in detail.";
   await page.getByTestId("chat-input").fill(question);
   await page.getByTestId("send-message").click();
@@ -96,6 +99,7 @@ test("new session aborts and isolates the previous stream", async ({ page }, tes
   ).click();
   await expect(page.getByTestId("assistant-message")).toHaveCount(0);
   await expect(page.getByTestId("stop-generation")).toHaveCount(0);
+  await page.evaluate(() => { (window as unknown as { holdMockStreamTail?: boolean }).holdMockStreamTail = false; });
   await page.waitForTimeout(700);
   await expect(page.getByTestId("assistant-message")).toHaveCount(0);
 

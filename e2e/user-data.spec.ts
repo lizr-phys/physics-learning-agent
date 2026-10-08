@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("signed-in users can persist and reload workspace data", async ({ request }, testInfo) => {
   const suffix = `${Date.now()}-${testInfo.project.name.replace(/\W+/g, "-")}`;
@@ -14,6 +14,8 @@ test("signed-in users can persist and reload workspace data", async ({ request }
 
   const saveResponse = await request.put("/api/user-data", {
     data: {
+      revision: 0,
+      operationId: `initial-${suffix}`,
       sessions: [
         {
           id: "session-e2e",

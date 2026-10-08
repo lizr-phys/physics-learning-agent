@@ -1,5 +1,7 @@
 "use client";
 
+import { workspaceStorage } from "@/lib/workspace-storage";
+
 const lastErrorKey = "pla.api.lastError.v1";
 
 export type StoredApiError = {
@@ -10,11 +12,11 @@ export type StoredApiError = {
 };
 
 export function saveLastApiError(error: StoredApiError) {
-  window.localStorage.setItem(lastErrorKey, JSON.stringify(error));
+  workspaceStorage().setItem(lastErrorKey, JSON.stringify(error));
 }
 
 export function clearLastApiError() {
-  window.localStorage.removeItem(lastErrorKey);
+  workspaceStorage().removeItem(lastErrorKey);
 }
 
 export function getLastApiError(): StoredApiError | null {
@@ -23,7 +25,7 @@ export function getLastApiError(): StoredApiError | null {
   }
 
   try {
-    const raw = window.localStorage.getItem(lastErrorKey);
+    const raw = workspaceStorage().getItem(lastErrorKey);
 
     if (!raw) {
       return null;

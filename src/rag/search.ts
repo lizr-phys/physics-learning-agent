@@ -1,5 +1,6 @@
 import { tokenize } from "@/rag/chunk";
 import type { RagChunk, RagSearchResult } from "@/rag/types";
+import { expandPhysicsTerms } from "@/rag/terms";
 
 export type RagSearchOptions = {
   limit?: number;
@@ -12,25 +13,20 @@ export type RagSearchOptions = {
 
 const bm25K1 = 1.35;
 const bm25B = 0.72;
+const tokenCache = new WeakMap<RagChunk, { text: string; tokens: string[] }>();
+const corpusCache = new WeakMap<RagChunk[], { documentTokens: string[][]; frequencies: Map<string, number>; averageLength: number }>();
 
 function normalizedText(value: string) {
   return value.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
 }
 
 function searchableTokens(chunk: RagChunk) {
-  return chunk.metadata?.tokenVersion === 2 && chunk.tokens.length
-    ? chunk.tokens
-    : tokenize(
-        [
-          chunk.heading,
-          chunk.metadata?.course,
-          chunk.metadata?.topic,
-          chunk.metadata?.description,
-          chunk.content,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+  const text = `${chunk.heading}\n${chunk.content}`;
+  const cached = tokenCache.get(chunk);
+  if (cached?.text === text) return cached.tokens;
+  const tokens = tokenize(expandPhysicsTerms(text));
+  tokenCache.set(chunk, { text, tokens });
+  return tokens;
 }
 
 function termFrequency(tokens: string[]) {
@@ -80,7 +76,7 @@ function phraseScore(query: string, chunk: RagChunk) {
     score += 2.5;
   }
 
-  if (normalizedHeading.includes(normalizedQuery) || normalizedQuery.includes(normalizedHeading)) {
+  if (normalizedHeading.length >= 2 && (normalizedHeading.includes(normalizedQuery) || normalizedQuery.includes(normalizedHeading))) {
     score += 2;
   }
 
@@ -88,7 +84,7 @@ function phraseScore(query: string, chunk: RagChunk) {
 }
 
 function headingScore(queryTokens: string[], chunk: RagChunk) {
-  const headingTokens = new Set(tokenize(chunk.heading));
+  const headingTokens = new Set(tokenize(expandPhysicsTerms(chunk.heading)));
 
   if (!headingTokens.size) {
     return 0;
@@ -113,7 +109,7 @@ function jaccardSimilarity(left: string[], right: string[]) {
   return union ? intersection / union : 0;
 }
 
-function formatLocator(chunk: RagChunk) {
+export function formatRagLocator(chunk: RagChunk) {
   const parts: string[] = [];
 
   if (chunk.metadata?.pageNumber) {
@@ -175,23 +171,27 @@ export function searchRagChunks(
   query: string,
   options: RagSearchOptions = {},
 ): RagSearchResult[] {
-  const queryTokens = tokenize(query);
+  const queryTokens = tokenize(expandPhysicsTerms(query));
 
   if (!chunks.length || !queryTokens.length) {
     return [];
   }
 
   const documentTokens = chunks.map(searchableTokens);
-  const documentFrequencies = new Map<string, number>();
-
-  for (const tokens of documentTokens) {
-    for (const token of new Set(tokens)) {
-      documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
+  let cachedCorpus = corpusCache.get(chunks);
+  if (!cachedCorpus || cachedCorpus.documentTokens.length !== documentTokens.length
+    || cachedCorpus.documentTokens.some((tokens, index) => tokens !== documentTokens[index])) {
+    const frequencies = new Map<string, number>();
+    for (const tokens of documentTokens) {
+      for (const token of new Set(tokens)) {
+        frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+      }
     }
+    cachedCorpus = { documentTokens, frequencies, averageLength: documentTokens.reduce((sum, tokens) => sum + tokens.length, 0) / Math.max(1, chunks.length) };
+    corpusCache.set(chunks, cachedCorpus);
   }
-
-  const averageLength =
-    documentTokens.reduce((sum, tokens) => sum + tokens.length, 0) / Math.max(1, chunks.length);
+  const documentFrequencies = cachedCorpus.frequencies;
+  const averageLength = cachedCorpus.averageLength;
   const queryFrequencies = termFrequency(queryTokens);
 
   const results = chunks
@@ -218,7 +218,8 @@ export function searchRagChunks(
         lexical +=
           inverseDocumentFrequency *
           ((frequency * (bm25K1 + 1)) / lengthNormalization) *
-          Math.min(2, queryFrequency);
+          Math.min(2, queryFrequency) *
+          (token.startsWith("physics_") ? 3 : 1);
       }
 
       const phrase = phraseScore(query, chunk);
@@ -228,8 +229,9 @@ export function searchRagChunks(
 
       return {
         ...chunk,
+        sourceId: chunk.id,
         score: lexical + phrase + heading + metadata + vector,
-        locator: formatLocator(chunk),
+        locator: formatRagLocator(chunk),
         scoreBreakdown: {
           lexical,
           phrase,
@@ -239,9 +241,13 @@ export function searchRagChunks(
         },
       };
     })
-    .filter((result) => result.score >= (options.minScore ?? 0.05))
+    .filter((result) => {
+      const evidence = result.scoreBreakdown;
+      return Boolean(evidence && (evidence.lexical + evidence.phrase + evidence.heading > 0
+        || evidence.vector >= 1.5)) && result.score >= (options.minScore ?? 0.05);
+    })
     .sort((left, right) => right.score - left.score)
-    .slice(0, options.candidateLimit ?? Math.max(12, (options.limit ?? 4) * 4));
+    .slice(0, options.candidateLimit ?? Math.min(40, Math.max(24, (options.limit ?? 4) * 6)));
 
   return selectDiverseResults(results, options.limit ?? 4);
 }

@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { buildLatexDocument, createTexFileName } from "@/lib/latex-export";
 
 describe("LaTeX export", () => {
+  it("exports a tagged display exactly once without a streaming repair", () => {
+    const tex = buildLatexDocument("$$\nE=mc^2 \\tag{1}\n$$\n\nFollowing text.");
+    expect((tex.match(/\\\[/g) ?? [])).toHaveLength(1);
+    expect(tex).toContain("E=mc^2 \\tag{1}");
+    expect(tex).toContain("Following text.");
+  });
   it("builds a complete ctex LaTeX document from practice Markdown", () => {
     const tex = buildLatexDocument(
       [

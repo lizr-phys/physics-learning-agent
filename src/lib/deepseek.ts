@@ -3,23 +3,24 @@ import "server-only";
 import { getModelConfig } from "@/agent/model-config";
 import { getResponseSuffix } from "@/agent/response-post-processor";
 import { buildUserPrompt, PHYSICS_TUTOR_SYSTEM_PROMPT } from "@/lib/prompt-builder";
+import { encodeGenerationEvent, type GenerationBinding, type GenerationPayload } from "@/lib/generation-stream";
+import { readProviderEvents, type ProviderEvent } from "@/lib/provider-sse";
+import { mergeImageAttachments } from "@/lib/image-attachments";
 import {
   assertSafeProviderBaseUrl,
   validateProviderBaseUrl,
 } from "@/lib/provider-url-policy";
 import type {
-  AgentIntent,
   AgentRequest,
   ChatMessage,
   ClientProviderConfig,
-  DetectedLanguage,
 } from "@/types/learning";
 
 type DeepSeekRole = "system" | "user" | "assistant";
 
 type DeepSeekMessage = {
   role: DeepSeekRole;
-  content: string;
+  content: string | Array<{type:"text";text:string} | {type:"image_url";image_url:{url:string;detail:"high"}}>;
 };
 
 type DeepSeekChoice = {
@@ -32,12 +33,6 @@ type DeepSeekChoice = {
   finish_reason?: string | null;
 };
 
-type DeepSeekStreamChunk = {
-  choices?: DeepSeekChoice[];
-  error?: {
-    message?: string;
-  };
-};
 
 type DeepSeekApiResponse = {
   choices?: DeepSeekChoice[];
@@ -58,6 +53,8 @@ type RequestProviderConfig = {
 };
 
 const allowedModels = new Set([
+  "deepseek-flash",
+  "deepseek-v4-flash-vision-exp",
   "deepseek-v4-flash",
   "deepseek-v4-pro",
   "deepseek-chat",
@@ -80,27 +77,37 @@ export class DeepSeekError extends Error {
   }
 }
 
-const streamEventPrefix = "[[PLA_STREAM_EVENT:";
-
-function encodeStreamEvent(type: "done" | "length" | "error", detail = "") {
-  return `\n${streamEventPrefix}${type}${detail ? `:${encodeURIComponent(detail)}` : ""}]]\n`;
+function visualContent(text:string, images:ChatMessage["images"], input:AgentRequest):DeepSeekMessage["content"] {
+  if (!images?.length) return text;
+  return [{type:"text",text},...images.map(image => {
+    const stored=input.resolvedImages?.[image.id];
+    if (!stored) throw new DeepSeekError("An attached image is unavailable. Reattach it before generating.","invalid-provider",400);
+    return {type:"image_url" as const,image_url:{url:`data:${stored.mimeType};base64,${stored.data}`,detail:"high" as const}};
+  })];
 }
-
-function toDeepSeekHistory(history: ChatMessage[] = []): DeepSeekMessage[] {
-  return history
-    .filter((message) => message.content.trim().length > 0)
-    .slice(-16)
+function toDeepSeekHistory(history: ChatMessage[] = [], input:AgentRequest): DeepSeekMessage[] {
+  const seen = new Set(mergeImageAttachments(input.images, input.toolContext?.images)?.map(image => image.id));
+  const visualHistory = [...history].reverse().map(message => ({
+    ...message,
+    images: message.role === "user" ? message.images?.filter(image => {
+      if (seen.has(image.id)) return false;
+      seen.add(image.id);
+      return true;
+    }) : undefined,
+  })).reverse();
+  return visualHistory
+    .filter((message) => message.content.trim().length > 0 || message.images?.length)
     .map((message) => ({
       role: message.role,
-      content: message.content.slice(0, 2000),
+      content: visualContent(message.content || "Attached image",message.images,input),
     }));
 }
 
 function buildMessages(input: AgentRequest): DeepSeekMessage[] {
   return [
     { role: "system", content: PHYSICS_TUTOR_SYSTEM_PROMPT },
-    ...toDeepSeekHistory(input.history),
-    { role: "user", content: buildUserPrompt(input) },
+    ...toDeepSeekHistory(input.history,input),
+    { role: "user", content: visualContent(buildUserPrompt(input),mergeImageAttachments(input.images,input.toolContext?.images),input) },
   ];
 }
 
@@ -118,7 +125,7 @@ function getConfig() {
   return {
     apiKey,
     baseUrl: (process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, ""),
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek-flash",
     thinkingMode: process.env.DEEPSEEK_THINKING ?? "disabled",
     timeoutMs: Number(process.env.DEEPSEEK_TIMEOUT_MS ?? 120000),
     type: "openai-compatible" as const,
@@ -174,7 +181,7 @@ export function getDeepSeekPublicConfig() {
   return {
     configured: Boolean(process.env.DEEPSEEK_API_KEY),
     baseUrl: (process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, ""),
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek-flash",
     thinkingMode: process.env.DEEPSEEK_THINKING ?? "disabled",
     timeoutMs: Number(process.env.DEEPSEEK_TIMEOUT_MS ?? 120000),
     streaming: true,
@@ -186,7 +193,7 @@ function resolveModel(requestedModel?: string) {
     return requestedModel;
   }
 
-  return process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+  return process.env.DEEPSEEK_MODEL ?? "deepseek-flash";
 }
 
 function resolveRequestConfig(input: AgentRequest): RequestProviderConfig {
@@ -209,6 +216,7 @@ function resolveRequestConfig(input: AgentRequest): RequestProviderConfig {
 function createAbortController(timeoutMs: number, parentSignal?: AbortSignal) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (parentSignal?.aborted) controller.abort();
   const abortFromParent = () => controller.abort();
 
   parentSignal?.addEventListener("abort", abortFromParent, { once: true });
@@ -223,197 +231,15 @@ function createAbortController(timeoutMs: number, parentSignal?: AbortSignal) {
   };
 }
 
-function extractStreamEventFromLine(line: string) {
-  const trimmed = line.trim();
-
-  if (!trimmed.startsWith("data:")) {
-    return { delta: "" };
-  }
-
-  const payload = trimmed.replace(/^data:\s*/, "");
-
-  if (!payload) {
-    return { delta: "" };
-  }
-
-  if (payload === "[DONE]") {
-    return { delta: "", done: true };
-  }
-
-  try {
-    const parsed = JSON.parse(payload) as DeepSeekStreamChunk;
-    const choice = parsed.choices?.[0];
-
-    return {
-      delta: choice?.delta?.content ?? choice?.message?.content ?? "",
-      finishReason: choice?.finish_reason ?? undefined,
-      error: parsed.error?.message,
-    };
-  } catch (error) {
-    console.warn("Failed to parse DeepSeek stream line", { payload, error });
-    return { delta: "" };
-  }
-}
-
 async function assertProviderResponse(response: Response, providerLabel: string) {
   if (!response.ok) {
-    const errorText = (await response.text()).slice(0, 2000);
+    await response.body?.cancel().catch(() => undefined);
     throw new DeepSeekError(
-      `${providerLabel} request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+      `${providerLabel} request failed (HTTP ${response.status}). Check the provider settings or retry.`,
       "request-failed",
       response.status,
     );
   }
-}
-
-function openAiStreamLine(delta: string, finishReason?: string | null) {
-  return `data: ${JSON.stringify({
-    choices: [
-      {
-        delta: delta ? { content: delta } : {},
-        finish_reason: finishReason ?? null,
-      },
-    ],
-  })}\n\n`;
-}
-
-function transformAnthropicToOpenAiStream(body: ReadableStream<Uint8Array>) {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-  let stopped = false;
-
-  function handleLine(line: string, controller: TransformStreamDefaultController<Uint8Array>) {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith("data:")) {
-      return;
-    }
-
-    const payload = trimmed.replace(/^data:\s*/, "");
-
-    if (!payload || payload === "[DONE]") {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(payload) as {
-        type?: string;
-        delta?: { text?: string; stop_reason?: string };
-        error?: { message?: string };
-      };
-
-      if (parsed.error?.message) {
-        controller.enqueue(encoder.encode(openAiStreamLine("", null)));
-        return;
-      }
-
-      if (parsed.type === "content_block_delta" && parsed.delta?.text) {
-        controller.enqueue(encoder.encode(openAiStreamLine(parsed.delta.text)));
-      }
-
-      if (parsed.type === "message_delta" && parsed.delta?.stop_reason) {
-        stopped = true;
-        const finishReason = parsed.delta.stop_reason === "max_tokens" ? "length" : "stop";
-        controller.enqueue(encoder.encode(openAiStreamLine("", finishReason)));
-      }
-
-      if (parsed.type === "message_stop" && !stopped) {
-        stopped = true;
-        controller.enqueue(encoder.encode(openAiStreamLine("", "stop")));
-      }
-    } catch (error) {
-      console.warn("Failed to parse Anthropic stream line", { payload, error });
-    }
-  }
-
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          handleLine(line, controller);
-        }
-      },
-      flush(controller) {
-        buffer += decoder.decode();
-
-        for (const line of buffer.split("\n")) {
-          handleLine(line, controller);
-        }
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      },
-    }),
-  );
-}
-
-function transformGeminiToOpenAiStream(body: ReadableStream<Uint8Array>) {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-
-  function handleLine(line: string, controller: TransformStreamDefaultController<Uint8Array>) {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith("data:")) {
-      return;
-    }
-
-    const payload = trimmed.replace(/^data:\s*/, "");
-
-    if (!payload || payload === "[DONE]") {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(payload) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-          finishReason?: string;
-        }>;
-      };
-      const candidate = parsed.candidates?.[0];
-      const text = candidate?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-
-      if (text) {
-        controller.enqueue(encoder.encode(openAiStreamLine(text)));
-      }
-
-      if (candidate?.finishReason) {
-        const finishReason = candidate.finishReason === "MAX_TOKENS" ? "length" : "stop";
-        controller.enqueue(encoder.encode(openAiStreamLine("", finishReason)));
-      }
-    } catch (error) {
-      console.warn("Failed to parse Gemini stream line", { payload, error });
-    }
-  }
-
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          handleLine(line, controller);
-        }
-      },
-      flush(controller) {
-        buffer += decoder.decode();
-
-        for (const line of buffer.split("\n")) {
-          handleLine(line, controller);
-        }
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      },
-    }),
-  );
 }
 
 function splitSystemAndConversation(messages: DeepSeekMessage[]) {
@@ -431,6 +257,7 @@ async function requestAnthropic(
   stream: boolean,
   signal: AbortSignal,
   config: RequestProviderConfig,
+  maxOutputTokens?: number,
 ) {
   const modelConfig = getModelConfig(input);
   const { system, conversation } = splitSystemAndConversation(buildMessages(input));
@@ -447,10 +274,12 @@ async function requestAnthropic(
       system,
       messages: conversation.map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
-        content: message.content,
+        content: typeof message.content === "string" ? message.content : message.content.map(part => part.type === "text" ? part : {
+          type:"image",source:{type:"base64",media_type:"image/webp",data:part.image_url.url.split(",")[1]},
+        }),
       })),
       temperature: modelConfig.temperature,
-      max_tokens: modelConfig.max_tokens,
+      max_tokens: Math.min(modelConfig.max_tokens, maxOutputTokens ?? modelConfig.max_tokens),
       stream,
     }),
   });
@@ -462,7 +291,7 @@ async function requestAnthropic(
       throw new DeepSeekError(`${config.label} returned an empty response.`, "empty-response", 502);
     }
 
-    return new Response(transformAnthropicToOpenAiStream(response.body), {
+    return new Response(response.body, {
       headers: { "Content-Type": "text/event-stream; charset=utf-8" },
     });
   }
@@ -484,6 +313,7 @@ async function requestGemini(
   stream: boolean,
   signal: AbortSignal,
   config: RequestProviderConfig,
+  maxOutputTokens?: number,
 ) {
   const modelConfig = getModelConfig(input);
   const { system, conversation } = splitSystemAndConversation(buildMessages(input));
@@ -503,11 +333,13 @@ async function requestGemini(
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
         contents: conversation.map((message) => ({
           role: geminiRole(message.role),
-          parts: [{ text: message.content }],
+          parts: typeof message.content === "string" ? [{text:message.content}] : message.content.map(part => part.type === "text" ? {text:part.text} : {
+            inlineData:{mimeType:"image/webp",data:part.image_url.url.split(",")[1]},
+          }),
         })),
         generationConfig: {
           temperature: modelConfig.temperature,
-          maxOutputTokens: modelConfig.max_tokens,
+          maxOutputTokens: Math.min(modelConfig.max_tokens, maxOutputTokens ?? modelConfig.max_tokens),
         },
       }),
     },
@@ -520,7 +352,7 @@ async function requestGemini(
       throw new DeepSeekError(`${config.label} returned an empty response.`, "empty-response", 502);
     }
 
-    return new Response(transformGeminiToOpenAiStream(response.body), {
+    return new Response(response.body, {
       headers: { "Content-Type": "text/event-stream; charset=utf-8" },
     });
   }
@@ -534,95 +366,20 @@ async function requestGemini(
   return Response.json({ choices: [{ message: { content } }] });
 }
 
-function transformDeepSeekStream(
-  body: ReadableStream<Uint8Array>,
-  onClose: () => void,
-  intent: AgentIntent,
-  language: DetectedLanguage,
-) {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-  let reachedLengthLimit = false;
-  let reachedTerminalSignal = false;
-  let emittedContent = "";
-
-  function handleLine(line: string, controller: TransformStreamDefaultController<Uint8Array>) {
-    const event = extractStreamEventFromLine(line);
-
-    if (event.done || event.finishReason) {
-      reachedTerminalSignal = true;
-    }
-
-    if (event.error) {
-      controller.enqueue(encoder.encode(encodeStreamEvent("error", event.error)));
-      return;
-    }
-
-    if (event.finishReason === "length") {
-      reachedLengthLimit = true;
-    }
-
-    if (event.delta) {
-      emittedContent += event.delta;
-      controller.enqueue(encoder.encode(event.delta));
-    }
+async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: AbortSignal, maxOutputTokens?: number) {
+  const config = resolveRequestConfig(input);
+  if (Object.keys(input.resolvedImages ?? {}).length && config.type === "openai-compatible"
+    && (!config.clientProvided || config.baseUrl?.includes("api.deepseek.com"))
+    && !["deepseek-flash","deepseek-v4-flash","deepseek-v4-flash-vision-exp"].includes(config.model)) {
+    throw new DeepSeekError("Choose DeepSeek V4.1 Flash (deepseek-flash) in API Settings to use images.","invalid-provider",400);
   }
 
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          handleLine(line, controller);
-        }
-      },
-      flush(controller) {
-        buffer += decoder.decode();
-
-        for (const line of buffer.split("\n")) {
-          handleLine(line, controller);
-        }
-
-        if (reachedLengthLimit) {
-          controller.enqueue(encoder.encode(encodeStreamEvent("length")));
-        } else if (!reachedTerminalSignal && emittedContent.trim()) {
-          controller.enqueue(
-            encoder.encode(
-              encodeStreamEvent(
-                "error",
-                "The upstream connection ended before a completion marker was received.",
-              ),
-            ),
-          );
-        } else {
-          const suffix = getResponseSuffix(intent, language);
-
-          if (suffix && !emittedContent.trimEnd().endsWith(suffix)) {
-            controller.enqueue(encoder.encode(`\n\n${suffix}`));
-          }
-
-          controller.enqueue(encoder.encode(encodeStreamEvent("done")));
-        }
-
-        onClose();
-      },
-    }),
-  );
-}
-
-async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: AbortSignal) {
-  const config = resolveRequestConfig(input);
-
   if (config.type === "anthropic") {
-    return requestAnthropic(input, stream, signal, config);
+    return requestAnthropic(input, stream, signal, config, maxOutputTokens);
   }
 
   if (config.type === "gemini") {
-    return requestGemini(input, stream, signal, config);
+    return requestGemini(input, stream, signal, config, maxOutputTokens);
   }
 
   const { apiKey, baseUrl, thinkingMode, model } = config;
@@ -655,30 +412,28 @@ async function requestDeepSeek(input: AgentRequest, stream: boolean, signal: Abo
       model,
       messages: buildMessages(input),
       temperature: modelConfig.temperature,
-      max_tokens: modelConfig.max_tokens,
+      max_tokens: Math.min(modelConfig.max_tokens, maxOutputTokens ?? modelConfig.max_tokens),
       stream,
       ...thinking,
     }),
   });
 
-  if (!response.ok) {
-    const errorText = (await response.text()).slice(0, 2000);
-    throw new DeepSeekError(
-      `${config.label} request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
-      "request-failed",
-      response.status,
-    );
-  }
+  await assertProviderResponse(response, config.label);
 
   return response;
 }
 
-export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSignal) {
-  const { timeoutMs } = resolveRequestConfig(input);
-  const abort = createAbortController(Math.min(timeoutMs, 30000), parentSignal);
+export async function openProviderEventStream(
+  input: AgentRequest, parentSignal?: AbortSignal,
+  budget: { idleTimeoutMs?: number; totalTimeoutMs?: number; maxOutputTokens?: number } = {},
+): Promise<AsyncGenerator<ProviderEvent>> {
+  const { timeoutMs, type } = resolveRequestConfig(input);
+  const startedAt = Date.now();
+  const totalTimeoutMs = budget.totalTimeoutMs ?? 240_000;
+  const abort = createAbortController(Math.min(timeoutMs, 30_000, totalTimeoutMs), parentSignal);
 
   try {
-    const response = await requestDeepSeek(input, true, abort.signal);
+    const response = await requestDeepSeek(input, true, abort.signal, budget.maxOutputTokens);
 
     if (!response.body) {
       abort.clear();
@@ -688,12 +443,11 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
     // The timeout only protects connection establishment. Once streaming starts,
     // the browser-side idle timeout is reset for every received chunk.
     abort.clearTimeout();
-    return transformDeepSeekStream(
-      response.body,
-      abort.clear,
-      input.intent ?? "general_question",
-      input.detectedLanguage ?? "en",
-    );
+    const events = readProviderEvents(response.body, type, { ...budget, totalTimeoutMs: Math.max(0, totalTimeoutMs - (Date.now() - startedAt)), signal: abort.signal });
+    return (async function* () {
+      try { yield* events; }
+      finally { abort.clear(); }
+    })();
   } catch (error) {
     abort.clear();
 
@@ -710,13 +464,66 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
     }
 
     throw new DeepSeekError(
-      error instanceof Error
-        ? `Network error: ${error.message}`
-        : "Network error: the DeepSeek request did not complete.",
+      "The provider connection could not be established. Check network access and provider settings.",
       "network-error",
       502,
     );
   }
+}
+
+export type GenerationStreamOptions = {
+  binding?: GenerationBinding;
+  initialEvents?: GenerationPayload[];
+  idleTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  maxOutputTokens?: number;
+  finalize?: (content: string) => GenerationPayload[] | Promise<GenerationPayload[]>;
+};
+
+export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSignal, options: GenerationStreamOptions = {}) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener("abort", abort, { once: true });
+  if (parentSignal?.aborted) abort();
+  let events: AsyncGenerator<ProviderEvent>;
+  try { events = await openProviderEventStream(input, controller.signal, options); }
+  catch (error) { parentSignal?.removeEventListener("abort", abort); throw error; }
+  const binding = options.binding ?? {
+    ownerId: "guest", authEpoch: input.authEpoch ?? "guest",
+    sessionId: input.conversationId ?? crypto.randomUUID(),
+    messageId: input.assistantMessageId ?? crypto.randomUUID(),
+    requestId: input.requestId ?? crypto.randomUUID(),
+  };
+  const encoder = new TextEncoder();
+  let seq = 0;
+  let content = "";
+  let cancelled = false;
+  return new ReadableStream<Uint8Array>({
+    async start(output) {
+      const emit = (event: GenerationPayload) => { if (!cancelled) output.enqueue(encoder.encode(encodeGenerationEvent({ ...binding, ...event }))); };
+      try {
+        for (const event of options.initialEvents ?? []) emit(event);
+        for await (const event of events) {
+          if (cancelled) break;
+          if (event.type === "delta") { content += event.text; emit({ ...event, seq: ++seq }); }
+          else if (event.type === "complete") {
+            if (!content.trim()) { emit({ type: "interrupted", reason: "empty_response", retryable: true }); continue; }
+            const suffix = getResponseSuffix(input.intent ?? "general_question", input.detectedLanguage ?? "en");
+            if (suffix && !content.trimEnd().endsWith(suffix)) { const text = `\n\n${suffix}`; content += text; emit({ type: "delta", seq: ++seq, text }); }
+            for (const finalized of await options.finalize?.(content) ?? []) emit(finalized);
+            emit(event);
+          } else emit(event);
+        }
+      } catch {
+        if (controller.signal.aborted) emit({ type: "cancelled", reason: "user_cancelled" });
+        else emit({ type: "interrupted", reason: "generation_failed", retryable: true });
+      } finally {
+        parentSignal?.removeEventListener("abort", abort);
+        if (!cancelled) output.close();
+      }
+    },
+    async cancel() { cancelled = true; controller.abort(); await events.return(undefined); },
+  });
 }
 
 export async function askDeepSeek(input: AgentRequest) {
@@ -747,9 +554,7 @@ export async function askDeepSeek(input: AgentRequest) {
     }
 
     throw new DeepSeekError(
-      error instanceof Error
-        ? `Network error: ${error.message}`
-        : "Network error: the DeepSeek request did not complete.",
+      "The provider connection failed. Check network access and provider settings.",
       "network-error",
       502,
     );

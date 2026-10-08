@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import { decidePersonalKnowledgeUse } from "@/agent/knowledge-mode";
 
 describe("personal knowledge mode decisions", () => {
+  it("treats an explicit document selection as retrieval intent for learning tasks", () => {
+    const decision = decidePersonalKnowledgeUse({ request: { message: "Explain Green functions.", knowledgeDocumentIds: ["doc-selected"] },
+      mode: "auto", intent: "physics_learning", queryType: "math_physics_support", hasUser: true });
+    expect(decision.shouldUse).toBe(true);
+    expect(decision.reason).toContain("selected specific personal documents");
+  });
+
+  it("distinguishes disabled personal retrieval from signed-out requests", () => {
+    expect(decidePersonalKnowledgeUse({ request: { message: "Explain my notes." }, mode: "never",
+      intent: "physics_learning", queryType: "physics_core", hasUser: false }).status).toBe("disabled");
+    expect(decidePersonalKnowledgeUse({ request: { message: "Explain my notes." }, mode: "always",
+      intent: "physics_learning", queryType: "physics_core", hasUser: false }).status).toBe("unauthenticated");
+  });
   it("uses personal knowledge when Auto sees an explicit uploaded-material request", () => {
     const decision = decidePersonalKnowledgeUse({
       request: {

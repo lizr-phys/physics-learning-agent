@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 function installCompleteResponseMock() {
   const originalFetch = window.fetch.bind(window);
@@ -60,7 +60,7 @@ test("practice infers course from a natural-language request", async ({ page }) 
   await expect(page.getByTestId("course-selector")).toHaveValue("quantum-mechanics");
   await expect(page.getByTestId("practice-result-list")).toContainText("Problem 1");
   await expect(page.getByTestId("practice-result-list")).toContainText("Output complete");
-  expect(await page.locator(".katex").count()).toBeGreaterThanOrEqual(4);
+  await expect.poll(() => page.locator(".katex").count()).toBeGreaterThanOrEqual(4);
   await expect(page.getByTestId("practice-result-list")).not.toContainText("\\(");
   await expect(page.getByTestId("practice-result-list")).not.toContainText("\\[");
   await expect(page.getByText("Show answer")).toBeVisible();

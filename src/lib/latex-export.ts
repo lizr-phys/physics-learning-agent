@@ -1,3 +1,5 @@
+import { normalizeMarkdownMath } from "@/lib/markdown-math";
+
 export type LatexDocumentOptions = {
   title?: string;
   subtitle?: string;
@@ -36,31 +38,7 @@ function stripInlineMarkdown(input: string) {
 }
 
 function normalizeMathDelimiters(input: string) {
-  return input
-    .replace(/\r\n?/g, "\n")
-    .replace(
-      /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
-      (_, body: string) => `$$\n${body.trim()}\n$$`,
-    )
-    .replace(
-      /\\begin\{(?:align|align\*|gather|gather\*|multline|multline\*)\}([\s\S]*?)\\end\{(?:align|align\*|gather|gather\*|multline|multline\*)\}/g,
-      (_, body: string) => `$$\n\\begin{aligned}\n${body.trim()}\n\\end{aligned}\n$$`,
-    )
-    .replace(/\\\[/g, "$$")
-    .replace(/\\\]/g, "$$")
-    .replace(/\\\(/g, "$")
-    .replace(/\\\)/g, "$")
-    .split("\n")
-    .map((line) => {
-      const trimmed = line.trim();
-
-      if (/\\tag\{[^}]+\}/.test(trimmed) && !trimmed.startsWith("$")) {
-        return `$$\n${trimmed}\n$$`;
-      }
-
-      return line;
-    })
-    .join("\n");
+  return normalizeMarkdownMath(input);
 }
 
 function escapeInlineTextWithMath(input: string) {

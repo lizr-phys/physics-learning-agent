@@ -7,20 +7,19 @@ import { Download, RefreshCw, Send } from "lucide-react";
 import { parseExerciseRequest } from "@/agent/exercise-parser";
 import { classifyAgentIntent } from "@/agent/intent-classifier";
 import {
-  createLearningMemory,
-  updateLearningMemory,
   updateLearningProfile,
 } from "@/agent/memory-manager";
 import { CourseSelector } from "@/components/CourseSelector";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { GenerationStatus } from "@/components/common/GenerationStatus";
-import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
+import { ImageAttachmentInput, ImageGallery } from "@/components/common/ImageAttachments";
 import { PracticeResultList } from "@/components/practice/PracticeResultList";
 import type { RecommendationItem } from "@/data/recommendations";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
 import { getClientProviderOverride } from "@/lib/client-provider";
+import { getWorkspaceIdentity, isWorkspaceCurrent, workspaceStorage } from "@/lib/workspace-storage";
 import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
@@ -33,6 +32,8 @@ import {
   type StoredPracticeGeneration,
 } from "@/lib/practice-history";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
+import { practiceProgress, safePracticeRequest, type PracticeTaskProgress } from "@/lib/practice-task";
+import { createDraftCheckpoint } from "@/lib/draft-checkpoint";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { buildLatexDocument, createTexFileName } from "@/lib/latex-export";
 import { getPersonalizedRecommendations } from "@/lib/recommendations";
@@ -57,6 +58,8 @@ import {
   type PracticeAssessmentStatus,
   type PracticeStyleId,
   type ToolContext,
+  type GenerationDiagnostics,
+  type ImageAttachment,
 } from "@/types/learning";
 
 const config = {
@@ -64,13 +67,13 @@ const config = {
   source: "practice" as const,
   title: "Practice Problems",
   description:
-    "Generate original physics practice problems from a selected course, topic, difficulty, count, and source-style profile. The agent adapts between Chinese and English problem traditions based on the request.",
+    "Create original problems from a topic or an image.",
   submitLabel: "Generate problems",
-  inputLabel: "Additional requirements",
+  inputLabel: "Practice request",
   placeholder:
-    "Examples: open-course problem-set style on electrostatic boundary-value problems; Chinese final-exam style on separation of variables.",
+    "Describe a topic, or attach a problem and ask for variations…",
   emptyOutput:
-    "Generated problems will appear here. Markdown, LaTeX, tables, and long formulas are supported.",
+    "Your practice set will appear here.",
 };
 
 function languageLabel(language?: DetectedLanguage) {
@@ -90,7 +93,7 @@ export function AgentGenerator() {
   const [course, setCourse] = useState<CourseId | "">("");
   const [knowledgePoint, setKnowledgePoint] = useState("");
   const [difficulty, setDifficulty] = useState<DifficultyId>("medium");
-  const [exerciseCount, setExerciseCount] = useState<3 | 5 | 10>(5);
+  const [exerciseCount, setExerciseCount] = useState<number>(5);
   const [practiceOutputMode, setPracticeOutputMode] =
     useState<PracticeOutputMode>("hidden-answer");
   const [practiceStyle, setPracticeStyle] = useState<PracticeStyleId>("auto");
@@ -98,6 +101,9 @@ export function AgentGenerator() {
     getStoredAnswerDepth(),
   );
   const [extraInput, setExtraInput] = useState("");
+  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [sourceImages, setSourceImages] = useState<ImageAttachment[]>([]);
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -110,6 +116,10 @@ export function AgentGenerator() {
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const generatedAtRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [taskProgress, setTaskProgress] = useState<PracticeTaskProgress | null>(null);
+  const [generationStage, setGenerationStage] = useState("");
+  const draftCheckpointRef = useRef<ReturnType<typeof createDraftCheckpoint<{ content: string; task: PracticeTaskProgress }>> | null>(null);
+  const stopGenerationRef = useRef<((reason?: string) => void) | null>(null);
 
   const knowledgeOptions = useMemo(() => (course ? getKnowledgeByCourse(course) : []), [course]);
   const selectedKnowledgeTitle = getKnowledgeTitle(knowledgePoint);
@@ -152,8 +162,15 @@ export function AgentGenerator() {
       setPracticeStyle(latest.practiceStyle ?? "auto");
       setAnswerDepth(latest.answerDepth ?? getStoredAnswerDepth());
       setExtraInput(latest.prompt);
+      setImages(latest.originalRequest?.images ?? []);
+      setSourceImages(latest.originalRequest?.images ?? []);
       setContent(latest.content);
       setProblemAssessments(latest.problemAssessments ?? {});
+      setTaskProgress(latest.task ?? null);
+      if (latest.status !== "complete") {
+        setPendingRequest(latest.originalRequest ?? { message: latest.prompt, module: "practice", taskType: "practice", course: latest.course, knowledgePoint: latest.knowledgePoint, difficulty: latest.difficulty, exerciseCount: latest.exerciseCount, practiceOutputMode: latest.practiceOutputMode, practiceStyle: latest.practiceStyle, answerDepth: latest.answerDepth });
+        setError("This practice set is unfinished. Continue generation to restore the missing problems.");
+      }
       generatedAtRef.current = latest.createdAt;
     });
 
@@ -162,10 +179,37 @@ export function AgentGenerator() {
 
   useEffect(
     () => () => {
+      stopGenerationRef.current?.("page_left");
+      stopGenerationRef.current = null;
       abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
     },
     [],
   );
+
+  useEffect(() => {
+    const preserve = (event: Event) => { stopGenerationRef.current?.(event.type === "pagehide" ? "page_left" : "workspace_changed"); };
+    window.addEventListener("pagehide", preserve);
+    window.addEventListener("pla:workspace-will-change", preserve);
+    return () => { window.removeEventListener("pagehide", preserve); window.removeEventListener("pla:workspace-will-change", preserve); };
+  }, []);
+
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (abortControllerRef.current) return;
+      const records = getStoredPracticeGenerations();
+      const visible = records.find(record => record.id === practiceRecordId) ?? records[0];
+      if (!visible) { setContent(""); setProblemAssessments({}); setTaskProgress(null); setPendingRequest(null); return; }
+      setPracticeRecordId(visible.id);
+      setContent(visible.content);
+      setSourceImages(visible.originalRequest?.images ?? []);
+      setProblemAssessments(visible.problemAssessments ?? {});
+      setTaskProgress(visible.task ?? null);
+      setPendingRequest(visible.status !== "complete" ? visible.originalRequest ?? { message: visible.prompt, module: "practice", taskType: "practice", course: visible.course, exerciseCount: visible.exerciseCount, practiceOutputMode: visible.practiceOutputMode } : null);
+    };
+    for (const event of ["pla:practice-history-changed", "pla:workspace-loaded", "storage"]) window.addEventListener(event, refreshVisible);
+    return () => { for (const event of ["pla:practice-history-changed", "pla:workspace-loaded", "storage"]) window.removeEventListener(event, refreshVisible); };
+  }, [practiceRecordId]);
 
   function refreshRecommendations() {
     setRecommendations(
@@ -195,7 +239,7 @@ export function AgentGenerator() {
     resolvedCourse: CourseId;
     resolvedKnowledgePoint?: string;
     resolvedDifficulty: DifficultyId;
-    resolvedCount: 3 | 5 | 10;
+    resolvedCount: number;
     resolvedLanguage: DetectedLanguage;
     resolvedPracticeStyle: PracticeStyleId;
   }) {
@@ -218,6 +262,7 @@ export function AgentGenerator() {
       "Use the reference profile only as a style and training convention. Do not copy textbook, exam, MIT OCW, or open-course problem statements.",
       "Use Markdown. Use $...$ and $$...$$ for formulas; do not wrap formulas in code blocks.",
       extraInput.trim() ? `User's additional requirements:\n${extraInput.trim()}` : "",
+      images.length ? "Use the attached image to identify the concepts, diagrams and conditions. Create new variations; do not copy the pictured problem. Ask for clarification if any necessary value or label is unreadable." : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -230,6 +275,8 @@ export function AgentGenerator() {
     status: StoredPracticeGeneration["status"];
     request: AgentRequest;
     promptText: string;
+    task?: PracticeTaskProgress;
+    generation?: GenerationDiagnostics;
   }) {
     const now = Date.now();
     const createdAt = generatedAtRef.current || now;
@@ -251,6 +298,11 @@ export function AgentGenerator() {
       content: options.resultContent,
       status: options.status,
       problemAssessments: existing?.problemAssessments,
+      assessmentTombstones: existing?.assessmentTombstones,
+      task: options.task ?? practiceProgress(options.request, options.resultContent, options.recordId, true),
+      originalRequest: safePracticeRequest(options.request),
+      generation: options.generation ?? existing?.generation,
+      generationAttempts: options.generation ? [...(existing?.generationAttempts ?? []).filter(attempt => attempt.requestId !== options.generation?.requestId), options.generation] : existing?.generationAttempts,
       createdAt,
       updatedAt: now,
     });
@@ -259,11 +311,13 @@ export function AgentGenerator() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isLoading) {
+    if (isLoading || imagesBusy) {
       return;
     }
 
     const parsed = parseExerciseRequest(extraInput, course);
+    const writtenCount = extraInput.match(/(\d+)\s*(?:problems?|exercises?|questions?|道题|道|题)/i)?.[1];
+    if (writtenCount && (Number(writtenCount) < 1 || Number(writtenCount) > 20)) { setError("Generate between 1 and 20 problems in one set."); return; }
 
     if (parsed.conflict) {
       setError(
@@ -272,7 +326,7 @@ export function AgentGenerator() {
       return;
     }
 
-    const resolvedCourse = course || parsed.detectedCourse || "";
+    const resolvedCourse = course || parsed.detectedCourse || (images.length ? "general-physics" : "");
     const resolvedKnowledgePoint = knowledgePoint || parsed.detectedKnowledgeId || "";
     const resolvedDifficulty = parsed.difficulty ?? difficulty;
     const resolvedCount = parsed.count ?? exerciseCount;
@@ -285,7 +339,7 @@ export function AgentGenerator() {
       return;
     }
 
-    if (!resolvedKnowledgePoint && !extraInput.trim()) {
+    if (!resolvedKnowledgePoint && !extraInput.trim() && !images.length) {
       setError("Please select a topic, or enter a clear practice request.");
       return;
     }
@@ -305,9 +359,6 @@ export function AgentGenerator() {
     generatedAtRef.current = Date.now();
     const recordId = createPracticeGenerationId();
     setPracticeRecordId(recordId);
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
     const message = buildMessage({
       resolvedCourse,
       resolvedKnowledgePoint,
@@ -336,204 +387,141 @@ export function AgentGenerator() {
       detectedLanguage: resolvedLanguage,
       answerDepth,
       clientProvider: getClientProviderOverride(),
+      model: workspaceStorage().getItem("pla.deepseek.model") ?? "deepseek-flash",
+      images: images.length ? images : undefined,
     };
 
-    try {
-      const intent = classifyAgentIntent(baseRequest);
-      const memory = updateLearningMemory(createLearningMemory(), baseRequest, intent);
-      saveStoredLearningProfile(
-        updateLearningProfile(getStoredLearningProfile(), memory),
-      );
-      const requestBody: AgentRequest = {
-        ...baseRequest,
-        intent,
-        memory,
-        referenceProfile: memory.referenceProfile,
-      };
+    await runPracticeGeneration(baseRequest, recordId, resultTitle);
+  }
 
-      const result = await requestAgentStream(
-        requestBody,
-        setContent,
-        {
-          signal: abortController.signal,
-          throttleMs: 80,
-          idleTimeoutMs: resolvedCount === 10 ? 180000 : 120000,
-        },
-      );
-      setContent(result);
-      savePracticeResult({
-        recordId,
-        title: resultTitle,
-        resultContent: result,
-        status: "complete",
-        request: requestBody,
-        promptText: extraInput.trim() || message,
-      });
-      clearLastApiError();
-    } catch (requestError) {
-      const streamError =
-        requestError instanceof AgentStreamError
-          ? requestError
-          : new AgentStreamError(requestError instanceof Error ? requestError.message : "Request failed.");
-
-      if (streamError.partialContent) {
-        setContent(streamError.partialContent);
-        savePracticeResult({
-          recordId,
-          title: resultTitle,
-          resultContent: streamError.partialContent,
-          status: streamError.reason === "abort" ? "interrupted" : "error",
-          request: baseRequest,
-          promptText: extraInput.trim() || message,
-        });
+  async function runPracticeGeneration(baseRequest: AgentRequest, recordId: string, title?: string, resumeContent?: string) {
+    const identity = getWorkspaceIdentity();
+    const abortController = new AbortController();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = abortController;
+    const current = () => isWorkspaceCurrent(identity) && abortControllerRef.current === abortController;
+    let effectiveRequest: AgentRequest = {
+      ...baseRequest,
+      intent: classifyAgentIntent(baseRequest),
+      clientProvider: getClientProviderOverride(),
+      conversationId: recordId,
+      assistantMessageId: `${recordId}:answer`,
+      requestId: crypto.randomUUID(),
+      practiceTask: { setId: recordId, resumeContent },
+    };
+    let latestContent = resumeContent ?? "";
+    let latestTask = practiceProgress(effectiveRequest, latestContent, recordId, true);
+    const startedAt = Date.now();
+    let generation: GenerationDiagnostics = { requestId: effectiveRequest.requestId!, provider: effectiveRequest.clientProvider?.provider ?? "server-default", model: effectiveRequest.clientProvider?.model ?? effectiveRequest.model, intent: effectiveRequest.intent, startedAt, terminal: "interrupted", reason: "checkpoint" };
+    setIsLoading(true);
+    setError("");
+    setSourceImages(baseRequest.images ?? []);
+    setGenerationStage("plan-task");
+    setTaskProgress(latestTask);
+    let storageFailure = false;
+    const storageMessage = "The browser could not save this practice set. The current text is still available; download it before leaving and free storage before retrying.";
+    const save = (resultContent: string, status: StoredPracticeGeneration["status"]) => { try { savePracticeResult({
+      recordId, title, resultContent, status, request: effectiveRequest,
+      promptText: extraInput.trim() || baseRequest.message, task: latestTask, generation: { ...generation, durationMs: Date.now() - startedAt, outputChars: resultContent.length },
+    }); return true; } catch { storageFailure = true; setError(storageMessage); abortController.abort(); return false; } };
+    const checkpoint = createDraftCheckpoint<{ content: string; task: PracticeTaskProgress }>(snapshot => {
+      latestTask = snapshot.task;
+      save(snapshot.content, "interrupted");
+    }, current);
+    draftCheckpointRef.current?.discard();
+    draftCheckpointRef.current = checkpoint;
+    stopGenerationRef.current = (reason = "user_cancelled") => {
+      if (current()) {
+        generation = { ...generation, terminal: "cancelled", reason };
+        checkpoint.flush();
+        save(latestContent, "interrupted");
       }
-
-      setPendingRequest(baseRequest);
+      abortController.abort();
+    };
+    try {
+      if (!save(latestContent, "interrupted")) { setPendingRequest(safePracticeRequest(effectiveRequest)); return; }
+      const result = await requestAgentStream(effectiveRequest, partial => {
+        if (!current()) return;
+        latestContent = partial;
+        setContent(partial);
+        checkpoint.update({ content: partial, task: latestTask });
+      }, {
+        signal: abortController.signal, throttleMs: 80, idleTimeoutMs: 120_000,
+        onEvent: event => {
+          if (!current()) return;
+          if (event.type === "delta" && event.text.trim() && generation.firstTokenMs === undefined) generation.firstTokenMs = Date.now() - startedAt;
+          if (event.type === "stage") setGenerationStage(event.stage);
+          if (event.type === "context") {
+            effectiveRequest = { ...effectiveRequest, ...event.context };
+            if (event.context.course) setCourse(event.context.course);
+            if (event.context.knowledgePoint) setKnowledgePoint(event.context.knowledgePoint);
+          }
+          if (event.type === "practice") {
+            latestTask = event.task;
+            setTaskProgress(event.task);
+            checkpoint.update({ content: event.content, task: event.task });
+            checkpoint.flush();
+          }
+          if (event.type === "memory") { try { saveStoredLearningProfile(updateLearningProfile(getStoredLearningProfile(), event.memory)); } catch { setError("The set finished, but learning preferences could not be saved. Download the set before leaving."); } }
+          if (event.type === "complete" || event.type === "interrupted" || event.type === "truncated" || event.type === "cancelled") generation = { ...generation, terminal: event.type, reason: "reason" in event ? event.reason : undefined, finishReason: event.type === "complete" ? event.finishReason : undefined, usage: "usage" in event ? event.usage : undefined };
+        },
+      });
+      if (!current()) return;
+      latestContent = result;
+      latestTask = practiceProgress(effectiveRequest, result, recordId, true);
+      setContent(result);
+      setTaskProgress(latestTask);
+      checkpoint.discard();
+      if (latestTask.completedProblemIds.length !== latestTask.targetCount) {
+        generation = { ...generation, terminal: "interrupted", reason: "practice_contract_incomplete" };
+        if (!save(result, "interrupted")) { setPendingRequest(safePracticeRequest(effectiveRequest)); return; }
+        setPendingRequest(safePracticeRequest(effectiveRequest));
+        setError(`Only ${latestTask.completedProblemIds.length} of ${latestTask.targetCount} problems passed structure checks. Continue generation to finish the set.`);
+      } else {
+        generation = { ...generation, terminal: "complete", reason: undefined };
+        if (!save(result, "complete")) { setPendingRequest(safePracticeRequest(effectiveRequest)); return; }
+        setPendingRequest(null);
+        try { clearLastApiError(); } catch { /* Task output remains visible when diagnostics storage is unavailable. */ }
+      }
+    } catch (requestError) {
+      if (!current()) { checkpoint.discard(); return; }
+      const streamError = requestError instanceof AgentStreamError ? requestError : new AgentStreamError(requestError instanceof Error ? requestError.message : "Request failed.");
+      latestContent = streamError.partialContent || latestContent;
+      latestTask = practiceProgress(effectiveRequest, latestContent, recordId, true);
+      generation = { ...generation, terminal: streamError.reason === "abort" ? "cancelled" : streamError.reason === "length" ? "truncated" : "interrupted", reason: generation.reason !== "checkpoint" ? generation.reason : streamError.reason };
+      setContent(latestContent);
+      setTaskProgress(latestTask);
+      checkpoint.discard();
+      if (storageFailure) { setPendingRequest(safePracticeRequest(effectiveRequest)); setError(storageMessage); return; }
+      if (!save(latestContent, "interrupted")) { setPendingRequest(safePracticeRequest(effectiveRequest)); return; }
+      setPendingRequest(safePracticeRequest(effectiveRequest));
       const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
       setError(messageText);
-      saveLastApiError(createStoredApiError(messageText, streamError.reason));
+      try { saveLastApiError(createStoredApiError(messageText, streamError.reason)); } catch { /* Secondary diagnostics must not hide the retained task output. */ }
     } finally {
-      if (abortControllerRef.current === abortController) {
+      if (current()) {
+        checkpoint.flush();
         abortControllerRef.current = null;
+        draftCheckpointRef.current = null;
+        stopGenerationRef.current = null;
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
   }
 
   async function continueGeneration() {
-    if (!pendingRequest || isLoading) {
-      return;
-    }
-
-    const existingContent = content;
-    setIsLoading(true);
-    setError("");
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      const continuationRequest: AgentRequest = {
-        ...pendingRequest,
-        clientProvider: getClientProviderOverride(),
-        message: `The previous output stopped at the following point. Do not repeat existing content. Continue from the interruption point, preserving the original structure, numbering, language, notation, and LaTeX format.
-
-Original request:
-${pendingRequest.message}
-
-Generated content:
-${existingContent}`,
-      };
-      const continuation = await requestAgentStream(
-        continuationRequest,
-        (partial) => setContent(`${existingContent}${partial}`),
-        {
-          signal: abortController.signal,
-          throttleMs: 80,
-          idleTimeoutMs: pendingRequest.exerciseCount === 10 ? 180000 : 120000,
-        },
-      );
-
-      setContent(`${existingContent}${continuation}`);
-      savePracticeResult({
-        recordId: ensurePracticeRecordId(),
-        resultContent: `${existingContent}${continuation}`,
-        status: "complete",
-        request: pendingRequest,
-        promptText: extraInput.trim() || pendingRequest.message,
-      });
-      setPendingRequest(null);
-      clearLastApiError();
-    } catch (requestError) {
-      const streamError =
-        requestError instanceof AgentStreamError
-          ? requestError
-          : new AgentStreamError(requestError instanceof Error ? requestError.message : "Request failed.");
-
-      if (streamError.partialContent) {
-        setContent(`${existingContent}${streamError.partialContent}`);
-        savePracticeResult({
-          recordId: ensurePracticeRecordId(),
-          resultContent: `${existingContent}${streamError.partialContent}`,
-          status: streamError.reason === "abort" ? "interrupted" : "error",
-          request: pendingRequest,
-          promptText: extraInput.trim() || pendingRequest.message,
-        });
-      }
-
-      const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
-      setError(messageText);
-      saveLastApiError(createStoredApiError(messageText, streamError.reason));
-    } finally {
-      if (abortControllerRef.current === abortController) {
-        abortControllerRef.current = null;
-      }
-      setIsLoading(false);
-    }
+    if (!pendingRequest || isLoading) return;
+    await runPracticeGeneration(pendingRequest, ensurePracticeRecordId(), undefined, content);
   }
 
   async function retryGeneration() {
-    if (!pendingRequest || isLoading) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError("");
-    setContent("");
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      const result = await requestAgentStream(
-        { ...pendingRequest, clientProvider: getClientProviderOverride() },
-        setContent,
-        {
-          signal: abortController.signal,
-          throttleMs: 80,
-          idleTimeoutMs: pendingRequest.exerciseCount === 10 ? 180000 : 120000,
-        },
-      );
-      setContent(result);
-      savePracticeResult({
-        recordId: ensurePracticeRecordId(),
-        resultContent: result,
-        status: "complete",
-        request: pendingRequest,
-        promptText: extraInput.trim() || pendingRequest.message,
-      });
-      setPendingRequest(null);
-      clearLastApiError();
-    } catch (requestError) {
-      const streamError =
-        requestError instanceof AgentStreamError
-          ? requestError
-          : new AgentStreamError(
-              requestError instanceof Error ? requestError.message : "Request failed.",
-            );
-
-      if (streamError.partialContent) {
-        setContent(streamError.partialContent);
-        savePracticeResult({
-          recordId: ensurePracticeRecordId(),
-          resultContent: streamError.partialContent,
-          status: streamError.reason === "abort" ? "interrupted" : "error",
-          request: pendingRequest,
-          promptText: extraInput.trim() || pendingRequest.message,
-        });
-      }
-
-      const messageText = streamError.message || "Generation interrupted. The current content has been preserved.";
-      setError(messageText);
-      saveLastApiError(createStoredApiError(messageText, streamError.reason));
-    } finally {
-      if (abortControllerRef.current === abortController) {
-        abortControllerRef.current = null;
-      }
-      setIsLoading(false);
-    }
+    if (!pendingRequest || isLoading) return;
+    // Retry the unfinished batch; completed problem IDs and assessments stay intact.
+    await runPracticeGeneration(pendingRequest, ensurePracticeRecordId(), undefined, content);
   }
 
   function stopGeneration() {
-    abortControllerRef.current?.abort();
+    stopGenerationRef.current?.();
   }
 
   function ensurePracticeRecordId() {
@@ -546,14 +534,13 @@ ${existingContent}`,
     return nextId;
   }
 
-  function assessProblem(problemIndex: number, status?: PracticeAssessmentStatus) {
+  function assessProblem(problemIndex: number | string, status?: PracticeAssessmentStatus, notes?: { attemptDraft?: string; stuckNote?: string }) {
     if (!practiceRecordId) {
       return;
     }
 
-    setProblemAssessments(
-      updateStoredPracticeAssessment(practiceRecordId, problemIndex, status),
-    );
+    try { setProblemAssessments(updateStoredPracticeAssessment(practiceRecordId, problemIndex, status, notes)); }
+    catch { setError("This attempt could not be saved. Free browser storage and try again; the generated set remains visible."); }
   }
 
   function downloadLatex() {
@@ -561,7 +548,7 @@ ${existingContent}`,
       return;
     }
 
-    const latex = buildLatexDocument(content, {
+    const latex = buildLatexDocument(content.replace(/<!--\s*pla:problem-id\s+[^>]+-->/g, ""), {
       title: "Physics Learning Agent Practice Problems",
       subtitle: topic ? `Topic: ${topic}` : undefined,
       generatedAt: generatedAtRef.current ? new Date(generatedAtRef.current) : new Date(),
@@ -601,6 +588,7 @@ ${existingContent}`,
         resolvedPracticeStyle: practiceStyle,
       }),
       generatedContent: content,
+      images: sourceImages.length ? sourceImages : undefined,
       selectedItem,
       createdAt: generatedAtRef.current || 0,
     };
@@ -633,14 +621,19 @@ ${existingContent}`,
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl items-start gap-6 px-4 py-8 md:px-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <section className="min-w-0 rounded-md border border-zinc-200 bg-white p-5">
-        <div className="space-y-2 border-b border-zinc-200 pb-5">
+    <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-6 md:px-6 lg:grid-cols-[310px_minmax(0,1fr)]">
+      <section className="min-w-0">
+        <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{config.title}</h1>
           <p className="text-sm leading-6 text-zinc-600">{config.description}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <label className="block space-y-2 text-sm font-medium text-zinc-800">
+            <span>{config.inputLabel}</span>
+            <textarea id="practice-request-input" value={extraInput} onChange={event => setExtraInput(event.target.value)} placeholder={config.placeholder} rows={3} className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-zinc-950" data-testid="generator-prompt" />
+          </label>
+          <ImageAttachmentInput images={images} onChange={setImages} onBusyChange={setImagesBusy} disabled={isLoading} pasteTargetId="practice-request-input" />
           <CourseSelector
             value={course}
             placeholder="Select a course"
@@ -651,7 +644,27 @@ ${existingContent}`,
             }}
           />
 
-          <label className="block space-y-2 text-sm font-medium text-zinc-800">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-2 text-sm font-medium text-zinc-800">
+              <span>Count</span>
+              <select aria-label="Count" value={exerciseCount} onChange={event => setExerciseCount(Number(event.target.value))} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm">
+                {[3,5,10,...(![3,5,10].includes(exerciseCount) ? [exerciseCount] : [])].map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-2 text-sm font-medium text-zinc-800">
+              <span>Output mode</span>
+              <select aria-label="Output mode" value={practiceOutputMode} onChange={event => setPracticeOutputMode(event.target.value as PracticeOutputMode)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs" data-testid="practice-output-mode">
+                {practiceOutputModeOptions.map(option => <option key={option.id} value={option.id}>{option.id === "hidden-answer" ? "Hidden answers" : option.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <button type={isLoading ? "button" : "submit"} disabled={imagesBusy && !isLoading} onClick={isLoading ? stopGeneration : undefined} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:bg-zinc-400" data-testid="generator-submit">
+            <Send size={16} />{isLoading ? "Stop generation" : config.submitLabel}
+          </button>
+          <details className="text-sm text-zinc-600">
+          <summary className="cursor-pointer py-2">Options</summary>
+          <div className="mt-2 space-y-3">
+          <label className="mt-2 block space-y-2 text-sm font-medium text-zinc-800">
             <span>Topic</span>
             <select
               value={knowledgePoint}
@@ -669,7 +682,7 @@ ${existingContent}`,
             </select>
           </label>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div>
             <label className="block space-y-2 text-sm font-medium text-zinc-800">
               <span>Difficulty</span>
               <select
@@ -685,18 +698,6 @@ ${existingContent}`,
               </select>
             </label>
 
-            <label className="block space-y-2 text-sm font-medium text-zinc-800">
-              <span>Count</span>
-              <select
-                value={exerciseCount}
-                onChange={(event) => setExerciseCount(Number(event.target.value) as 3 | 5 | 10)}
-                className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
-              >
-                <option value={3}>3</option>
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-              </select>
-            </label>
           </div>
 
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
@@ -734,19 +735,7 @@ ${existingContent}`,
             </select>
           </label>
 
-          <label className="block space-y-2 text-sm font-medium text-zinc-800">
-            <span>{config.inputLabel}</span>
-            <textarea
-              value={extraInput}
-              onChange={(event) => setExtraInput(event.target.value)}
-              placeholder={config.placeholder}
-              rows={4}
-              className="w-full resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-zinc-950"
-              data-testid="generator-prompt"
-            />
-          </label>
-
-          <div className="rounded-md border border-zinc-200 p-3">
+          <div className="pt-2">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium text-zinc-800">Recommended prompts</p>
               <button
@@ -771,39 +760,14 @@ ${existingContent}`,
               ))}
             </div>
           </div>
-
-          <label className="block space-y-2 text-sm font-medium text-zinc-800">
-            <span>Output mode</span>
-            <select
-              value={practiceOutputMode}
-              onChange={(event) =>
-                setPracticeOutputMode(event.target.value as PracticeOutputMode)
-              }
-              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
-              data-testid="practice-output-mode"
-            >
-              {practiceOutputModeOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type={isLoading ? "button" : "submit"}
-            onClick={isLoading ? stopGeneration : undefined}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-            data-testid="generator-submit"
-          >
-            <Send size={16} />
-            {isLoading ? "Stop generation" : config.submitLabel}
-          </button>
+          </div>
+          </details>
         </form>
       </section>
 
-      <section className="min-h-[520px] min-w-0 overflow-x-hidden rounded-md border border-zinc-200 bg-white p-5 pb-12">
+      <section className="min-h-60 min-w-0 overflow-x-hidden border-t border-zinc-200 pt-5 pb-12 lg:border-t-0 lg:border-l lg:pl-6">
         <ErrorMessage message={error} />
+        {sourceImages.length ? <details className="mb-4 text-xs text-zinc-500"><summary className="cursor-pointer py-2">Source images</summary><ImageGallery images={sourceImages} compact /></details> : null}
         {pendingRequest ? (
           <div className="mb-4 flex flex-wrap gap-2">
             <button
@@ -832,20 +796,21 @@ ${existingContent}`,
                 module="practice"
                 taskType={config.taskType}
                 hasContent
+                stage={generationStage}
+                completedProblems={taskProgress?.completedProblemIds.length}
+                totalProblems={taskProgress?.targetCount}
               />
             ) : null}
-            {isLoading ? (
-              <div data-testid="generator-streaming-content">
-                <MarkdownRenderer content={content} streaming />
-              </div>
-            ) : (
+            <div data-testid={isLoading ? "generator-streaming-content" : undefined}>
               <PracticeResultList
                 content={content}
                 onAsk={askPracticeProblem}
                 assessments={problemAssessments}
                 onAssess={assessProblem}
+                outputMode={practiceOutputMode}
+                streaming={isLoading}
               />
-            )}
+            </div>
 
             {!isLoading ? (
               <div className="flex flex-wrap gap-2">
@@ -876,7 +841,7 @@ ${existingContent}`,
           </div>
         ) : isLoading ? (
           <div className="flex min-h-[440px] items-center justify-center">
-            <GenerationStatus module="practice" taskType={config.taskType} />
+            <GenerationStatus module="practice" taskType={config.taskType} stage={generationStage} completedProblems={taskProgress?.completedProblemIds.length} totalProblems={taskProgress?.targetCount} />
           </div>
         ) : (
           <div className="flex min-h-[440px] items-center justify-center text-center text-sm leading-6 text-zinc-500">

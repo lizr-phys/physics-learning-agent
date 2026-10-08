@@ -1,11 +1,13 @@
 "use client";
 
 import { Link2, X } from "lucide-react";
+import { ImageGallery } from "@/components/common/ImageAttachments";
 
 import type { ToolContext } from "@/types/learning";
 
 const labels: Record<ToolContext["source"], string> = {
   practice: "Practice",
+  knowledge: "Photo problem",
 };
 
 type ContextBannerProps = {
@@ -43,6 +45,7 @@ export function ContextBanner({ context, onClear }: ContextBannerProps) {
           <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap border-t border-zinc-200 pt-2 leading-5">
             {context.selectedItem?.content ?? context.generatedContent}
           </p>
+          <ImageGallery images={context.images} compact />
         </details>
       </div>
     </div>

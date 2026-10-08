@@ -1,4 +1,5 @@
 import path from "path";
+import { createHash } from "crypto";
 
 import {
   LatexTextSplitter,
@@ -8,6 +9,34 @@ import {
 } from "@langchain/textsplitters";
 
 import type { RagChunk, RagDocument } from "@/rag/types";
+import { expandPhysicsTerms } from "@/rag/terms";
+
+export const chunkSplitterVersion = "pla-structured-chunks-v3";
+
+export function hashContent(content: string | Buffer) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+/** Content-addressed IDs remain stable when an unchanged document is reindexed. */
+export function withStableChunkIdentity(chunks: RagChunk[], options: {
+  documentId: string; version?: number; documentHash?: string;
+}): RagChunk[] {
+  const occurrences = new Map<string, number>();
+  return chunks.map((chunk) => {
+    const contentHash = hashContent(chunk.content);
+    const occurrence = occurrences.get(contentHash) ?? 0;
+    occurrences.set(contentHash, occurrence + 1);
+    return {
+      ...chunk,
+      id: `${options.documentId}:${contentHash.slice(0, 32)}:${occurrence}`,
+      tokens: tokenize(expandPhysicsTerms(`${chunk.heading}\n${chunk.content}`)),
+      metadata: { ...chunk.metadata, contentHash, version: options.version ?? 1,
+        documentHash: options.documentHash, splitterVersion: chunkSplitterVersion,
+        sectionPath: chunk.metadata?.sectionPath ?? (chunk.metadata?.section ? [chunk.metadata.section] : [chunk.heading]),
+        tokenVersion: 3 },
+    };
+  });
+}
 
 const searchSegmentPattern = /\\[A-Za-z]+|\p{Script=Han}+|[A-Za-z][A-Za-z0-9_+\-]*|\d+(?:\.\d+)?/gu;
 const ignoredTokens = new Set([
@@ -137,32 +166,25 @@ export async function chunkMarkdownDocument(
         source: document.source,
         heading,
         content,
-        tokens: tokenize(
-          [
-            heading,
-            document.metadata?.course,
-            document.metadata?.topic,
-            document.metadata?.description,
-            content,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        ),
+        tokens: tokenize(expandPhysicsTerms(`${heading}\n${content}`)),
         metadata: {
           ...document.metadata,
           chunkIndex: index,
           section: heading,
-          tokenVersion: 2,
+          tokenVersion: 3,
+          splitterVersion: chunkSplitterVersion,
+          sectionPath: [heading],
         },
       } satisfies RagChunk;
     })
     .filter((chunk) => chunk.content.length > 0);
 
-  return chunks.map((chunk) => ({
+  return withStableChunkIdentity(chunks.map((chunk) => ({
     ...chunk,
     metadata: {
       ...chunk.metadata,
       totalChunks: chunks.length,
     },
-  }));
+  })), { documentId: document.metadata?.documentId ?? document.source,
+    version: document.metadata?.version, documentHash: document.metadata?.contentHash ?? hashContent(document.content) });
 }

@@ -2,17 +2,11 @@ import "server-only";
 
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 
-import { selectConversationHistory } from "@/agent/context-manager";
-import {
-  detectCourseFromText,
-  detectKnowledgeFromText,
-  detectPracticeStyleFromText,
-} from "@/agent/exercise-parser";
+import { allocateRequestContext, resolveLearningContext } from "@/agent/context-manager";
+import { detectExerciseCount } from "@/agent/exercise-parser";
 import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier";
 import { decidePersonalKnowledgeUse, resolveKnowledgeMode } from "@/agent/knowledge-mode";
-import { createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
-import { resolvePracticeStyle, resolveReferenceProfile } from "@/data/referenceProfiles";
-import { detectLanguage } from "@/lib/language";
+import { commitLearningMemory, createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
 import { retrievePersonalKnowledge } from "@/lib/personal-knowledge";
 import { classifyQuery } from "@/lib/query-classifier";
 import { retrieveRagSnippets } from "@/rag/retrieve";
@@ -27,6 +21,7 @@ import type {
   QueryType,
   RagContext,
   ReferenceProfileId,
+  RetrievalStatus,
 } from "@/types/learning";
 
 export type AgentWorkflowStage =
@@ -44,6 +39,7 @@ export type PreparedAgentRequest = {
 
 type WorkflowOptions = {
   userId?: string;
+  signal?: AbortSignal;
 };
 
 type WorkflowSnippet = RagContext["snippets"][number];
@@ -69,6 +65,7 @@ const AgentWorkflowState = Annotation.Root({
     reducer: (_left, right) => right,
     default: () => [],
   }),
+  retrievalStatus: Annotation<RetrievalStatus>(),
   preparedInput: Annotation<AgentRequest>(),
 });
 
@@ -76,42 +73,28 @@ type WorkflowState = typeof AgentWorkflowState.State;
 
 function understandInput(state: WorkflowState) {
   const { input } = state;
-  const intent = input.intent ?? classifyAgentIntent(input);
-  const language =
-    input.detectedLanguage ?? detectLanguage(input.message, input.memory?.recentLanguage ?? "en");
-  const practiceStyle =
-    input.practiceStyle ??
-    detectPracticeStyleFromText(input.message) ??
-    input.memory?.practiceStyle ??
-    resolvePracticeStyle({ language });
-  const referenceProfile =
-    input.referenceProfile ??
-    resolveReferenceProfile({
-      language,
-      practiceStyle,
-      referenceProfile: input.memory?.referenceProfile,
-    });
+  state.options.signal?.throwIfAborted();
+  const resolved = resolveLearningContext(input);
+  const intent = input.intent ?? (detectExerciseCount(input.message) && (resolved.course !== "general" || input.memory?.exerciseTopics.length)
+    ? "exercise_generation" : classifyAgentIntent(resolved));
+  const language = resolved.detectedLanguage ?? "en";
+  const practiceStyle = resolved.practiceStyle ?? "auto";
+  const referenceProfile = resolved.referenceProfile ?? "auto";
 
   return {
     intent,
     language,
     practiceStyle,
     referenceProfile,
+    contextInput: resolved,
     stages: ["understand-input"] satisfies AgentWorkflowStage[],
   };
 }
 
 function resolveContext(state: WorkflowState) {
-  const { input, language, practiceStyle, referenceProfile, intent } = state;
-  const detectedCourse = detectCourseFromText(input.message);
-  const course =
-    input.course && input.course !== "general"
-      ? input.course
-      : detectedCourse ?? input.memory?.currentCourse ?? "general";
-  const knowledgePoint =
-    input.knowledgePoint ??
-    detectKnowledgeFromText(input.message, course) ??
-    input.memory?.currentKnowledgePoint;
+  const { contextInput: input, language, practiceStyle, referenceProfile, intent } = state;
+  const course = input.course ?? "general";
+  const knowledgePoint = input.knowledgePoint;
   const queryType = input.queryType ?? classifyQuery({ ...input, course, knowledgePoint });
   const contextInput: AgentRequest = {
     ...input,
@@ -123,7 +106,7 @@ function resolveContext(state: WorkflowState) {
     referenceProfile,
     queryType,
     knowledgeMode: resolveKnowledgeMode(input.knowledgeMode),
-    history: selectConversationHistory(input.history),
+    history: input.history,
   };
 
   return {
@@ -168,18 +151,31 @@ function planRetrieval(state: WorkflowState) {
 }
 
 async function retrieveKnowledge(state: WorkflowState) {
-  const personalRagResults =
-    state.options.userId && state.personalKnowledgeDecision.shouldUse
-      ? await retrievePersonalKnowledge(
+  state.options.signal?.throwIfAborted();
+  let retrievalStatus: RetrievalStatus = state.personalKnowledgeDecision.shouldUse ? state.options.userId ? "no_match" : "unauthenticated" : state.personalKnowledgeDecision.status ?? "disabled";
+  let personalRagResults: Awaited<ReturnType<typeof retrievePersonalKnowledge>> = [];
+  if (state.options.userId && state.personalKnowledgeDecision.shouldUse) {
+    try {
+      personalRagResults = await retrievePersonalKnowledge(
           state.options.userId,
           state.personalKnowledgeDecision.retrievalQuery ?? state.contextInput.message,
           {
             limit: 4,
             course: state.course,
             topic: state.knowledgePoint,
+            documentIds: state.contextInput.knowledgeDocumentIds,
+            courseOnly: state.contextInput.knowledgeCourseOnly,
+            signal: state.options.signal,
           },
-        )
-      : [];
+        );
+      retrievalStatus = personalRagResults.length ? "retrieved" : "no_match";
+    } catch (error) {
+      state.options.signal?.throwIfAborted();
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      retrievalStatus = "failed";
+    }
+  }
+  state.options.signal?.throwIfAborted();
   const sampleRagResults =
     state.contextInput.useRag && isPhysicsIntent(state.intent)
       ? await retrieveRagSnippets(state.contextInput.message, {
@@ -200,25 +196,29 @@ async function retrieveKnowledge(state: WorkflowState) {
       content: result.content,
       kind: result.kind,
       locator: result.locator,
+      sourceId: result.sourceId,
+      documentId: result.metadata?.documentId,
+      contentHash: result.metadata?.contentHash,
+      version: result.metadata?.version,
     }));
 
   return {
     ragSnippets,
+    retrievalStatus,
     stages: ["retrieve-knowledge"] satisfies AgentWorkflowStage[],
   };
 }
 
 function prepareGeneration(state: WorkflowState) {
-  const preparedInput: AgentRequest = {
+  const preparedInput: AgentRequest = allocateRequestContext({
     ...state.contextInput,
     memory: state.memory,
-    personalKnowledgeDecision: state.personalKnowledgeDecision,
-    ragContext: state.ragSnippets.length
-      ? {
+    personalKnowledgeDecision: { ...state.personalKnowledgeDecision, status: state.retrievalStatus },
+    ragContext: {
           snippets: state.ragSnippets,
-        }
-      : undefined,
-  };
+          status: state.retrievalStatus,
+        },
+  });
 
   return {
     preparedInput,
@@ -249,10 +249,14 @@ export async function prepareAgentRequest(
   const result = await agentWorkflow.invoke({
     input,
     options,
-  });
+  }, { signal: options.signal });
 
   return {
     stages: result.stages,
     input: result.preparedInput,
   };
+}
+
+export function finalizePreparedAgentMemory(prepared: PreparedAgentRequest, content: string) {
+  return commitLearningMemory(prepared.input, content);
 }

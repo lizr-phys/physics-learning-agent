@@ -3,15 +3,17 @@
 import { CheckCircle2, ChevronDown, CircleHelp, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
-import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
+import { MarkdownRenderer } from "@/components/common/LazyMarkdownRenderer";
 import type { ParsedPracticeProblem } from "@/lib/practice-parser";
-import type { PracticeAssessmentStatus } from "@/types/learning";
+import { validatePracticeProblem } from "@/lib/practice-parser";
+import type { PracticeAssessment, PracticeAssessmentStatus, PracticeOutputMode } from "@/types/learning";
 
 type PracticeProblemCardProps = {
   problem: ParsedPracticeProblem;
   onAsk: (problem: ParsedPracticeProblem) => void;
-  assessment?: PracticeAssessmentStatus;
-  onAssess: (problemIndex: number, status?: PracticeAssessmentStatus) => void;
+  assessment?: PracticeAssessment;
+  onAssess: (problemId: number | string, status?: PracticeAssessmentStatus, notes?: { attemptDraft?: string; stuckNote?: string }) => void;
+  outputMode?: PracticeOutputMode;
   headingId?: string;
 };
 
@@ -39,8 +41,13 @@ export function PracticeProblemCard({
   assessment,
   onAssess,
   headingId,
+  outputMode = "hidden-answer",
 }: PracticeProblemCardProps) {
   const [problemOpen, setProblemOpen] = useState(true);
+  const [attemptDraft, setAttemptDraft] = useState(assessment?.attemptDraft ?? "");
+  const [stuckNote, setStuckNote] = useState(assessment?.stuckNote ?? "");
+  const notes = { attemptDraft, stuckNote };
+  const assessmentStatus = assessment?.status;
 
   return (
     <article
@@ -73,13 +80,26 @@ export function PracticeProblemCard({
             </p>
           ) : null}
           <div className="rounded-md bg-zinc-50 p-3">
+            {problem.conditions ? <div className="mb-3"><p className="mb-1 text-xs font-medium text-zinc-500">Conditions</p><MarkdownRenderer content={problem.conditions} /></div> : null}
             <MarkdownRenderer content={problem.problem} />
           </div>
+          {!validatePracticeProblem(problem, outputMode).valid ? <p className="mt-2 text-xs text-amber-700">This problem needs structural completion. Generated answers still require physics review.</p> : null}
           <div className="mt-3">
             <FoldSection title="Show hint" content={problem.hint} />
             <FoldSection title="Show solution" content={problem.solution} />
             <FoldSection title="Show answer" content={problem.answer} />
+            <FoldSection title="Show common mistakes" content={problem.pitfalls} />
           </div>
+          <details className="border-t border-zinc-200 py-3">
+            <summary className="cursor-pointer text-xs font-medium text-zinc-700">My attempt (optional)</summary>
+            <label className="mt-3 block text-xs text-zinc-600">Your working
+              <textarea aria-label={`Your attempt for problem ${problem.index}`} value={attemptDraft} maxLength={4000} onChange={event => setAttemptDraft(event.target.value)} onBlur={() => { if (assessmentStatus) onAssess(problem.id, assessmentStatus, notes); }} className="mt-1 block min-h-20 w-full rounded border border-zinc-200 p-2 text-sm" />
+            </label>
+            <label className="mt-2 block text-xs text-zinc-600">Where did you get stuck?
+              <input aria-label={`Stuck step for problem ${problem.index}`} value={stuckNote} maxLength={1000} onChange={event => setStuckNote(event.target.value)} onBlur={() => { if (assessmentStatus) onAssess(problem.id, assessmentStatus, notes); }} className="mt-1 block w-full rounded border border-zinc-200 p-2 text-sm" />
+            </label>
+            <p className="mt-2 text-xs text-zinc-500">Choose Solved or Needs work to save this attempt. Self-assessment is not automatic grading.</p>
+          </details>
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
             <button
               type="button"
@@ -93,12 +113,12 @@ export function PracticeProblemCard({
             <button
               type="button"
               onClick={() =>
-                onAssess(problem.index, assessment === "solved" ? undefined : "solved")
+                onAssess(problem.id, assessmentStatus === "solved" ? undefined : "solved", notes)
               }
-              aria-pressed={assessment === "solved"}
+              aria-pressed={assessmentStatus === "solved"}
               data-testid={`practice-assessment-solved-${problem.index}`}
               className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors ${
-                assessment === "solved"
+                assessmentStatus === "solved"
                   ? "border-zinc-900 bg-zinc-900 text-white"
                   : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
               }`}
@@ -110,14 +130,15 @@ export function PracticeProblemCard({
               type="button"
               onClick={() =>
                 onAssess(
-                  problem.index,
-                  assessment === "needs-work" ? undefined : "needs-work",
+                  problem.id,
+                  assessmentStatus === "needs-work" ? undefined : "needs-work",
+                  notes,
                 )
               }
-              aria-pressed={assessment === "needs-work"}
+              aria-pressed={assessmentStatus === "needs-work"}
               data-testid={`practice-assessment-needs-work-${problem.index}`}
               className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors ${
-                assessment === "needs-work"
+                assessmentStatus === "needs-work"
                   ? "border-zinc-900 bg-zinc-900 text-white"
                   : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
               }`}

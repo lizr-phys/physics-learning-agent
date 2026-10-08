@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  outputFileTracingExcludes: {
+    "/*": ["./.pla-data/**", "./.env*", "./test-results/**", "./playwright-report/**"],
+  },
+  devIndicators: process.env.PLA_TEST_MODE === "true" ? false : undefined,
   async headers() {
     return [
       {

@@ -139,10 +139,16 @@ export function decidePersonalKnowledgeUse(input: {
 }): PersonalKnowledgeDecision {
   const mode = resolveKnowledgeMode(input.mode);
 
+  if (mode === "never") {
+    return { mode, shouldUse: false, status: "disabled", confidence: "high",
+      reason: "The user selected Do not use personal knowledge." };
+  }
+
   if (!input.hasUser) {
     return {
       mode,
       shouldUse: false,
+      status: "unauthenticated",
       confidence: "high",
       reason: "No signed-in user is available, so there is no personal knowledge base to search.",
     };
@@ -158,12 +164,13 @@ export function decidePersonalKnowledgeUse(input: {
     };
   }
 
-  if (mode === "never") {
+  if (input.request.knowledgeDocumentIds?.length && (isPhysicsIntent(input.intent) || isPhysicsLikeQuery(input.queryType))) {
     return {
       mode,
-      shouldUse: false,
+      shouldUse: true,
       confidence: "high",
-      reason: "The user selected Do not use personal knowledge.",
+      reason: "The user selected specific personal documents for this learning task.",
+      retrievalQuery: compactRetrievalQuery(input.request),
     };
   }
 
@@ -196,6 +203,7 @@ export function decidePersonalKnowledgeUse(input: {
     return {
       mode,
       shouldUse: false,
+      status: "disabled",
       confidence: "high",
       reason: "The message is a general non-physics request and does not ask for uploaded materials.",
     };
@@ -220,6 +228,7 @@ export function decidePersonalKnowledgeUse(input: {
   return {
     mode,
     shouldUse: false,
+    status: "disabled",
     confidence: "low",
     reason: "The message does not clearly require user-uploaded materials.",
   };

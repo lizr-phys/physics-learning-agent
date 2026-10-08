@@ -1,7 +1,5 @@
-import { detectPracticeStyleFromText } from "@/agent/exercise-parser";
+import { buildConversationSummary, resolveLearningContext } from "@/agent/context-manager";
 import { getKnowledgeItem, knowledgeItems } from "@/data/knowledge";
-import { resolveReferenceProfile } from "@/data/referenceProfiles";
-import { detectLanguage } from "@/lib/language";
 import type {
   AgentIntent,
   AgentRequest,
@@ -33,7 +31,7 @@ function uniqueRecent(items: string[], limit: number) {
 export function createLearningMemory(): LearningMemory {
   return {
     recentLanguage: "en",
-    referenceProfile: "english",
+    referenceProfile: "auto",
     practiceStyle: "auto",
     recentConfusions: [],
     coveredConcepts: [],
@@ -49,7 +47,7 @@ export function createLearningProfile(): LearningProfile {
     recentTopics: [],
     preferredStyle: "balanced",
     recentLanguage: "en",
-    referenceProfile: "english",
+    referenceProfile: "auto",
     practiceStyle: "auto",
     updatedAt: Date.now(),
   };
@@ -102,20 +100,13 @@ export function updateLearningMemory(
   intent: AgentIntent,
 ) {
   const current = previous ?? createLearningMemory();
-  const selectedKnowledge = getKnowledgeItem(input.knowledgePoint);
-  const mentionedConcepts = inferMentionedConcepts(input.message);
-  const currentKnowledgePoint =
-    selectedKnowledge?.title ?? mentionedConcepts[0] ?? current.currentKnowledgePoint;
-  const language = input.detectedLanguage ?? detectLanguage(input.message, current.recentLanguage ?? "en");
-  const practiceStyle =
-    input.practiceStyle ?? detectPracticeStyleFromText(input.message) ?? current.practiceStyle ?? "auto";
-  const referenceProfile =
-    input.referenceProfile ??
-    resolveReferenceProfile({
-      language,
-      practiceStyle,
-      referenceProfile: current.referenceProfile,
-    });
+  const resolved = resolveLearningContext({ ...input, memory: current });
+  const isLearningTask = intent !== "general_question" && intent !== "meta_question";
+  const selectedKnowledge = getKnowledgeItem(resolved.knowledgePoint);
+  const mentionedConcepts = isLearningTask ? inferMentionedConcepts(input.message) : [];
+  const currentKnowledgePoint = isLearningTask
+    ? selectedKnowledge?.title ?? resolved.knowledgePoint
+    : current.currentKnowledgePoint;
   const isConfusion = confusionTerms.some((term) => input.message.toLowerCase().includes(term));
   const exerciseTopic =
     intent === "exercise_generation"
@@ -125,12 +116,13 @@ export function updateLearningMemory(
   return {
     ...current,
     currentCourse:
-      input.course && input.course !== "general" ? input.course : current.currentCourse,
+      isLearningTask && resolved.course !== "general" ? resolved.course : current.currentCourse,
     currentKnowledgePoint,
-    currentGoal: buildGoal(input, intent) ?? current.currentGoal,
-    recentLanguage: language,
-    practiceStyle,
-    referenceProfile,
+    currentGoal: buildGoal(resolved, intent) ?? current.currentGoal,
+    recentLanguage: resolved.detectedLanguage,
+    practiceStyle: resolved.practiceStyle,
+    referenceProfile: resolved.referenceProfile,
+    contextProvenance: resolved.contextProvenance,
     recentConfusions: uniqueRecent(
       [...current.recentConfusions, isConfusion ? input.message.slice(0, 200) : ""],
       6,
@@ -143,6 +135,18 @@ export function updateLearningMemory(
     preferredStyle: inferPreferredStyle(input.message, current.preferredStyle),
     updatedAt: Date.now(),
   } satisfies LearningMemory;
+}
+
+/** Called only after a provider terminal signal and output validation confirm completion. */
+export function commitLearningMemory(input: AgentRequest, content: string): LearningMemory {
+  const memory = updateLearningMemory(input.memory, input, input.intent ?? "physics_learning");
+  const messages = [
+    ...(input.history ?? []),
+    { id: `${input.requestId ?? "current"}:user`, role: "user" as const, content: input.message },
+    { id: input.assistantMessageId ?? `${input.requestId ?? "current"}:assistant`, role: "assistant" as const,
+      content, status: "complete" as const },
+  ];
+  return { ...memory, conversationSummary: buildConversationSummary(messages, memory), updatedAt: Date.now() };
 }
 
 export function updateLearningProfile(
@@ -187,6 +191,7 @@ export function formatLearningMemory(memory?: LearningMemory) {
     memory.coveredConcepts.length ? `Covered concepts: ${memory.coveredConcepts.join("; ")}` : "",
     memory.recentConfusions.length ? `Recent confusions: ${memory.recentConfusions.join("; ")}` : "",
     memory.exerciseTopics.length ? `Recent exercise topics: ${memory.exerciseTopics.join("; ")}` : "",
+    memory.conversationSummary ? `Conversation evidence (assistant explanations are unverified, not established facts):\n${memory.conversationSummary}` : "",
   ]
     .filter(Boolean)
     .join("\n");
