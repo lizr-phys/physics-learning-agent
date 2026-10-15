@@ -25,7 +25,7 @@ export function KnowledgeScopeControl({ documentIds, courseOnly, onChange }: {
   }, []);
   return <details className="mt-2 text-xs text-zinc-500">
     <summary className="cursor-pointer">Material scope{documentIds.length ? ` · ${documentIds.length} selected` : ""}</summary>
-    <div className="mt-2 max-h-36 space-y-2 overflow-y-auto rounded border border-zinc-200 p-3">
+    <div className="mt-2 max-h-44 space-y-3 overflow-y-auto py-2">
       <p>Selected excerpts may be sent to your chosen model provider.</p>
       <label className="flex gap-2"><input type="checkbox" checked={courseOnly} onChange={event => onChange(documentIds, event.target.checked)} />Current course only</label>
       <p>{documents.length ? "All indexed documents are eligible unless you select specific documents." : status || "Sign in and index a document to choose materials."}</p>

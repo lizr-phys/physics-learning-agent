@@ -185,9 +185,12 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
     finally { if (importController.current === controller) { importController.current = null; setImporting(false); } }
   }
 
-  return <>
-    {ready ? <div className="contents" key={epoch}>{children}</div> : <p role="status" className="p-6 text-sm">Loading workspace…</p>}
-    <div className={`fixed bottom-1 right-3 z-50 max-w-[min(92vw,28rem)] bg-white px-2 py-1 text-xs text-zinc-500 ${detail || offerImport || offerLegacy ? "rounded-lg border border-zinc-200 p-3 shadow-sm" : ""}`}>
+  const needsAttention = Boolean(detail || offerImport || offerLegacy);
+
+  return <div className="flex h-dvh flex-col overflow-hidden bg-white">
+    {ready ? <div className="min-h-0 flex-1" key={epoch}>{children}</div> : <p role="status" className="min-h-0 flex-1 p-6 text-sm">Loading workspace…</p>}
+    <div data-testid="workspace-save-state" className={`shrink-0 border-t border-zinc-100 bg-white px-4 text-xs text-zinc-500 ${needsAttention ? "max-h-[40dvh] overflow-y-auto py-3" : "py-1 text-right"}`}>
+      <div className={needsAttention ? "mx-auto max-w-2xl space-y-1" : ""}>
       <span role="status" aria-live="polite" title={detail}>{status}</span>
       {detail ? <p>{detail} <button className="underline" onClick={() => window.dispatchEvent(new Event("pla:auth-changed"))}>Retry save</button></p> : null}
       {offerImport || offerLegacy ? <div className="mt-2 space-y-2">
@@ -195,6 +198,7 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
         <button disabled={importing} className="mr-3 underline disabled:opacity-50" onClick={() => chooseImport(true, !offerImport)}>{importing ? "Importing…" : "Import into this account"}</button>
         <button disabled={importing} className="underline disabled:opacity-50" onClick={() => chooseImport(false, !offerImport)}>Keep separate</button>
       </div> : null}
+      </div>
     </div>
-  </>;
+  </div>;
 }

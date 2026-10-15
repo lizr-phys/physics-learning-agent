@@ -22,6 +22,7 @@ test("document selection reaches the request and citations open the real saved e
     await route.fulfill({contentType:"text/event-stream",body:event({type:"sources",status:"retrieved",sources:[source]})+event({type:"delta",seq:1,text:"A normalizable state has total probability one [1]."})+event({type:"complete",finishReason:"stop"})});
   });
   await page.goto("/chat");
+  await page.getByRole("button", {name:"Chat options", exact:true}).click();
   await page.getByText("Material scope", {exact:true}).click();
   await page.getByLabel("normalization-notes.md").check();
   await page.getByTestId("chat-input").fill("Use these notes to explain normalization");

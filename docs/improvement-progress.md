@@ -6,6 +6,8 @@ The existing untracked Chinese plan, product requirements and `logo.png` are pre
 
 The subsequent image-input and compact-interface implementation, verification and limits are tracked in [multimodal-ui-progress.md](multimodal-ui-progress.md). Its final test ledger supersedes the earlier local acceptance counts below while retaining this stage history. GitHub upload was explicitly authorized by the user on 2026-10-08; it does not authorize deployment.
 
+The 2026-10-15 interface refinement is tracked separately in [ui-simplification.md](ui-simplification.md), including navigation, focused page layouts and regression evidence. Earlier stage results below remain historical records.
+
 | Finding | Status | Scope / evidence | Remaining |
 | --- | --- | --- | --- |
 | F01 | Implemented; local acceptance passed | Scoped caches, auth epoch, abort/stale guards, explicit imports; desktop/mobile account, tab, delayed GET and draft cases | Actual shared-device pilot observation |

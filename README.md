@@ -31,10 +31,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/workspace.png" alt="Physics Learning Agent conversation workspace" width="1100" />
+  <img src="docs/assets/workspace.png" alt="Physics Learning Agent with focused navigation and a compact chat composer" width="1100" />
 </p>
 
 Physics Learning Agent is a study workspace for undergraduate physics, with text and image conversations, structured course knowledge, original practice problems, personal document retrieval, and multi-provider model access. Compact pages keep the main task visible and place optional controls in expandable sections.
+
+The sidebar opens Chat, Practice Problems, Knowledge Map and Personal Knowledge; API Settings sits at the bottom. Conversation history appears in Chat. In the composer, **Options** groups answer depth, personal retrieval and material scope. Practice results use a full reading column, with **Edit request** to reopen their settings. The map uses course and topic selectors, while the personal library keeps saved materials visible and opens uploads through **Add material**.
 
 The project is built around two primary workflows:
 
@@ -115,9 +117,9 @@ Attach a photo, paste a screenshot, or use the camera picker in Chat and Practic
 
 The default model ID is `deepseek-flash`, the official API name for DeepSeek V4.1 Flash. DeepSeek's older Flash aliases remain selectable. OpenAI-compatible, Anthropic and Gemini adapters forward images through their native content parts; the selected model must support vision. DeepSeek Pro rejects image requests with a visible explanation. See the official [DeepSeek vision guide](https://api-docs.deepseek.com/guides/vision/) and [model reference](https://api-docs.deepseek.com/quick_start/pricing/).
 
-Images are stored privately under `PLA_DATA_DIR`, separately for each account and the browser's anonymous workspace. Signing in offers an explicit copy of anonymous records and their images. Account switching cancels old uploads and generation. Workspace exports contain image references; use API Settings → Workspace data → Manage images to save image copies or remove unused uploads.
+Images are stored privately under `PLA_DATA_DIR`, separately for each account and the browser's anonymous workspace. Signing in offers an explicit copy of anonymous records and their images. Account switching cancels old uploads and generation. Workspace exports contain image references; use API Settings → Advanced → Workspace data → Manage images to save image copies or remove unused uploads.
 
-In Personal Knowledge Base, **Photo problems** organizes photographed exams and homework. Choose a category, attach images, and let the selected vision model transcribe questions, conditions, diagram descriptions and unclear details without inventing a solution. Review or edit the text and explicitly confirm it before saving. The library retains the source images and user source note alongside an indexed Markdown document. Filter exam/homework photos, reopen the note, or carry its text, images and document scope into Chat. Recognition drafts survive page navigation and refresh in the account's browser cache; completed notes live in the private server library. Duplicate save retries reuse the same record. Review confirms transcription only, not physics correctness.
+In Personal Knowledge Base, **Add material → Photo problems** organizes photographed exams and homework. Choose a category, attach images, and let the selected vision model transcribe questions, conditions, diagram descriptions and unclear details without inventing a solution. Review or edit the text and explicitly confirm it before saving. The library retains the source images and user source note alongside an indexed Markdown document. Filter exam/homework photos, reopen the note, or carry its text, images and document scope into Chat. Recognition drafts survive closing the panel, page navigation and refresh in the account's browser cache; completed notes live in the private server library. Duplicate save retries reuse the same record. Review confirms transcription only, not physics correctness.
 
 Limits are four images per message and eight unique images per request, including history. JPEG, PNG, WebP and GIF inputs must be at most 10 MB and 25 megapixels. Images are rotated, stripped of metadata, resized to at most 2560 pixels per side, and stored as WebP up to 2 MB each. GIF uses its first frame. Each workspace has a 50 MB / 256-image allowance. Crop small handwriting when needed; unreadable values should prompt clarification. Audio, video, native PDF vision, automatic OCR ingestion and provider Files API storage are not implemented.
 
@@ -186,14 +188,15 @@ Limits are four images per message and eight unique images per request, includin
 - Anonymous feedback remains in browser storage; signed-in feedback follows the existing account-scoped workspace snapshot
 - A deterministic offline baseline checks intent routing, course resolution, and bundled-note retrieval without spending model tokens
 - Evaluation fixtures are designed to grow from anonymized pilot failure patterns rather than one-off prompt tuning
-- API Settings provides a private workspace export, a feedback-summary export, and synchronization conflict details
+- API Settings → Advanced → Workspace data provides a private workspace export, a feedback-summary export, and synchronization conflict details
 - The summary includes retained feedback counts, terminal states, retrieval states, and available timing/token measurements; it excludes identities and learning text
 
 Exports are initiated by the user; no analytics are sent automatically. Stored feedback and self-assessment are weak learning signals, and format checks do not verify physics answers. See [Pilot Evaluation](docs/pilot-evaluation.md) for report generation and the unfilled human-review record.
 
 ### Bring Your Own Key model access
 
-- Use the server-configured default model, or provide a temporary browser-side key for another provider
+- Choose `Server default` or `My API key` in API Settings; each choice shows its relevant fields and connection result
+- `Save for this browser` stores provider preferences and the tab's temporary key without making a model request; `Test provider` explicitly checks the connection
 - Supported provider routes:
   - OpenAI-compatible APIs
   - DeepSeek

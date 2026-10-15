@@ -13,6 +13,7 @@ import {
   Settings,
   Trash2,
   Pencil,
+  MessageCircle,
 } from "lucide-react";
 import { KeyboardEvent, useEffect, useMemo, useState } from "react";
 
@@ -34,10 +35,10 @@ type SidebarProps = {
 };
 
 const navItems = [
-  { href: "/map", label: "Knowledge Map", icon: Route },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/practice", label: "Practice Problems", icon: PenLine },
+  { href: "/map", label: "Knowledge Map", icon: Route },
   { href: "/knowledge-base", label: "Personal Knowledge", icon: Database },
-  { href: "/settings/api", label: "API Settings", icon: Settings },
 ];
 
 type SessionGroupProps = {
@@ -177,8 +178,10 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const [editingTitle, setEditingTitle] = useState("");
   const [menuSessionId, setMenuSessionId] = useState("");
   const grouped = useMemo(() => groupSessionsByTime(sessions), [sessions]);
+  const isChat = pathname === "/chat" || pathname === "/";
 
   useEffect(() => {
+    if (!isChat) return;
     function refresh() {
       const activeSessionId = getActiveSessionId();
       const nextSessions = compactEmptyManualSessions(activeSessionId);
@@ -195,7 +198,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       window.removeEventListener("pla:active-session-changed", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [isChat]);
 
   function openSession(session: StoredChatSession) {
     setActiveSessionId(session.id);
@@ -296,47 +299,33 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
-      <div className="border-b border-zinc-200 p-4">
+    <aside className="flex h-full w-[224px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50" aria-label="Workspace navigation">
+      <div className="px-4 pb-3 pt-5">
         <Link href="/chat" onClick={onNavigate} className="flex items-center gap-2 text-sm font-semibold text-zinc-950">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
             <Image src="/logo.png" alt="Physics Learning Agent logo" width={24} height={24} className="object-contain" />
           </span>
-          Physics Learning Agent
+          <span className="leading-5">Physics Learning<br />Agent</span>
         </Link>
+      </div>
+
+      <nav className="space-y-1 px-3 py-3" aria-label="Workspaces">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href || (item.href === "/chat" && isChat);
+          return <Link key={item.href} href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm ${active ? "bg-zinc-200/70 font-medium text-zinc-950" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"}`}><Icon size={16} /><span>{item.label}</span></Link>;
+        })}
+      </nav>
+      {isChat ? <>
         <button
           type="button"
           onClick={newSession}
-          className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#111111] px-3 text-sm font-medium text-white hover:bg-zinc-800"
+          className="mx-3 mb-4 mt-2 flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm text-zinc-700 hover:bg-zinc-200/70"
           data-testid="new-session"
         >
           <Plus size={16} />
           New conversation
         </button>
-      </div>
-
-      <nav className="space-y-1 border-b border-zinc-200 p-3">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={
-                active
-                  ? "flex items-center gap-2 rounded-lg bg-zinc-200 px-3 py-2 text-sm text-zinc-950"
-                  : "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
-              }
-            >
-              <Icon size={16} />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <div className="mb-2 flex items-center gap-2 px-2 text-xs font-medium text-zinc-500">
@@ -393,9 +382,13 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </>
         ) : (
           <p className="px-2 py-3 text-sm leading-6 text-zinc-500">
-            No local conversations yet. Start a new conversation or send your first question.
+            Your conversations will appear here.
           </p>
         )}
+      </div>
+      </> : <div className="flex-1" />}
+      <div className="border-t border-zinc-200 p-3">
+        <Link href="/settings/api" onClick={onNavigate} aria-current={pathname === "/settings/api" ? "page" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm ${pathname === "/settings/api" ? "bg-zinc-200/70 font-medium text-zinc-950" : "text-zinc-600 hover:bg-zinc-100"}`}><Settings size={16} />API Settings</Link>
       </div>
     </aside>
   );

@@ -34,18 +34,19 @@ export function FirstUseGuide() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pt-5">
-      <div className="relative border-b border-zinc-100 py-3 pr-10">
+    <details className="border-t border-zinc-200 pt-3 text-xs text-zinc-600">
+      <summary className="cursor-pointer py-1">Quick guide</summary>
+      <div className="relative mt-2 pr-8">
         <button
           type="button"
           onClick={close}
-          className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-950"
+          className="absolute right-0 top-0 rounded p-1 text-zinc-500 hover:text-zinc-950"
           aria-label="Close guide"
         >
           <X size={15} />
         </button>
-        <p className="text-xs text-zinc-500">Paste a screenshot or attach a photo to ask about diagrams and handwritten work.</p>
+        <p className="leading-5">Ask a question, paste a screenshot, or use the image and camera controls. Enter sends; Shift + Enter starts a new line.</p>
       </div>
-    </div>
+    </details>
   );
 }

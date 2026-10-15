@@ -20,6 +20,14 @@ flowchart LR
 
 The browser keeps English product navigation and independently selects the answer language from the current request. Chat, Knowledge Map, Practice Problems, Personal Knowledge Base, and API Settings remain the main entry points. General questions use a direct answer with at most a light final note about the physics workspace.
 
+## Interface structure
+
+The sidebar has four learning destinations, with API Settings in its footer. Conversation history and its storage listeners are active only on Chat. The composer groups depth, personal retrieval and document scope in one Options popover; opening it preserves the draft and does not resize the reading area. Material scope mounts when those options open, avoiding an unused library request on the initial Chat view.
+
+Practice uses one reading column. Its request editor collapses after generation and remains mounted so Edit request restores the selected values. Knowledge Map uses course/topic selectors and expandable supporting notes. Personal Knowledge Base starts with saved materials; Add material opens a native modal side panel with either the photo capture workflow or a separate document form. Photo draft checkpoints survive panel closure, and a successful save returns focus to Add material.
+
+Shared popovers mount their contents only while open and support outside dismissal, Escape and keyboard focus restoration. The material dialog uses native modal focus containment. Save state has a reserved footer, so it cannot cover the composer or page text; sync details and explicit import choices expand within that area. API Settings renders only the chosen connection form, keeps server and BYOK test results separate, and places diagnostics and workspace data tools under Advanced. Saving a BYOK configuration does not itself call the provider. These controls change presentation without changing the account, generation or persistence contracts below. Design decisions and local browser evidence are recorded in [Interface Simplification](ui-simplification.md).
+
 ## Request lifecycle
 
 1. The browser captures the workspace owner and authentication epoch, then assigns a conversation ID, assistant-message ID, and request ID. Account changes, session changes, deletion, and unmounting invalidate the active generation.

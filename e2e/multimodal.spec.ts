@@ -140,9 +140,10 @@ test("the five compact pages fit the viewport and keep optional controls accessi
     if (path === "/map") await expect(page.locator(".katex").first()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`ui-${path.replaceAll("/", "-").slice(1)}.png`) });
   }
-  await page.getByLabel("Enable", { exact: true }).check();
+  await page.getByText("My API key", { exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Provider", exact: true })).toHaveValue("deepseek");
   await expect(page.getByLabel("Model", { exact: true })).toHaveValue("deepseek-flash");
+  await page.getByText("Advanced", { exact: true }).click();
   await page.getByText("Workspace data", { exact: true }).click();
   await expect(page.getByRole("button", { name: "Export workspace", exact: true })).toBeVisible();
 });

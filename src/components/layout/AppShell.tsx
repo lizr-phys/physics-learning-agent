@@ -40,7 +40,7 @@ export function AppShell({ children }: AppShellProps) {
   }, [sidebarOpen]);
 
   return (
-    <UserDataSync><div className="flex h-[100dvh] overflow-hidden bg-white text-[#111111]">
+    <UserDataSync><div className="flex h-full overflow-hidden bg-white text-[#111111]">
       <div className="hidden h-full md:block">
         <Sidebar />
       </div>

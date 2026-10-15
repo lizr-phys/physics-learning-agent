@@ -104,6 +104,7 @@ export function AgentGenerator() {
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [sourceImages, setSourceImages] = useState<ImageAttachment[]>([]);
   const [imagesBusy, setImagesBusy] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(false);
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -345,6 +346,7 @@ export function AgentGenerator() {
     }
 
     setCourse(resolvedCourse);
+    setEditingRequest(false);
     setKnowledgePoint(resolvedKnowledgePoint);
     setDifficulty(resolvedDifficulty);
     setExerciseCount(resolvedCount);
@@ -621,19 +623,23 @@ export function AgentGenerator() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-6 md:px-6 lg:grid-cols-[310px_minmax(0,1fr)]">
+    <div className="mx-auto max-w-4xl space-y-6 px-5 py-8 md:px-8">
       <section className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{config.title}</h1>
           <p className="text-sm leading-6 text-zinc-600">{config.description}</p>
         </div>
+        {content && !isLoading ? <button type="button" onClick={() => setEditingRequest(value => !value)} aria-expanded={editingRequest} aria-controls="practice-request-editor" className="rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50">{editingRequest ? "Close editor" : "Edit request"}</button> : null}
+        </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <form id="practice-request-editor" hidden={Boolean(content) && !isLoading && !editingRequest} onSubmit={handleSubmit} className="mt-6 space-y-4">
           <label className="block space-y-2 text-sm font-medium text-zinc-800">
             <span>{config.inputLabel}</span>
-            <textarea id="practice-request-input" value={extraInput} onChange={event => setExtraInput(event.target.value)} placeholder={config.placeholder} rows={3} className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-zinc-950" data-testid="generator-prompt" />
+            <textarea id="practice-request-input" value={extraInput} onChange={event => setExtraInput(event.target.value)} placeholder={config.placeholder} rows={3} className="w-full resize-y rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm leading-6 outline-none focus:border-zinc-950" data-testid="generator-prompt" />
           </label>
           <ImageAttachmentInput images={images} onChange={setImages} onBusyChange={setImagesBusy} disabled={isLoading} pasteTargetId="practice-request-input" />
+          <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_5rem_auto]">
           <CourseSelector
             value={course}
             placeholder="Select a course"
@@ -644,26 +650,25 @@ export function AgentGenerator() {
             }}
           />
 
-          <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-2 text-sm font-medium text-zinc-800">
               <span>Count</span>
               <select aria-label="Count" value={exerciseCount} onChange={event => setExerciseCount(Number(event.target.value))} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm">
                 {[3,5,10,...(![3,5,10].includes(exerciseCount) ? [exerciseCount] : [])].map(value => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
+          <button type={isLoading ? "button" : "submit"} disabled={imagesBusy && !isLoading} onClick={isLoading ? stopGeneration : undefined} className="flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-medium text-white hover:bg-zinc-800 disabled:bg-zinc-400" data-testid="generator-submit">
+            <Send size={16} />{isLoading ? "Stop generation" : config.submitLabel}
+          </button>
+          </div>
+          <details className="text-sm text-zinc-600">
+          <summary className="cursor-pointer py-2">Options</summary>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
             <label className="block space-y-2 text-sm font-medium text-zinc-800">
               <span>Output mode</span>
-              <select aria-label="Output mode" value={practiceOutputMode} onChange={event => setPracticeOutputMode(event.target.value as PracticeOutputMode)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs" data-testid="practice-output-mode">
+              <select aria-label="Output mode" value={practiceOutputMode} onChange={event => setPracticeOutputMode(event.target.value as PracticeOutputMode)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm" data-testid="practice-output-mode">
                 {practiceOutputModeOptions.map(option => <option key={option.id} value={option.id}>{option.id === "hidden-answer" ? "Hidden answers" : option.label}</option>)}
               </select>
             </label>
-          </div>
-          <button type={isLoading ? "button" : "submit"} disabled={imagesBusy && !isLoading} onClick={isLoading ? stopGeneration : undefined} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:bg-zinc-400" data-testid="generator-submit">
-            <Send size={16} />{isLoading ? "Stop generation" : config.submitLabel}
-          </button>
-          <details className="text-sm text-zinc-600">
-          <summary className="cursor-pointer py-2">Options</summary>
-          <div className="mt-2 space-y-3">
           <label className="mt-2 block space-y-2 text-sm font-medium text-zinc-800">
             <span>Topic</span>
             <select
@@ -735,7 +740,7 @@ export function AgentGenerator() {
             </select>
           </label>
 
-          <div className="pt-2">
+          <div className="pt-2 sm:col-span-2">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium text-zinc-800">Recommended prompts</p>
               <button
@@ -765,7 +770,7 @@ export function AgentGenerator() {
         </form>
       </section>
 
-      <section className="min-h-60 min-w-0 overflow-x-hidden border-t border-zinc-200 pt-5 pb-12 lg:border-t-0 lg:border-l lg:pl-6">
+      <section className="min-w-0 pb-12">
         <ErrorMessage message={error} />
         {sourceImages.length ? <details className="mb-4 text-xs text-zinc-500"><summary className="cursor-pointer py-2">Source images</summary><ImageGallery images={sourceImages} compact /></details> : null}
         {pendingRequest ? (
@@ -844,9 +849,7 @@ export function AgentGenerator() {
             <GenerationStatus module="practice" taskType={config.taskType} stage={generationStage} completedProblems={taskProgress?.completedProblemIds.length} totalProblems={taskProgress?.targetCount} />
           </div>
         ) : (
-          <div className="flex min-h-[440px] items-center justify-center text-center text-sm leading-6 text-zinc-500">
-            {config.emptyOutput}
-          </div>
+          practiceOutputMode === "hidden-answer" ? <p className="text-xs leading-5 text-zinc-500">Answers stay hidden until you choose to reveal them.</p> : null
         )}
       </section>
     </div>

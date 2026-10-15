@@ -65,6 +65,13 @@ test("practice infers course from a natural-language request", async ({ page }) 
   await expect(page.getByTestId("practice-result-list")).not.toContainText("\\[");
   await expect(page.getByText("Show answer")).toBeVisible();
   await expect(page.getByTestId("download-latex")).toBeVisible();
+  await expect(page.getByTestId("generator-prompt")).toBeHidden();
+  await page.getByRole("button", { name: "Edit request", exact: true }).click();
+  await expect(page.getByTestId("generator-prompt")).toHaveValue("Generate 3 basic quantum mechanics one-dimensional stationary-state practice problems.");
+  await expect(page.getByTestId("course-selector")).toHaveValue("quantum-mechanics");
+  await page.getByRole("button", { name: "Close editor", exact: true }).click();
+  await expect(page.getByTestId("generator-prompt")).toBeHidden();
+  await expect(page.getByTestId("practice-result-list")).toBeVisible();
   await expect(
     page.getByText("The allowed energies are fixed by the integer quantum number", {
       exact: false,

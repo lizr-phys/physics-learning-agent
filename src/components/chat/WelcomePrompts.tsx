@@ -32,37 +32,23 @@ export function WelcomePrompts({ onPick }: WelcomePromptsProps) {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-[42vh] max-w-3xl flex-col justify-center px-4 py-8 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">What would you like to understand?</h1>
-      <div className="mt-3 flex items-center justify-center gap-3 text-sm text-zinc-500">
-        <span>Ask, attach a problem, or choose a topic.</span>
+    <div className="mx-auto flex min-h-[56dvh] max-w-2xl flex-col items-center justify-center px-5 py-8 text-center">
+      <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">What are you working on?</h1>
+      <p className="mt-3 text-sm leading-6 text-zinc-500">Ask a question or attach a problem.</p>
+      <details className="mt-6 w-full max-w-lg text-sm text-zinc-600">
+        <summary className="mx-auto w-fit cursor-pointer rounded-lg px-3 py-2 hover:bg-zinc-50">Try an example</summary>
+        <div className="mt-3 space-y-1 text-left">
+          {recommendations.map(item => <button key={item.id} type="button" onClick={() => onPick(item.prompt)} className="w-full rounded-lg px-3 py-2 text-xs leading-5 hover:bg-zinc-100">{item.title}</button>)}
         <button
           type="button"
           onClick={() => setRecommendations(buildRecommendations())}
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+          className="mx-3 mt-2 inline-flex min-h-8 items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-950"
         >
           <RefreshCw size={13} />
-          Refresh
+          More examples
         </button>
-      </div>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
-        {recommendations.length ? (
-          recommendations.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onPick(item.prompt)}
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-left text-xs leading-5 text-zinc-600 hover:bg-zinc-50"
-            >
-              {item.title}
-            </button>
-          ))
-        ) : (
-          <div className="col-span-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-500">
-            Loading recommendations...
-          </div>
-        )}
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

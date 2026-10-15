@@ -1,14 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileText, Loader2, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Database, FileText, Loader2, LogOut, MoreHorizontal, Plus, RefreshCw, Trash2, UserRound } from "lucide-react";
 
-import { courseOptions, getCourseLabel } from "@/data/courses";
+import { getCourseLabel } from "@/data/courses";
 import { announceAuthChange } from "@/lib/workspace-storage";
 import type { CourseId, DetectedLanguage } from "@/types/learning";
 import type { PhotoProblemMetadata } from "@/lib/photo-problem";
 import { PhotoProblemCapture } from "@/components/knowledge/PhotoProblemCapture";
 import { PhotoProblemViewer } from "@/components/knowledge/PhotoProblemViewer";
+import { DocumentUploadForm } from "@/components/knowledge/DocumentUploadForm";
+import { SidePanel } from "@/components/common/SidePanel";
+import { Popover } from "@/components/common/Popover";
 
 type User = {
   id: string;
@@ -90,14 +93,12 @@ export default function KnowledgeBasePage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "exam" | "homework">("all");
+  const [addingMaterial, setAddingMaterial] = useState(false);
+  const [materialType, setMaterialType] = useState<"photo" | "document">("photo");
   const visibleDocuments = documents.filter(document => libraryFilter === "all" || document.problem?.kind === libraryFilter);
 
   const indexedCount = useMemo(
     () => documents.filter((document) => document.indexStatus === "indexed").length,
-    [documents],
-  );
-  const totalChunks = useMemo(
-    () => documents.reduce((sum, document) => sum + document.chunkCount, 0),
     [documents],
   );
 
@@ -200,7 +201,8 @@ export default function KnowledgeBasePage() {
         fileInputRef.current.value = "";
       }
 
-      setNotice(data.document.statusMessage);
+      setNotice(data.document.indexStatus === "indexed" ? "Material saved and ready for chat." : "Material saved. Check File details for its indexing status.");
+      setAddingMaterial(false);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
     } finally {
@@ -243,7 +245,7 @@ export default function KnowledgeBasePage() {
       setDocuments((current) =>
         current.map((item) => (item.id === document.id ? data.document : item)),
       );
-      setNotice(data.document.statusMessage);
+      setNotice(data.document.indexStatus === "indexed" ? "Material is ready for chat." : "Indexing needs attention. Check File details.");
     } catch (reindexError) {
       setError(reindexError instanceof Error ? reindexError.message : "Reindexing failed.");
     } finally {
@@ -252,14 +254,20 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-6">
-      <section>
+    <div className="mx-auto max-w-5xl space-y-8 px-5 py-8 md:px-8">
+      <section className="flex flex-wrap items-start justify-between gap-4">
+        <div>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">
           Personal Knowledge Base
         </h1>
         <p className="mt-2 text-sm leading-6 text-zinc-600">
-          Add your notes for relevant references in chat.
+          Keep notes and photographed questions together.
         </p>
+        </div>
+        {user ? <Popover label="Account" trigger={<><UserRound size={16} /><span>Account</span></>} align="end" triggerClassName="flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-100" panelClassName="w-64">
+          <p className="text-sm font-medium text-zinc-950">{user.name}</p><p className="mt-1 break-all text-xs text-zinc-500">{user.email}</p>
+          <button type="button" onClick={() => void logout()} className="mt-4 flex min-h-9 items-center gap-2 text-xs text-zinc-700" aria-label="Sign out"><LogOut size={15} />Sign out</button>
+        </Popover> : null}
       </section>
 
       {isLoading ? (
@@ -357,210 +365,65 @@ export default function KnowledgeBasePage() {
               </p>
               <p>
                 Markdown, TXT, TeX, CSV, text-based PDF, DOCX, PPTX, XLSX, RTF, and OpenDocument
-                files can be indexed. Scanned pages require OCR before they become searchable.
+                files can be indexed.
               </p>
               <p>
-                For photos or scanned pages, attach images in Chat. Image uploads are separate from the searchable library.
+                For exam or homework photos, use Add material after signing in. Review the recognized text before saving it to your searchable library.
               </p>
             </div>
           </details>
         </div>
       ) : (
-        <div className="grid items-start gap-8 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="space-y-4">
-            <section>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-950">{user.name}</p>
-                  <p className="text-sm text-zinc-500">{user.email}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  className="rounded-lg border border-zinc-200 p-2 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-950"
-                  aria-label="Sign out"
-                >
-                  <LogOut size={16} />
-                </button>
-              </div>
-              <p className="mt-3 text-xs text-zinc-500">{indexedCount} indexed files · {totalChunks} search chunks</p>
-            </section>
-
-            <PhotoProblemCapture onSaved={loadDocuments} />
-            <details className="border-t border-zinc-200 pt-4">
-              <summary className="cursor-pointer text-sm font-semibold text-zinc-950">Upload documents</summary>
-              <form onSubmit={uploadDocument} className="mt-4 space-y-4">
-                <label className="block text-sm">
-                  <span className="font-medium text-zinc-800">File</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".md,.markdown,.txt,.tex,.csv,.pdf,.docx,.pptx,.xlsx,.rtf,.odt,.odp,.ods"
-                    className="mt-2 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-950 file:px-3 file:py-2 file:text-sm file:text-white"
-                  />
-                </label>
-                <details className="text-sm text-zinc-600">
-                <summary className="cursor-pointer py-1">Course, topic and description</summary>
-                <div className="mt-3 space-y-3">
-                <label className="block text-sm">
-                  <span className="font-medium text-zinc-800">Course</span>
-                  <select
-                    value={course}
-                    onChange={(event) => setCourse(event.target.value as CourseId | "")}
-                    className="mt-2 h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 outline-none focus:border-zinc-500"
-                  >
-                    <option value="">Detect from the document</option>
-                    {courseOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block text-sm">
-                  <span className="font-medium text-zinc-800">Topic</span>
-                  <input
-                    value={topic}
-                    onChange={(event) => setTopic(event.target.value)}
-                    className="mt-2 h-10 w-full rounded-lg border border-zinc-300 px-3 outline-none focus:border-zinc-500"
-                    placeholder="Optional chapter or topic"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <span className="font-medium text-zinc-800">Description</span>
-                  <textarea
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full resize-none rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-500"
-                    placeholder="Course, chapter, source notes, or usage context"
-                  />
-                </label>
-                </div>
-                </details>
-                <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-medium text-white disabled:bg-zinc-400"
-                >
-                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  {isUploading ? "Uploading..." : "Upload and index"}
-                </button>
-              </form>
-            </details>
-          </aside>
-
-          <section className="min-w-0 border-t border-zinc-200 pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
-            <div className="flex flex-col gap-2 border-b border-zinc-200 pb-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-zinc-950">Library</h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Indexed files are available to chat retrieval.
-                </p>
-              </div>
-              <select aria-label="Library category" value={libraryFilter} onChange={event => setLibraryFilter(event.target.value as typeof libraryFilter)} className="h-9 rounded-lg border border-zinc-300 bg-white px-2 text-xs">
+        <section className="space-y-5 pb-10" aria-label="Saved materials">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <select aria-label="Library category" value={libraryFilter} onChange={event => setLibraryFilter(event.target.value as typeof libraryFilter)} className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm">
                 <option value="all">All materials</option><option value="exam">Exam photos</option><option value="homework">Homework photos</option>
               </select>
+              <span className="text-xs text-zinc-500">{documents.length} {documents.length === 1 ? "material" : "materials"} · {indexedCount} indexed</span>
             </div>
-
-            {error ? (
-              <p className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                {error}
-              </p>
-            ) : null}
-            {notice ? (
-              <p className="mt-4 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
-                {notice}
-              </p>
-            ) : null}
-
-            <div className="mt-5 space-y-3">
-              {visibleDocuments.length ? (
-                visibleDocuments.map((document) => (
-                  <article
-                    key={document.id}
-                    className="border-b border-zinc-200 pb-4"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <FileText size={16} className="shrink-0 text-zinc-500" />
-                          <h3 className="truncate text-sm font-semibold text-zinc-950">
-                            {document.problem?.title ?? document.fileName}
-                          </h3>
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-zinc-600">
-                          {document.description || document.statusMessage}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
-                          {document.problem ? <span>{document.problem.kind === "exam" ? "Exam" : "Homework"} photo</span> : null}
-                          <span>
-                            {statusLabel(document.indexStatus)}
-                          </span>
-                          {document.course ? (
-                            <span>
-                              {getCourseLabel(document.course)}
-                            </span>
-                          ) : null}
-                          {document.topic ? (
-                            <span>
-                              {document.topic}
-                            </span>
-                          ) : null}
-                          <span>
-                            {document.chunkCount} chunks
-                          </span>
-                          <span>
-                            {formatBytes(document.size)}
-                          </span>
-                          <span>
-                            {new Date(document.createdAt).toLocaleDateString("en-US")}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void reindexDocument(document)}
-                          disabled={reindexingId === document.id}
-                          className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-400 hover:text-zinc-950 disabled:text-zinc-400"
-                        >
-                          <RefreshCw
-                            size={15}
-                            className={reindexingId === document.id ? "animate-spin" : ""}
-                          />
-                          Reindex
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteDocument(document)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:border-zinc-400 hover:text-zinc-950"
-                        >
-                          <Trash2 size={15} />
-                          Delete
-                        </button>
-                      </div>
+            <button type="button" onClick={() => { setAddingMaterial(true); setError(""); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white"><Plus size={16} />Add material</button>
+          </div>
+          {isUploading ? <p role="status" className="text-xs text-zinc-500">Uploading material…</p> : null}
+          {error ? <p role="alert" className="text-sm leading-6 text-red-700">{error}</p> : null}
+          {notice ? <p role="status" className="text-xs leading-5 text-zinc-600">{notice}</p> : null}
+          <div className="divide-y divide-zinc-200 border-t border-zinc-200">
+            {visibleDocuments.length ? visibleDocuments.map(document => (
+              <article key={document.id} className="py-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} className="shrink-0 text-zinc-500" />
+                      <h3 className="truncate text-sm font-medium text-zinc-950">{document.problem?.title ?? document.fileName}</h3>
                     </div>
-                    {document.problem ? <PhotoProblemViewer document={{ ...document, problem: document.problem }} /> : null}
-                    {document.description ? (
-                      <p className="mt-3 text-xs leading-5 text-zinc-500">
-                        {document.statusMessage}
-                      </p>
-                    ) : null}
-                  </article>
-                ))
-              ) : (
-                <div className="py-12 text-center">
-                  <Database className="mx-auto text-zinc-400" size={28} />
-                  <p className="mt-3 text-sm font-medium text-zinc-950">{libraryFilter === "all" ? "No documents yet" : `No ${libraryFilter} photos yet`}</p>
-                  <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    Upload your first note or course document.
-                  </p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">{document.problem ? `${document.problem.kind === "exam" ? "Exam" : "Homework"} photo · ` : ""}{statusLabel(document.indexStatus)}{document.course ? ` · ${getCourseLabel(document.course)}` : ""}{document.topic ? ` · ${document.topic}` : ""}</p>
+                  </div>
+                  <Popover label={`Actions for ${document.problem?.title ?? document.fileName}`} trigger={<MoreHorizontal size={18} />} align="end" closeOnAction triggerClassName="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100" panelClassName="w-40">
+                    <button type="button" onClick={() => void reindexDocument(document)} disabled={reindexingId === document.id} className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-zinc-100 disabled:text-zinc-400"><RefreshCw size={14} className={reindexingId === document.id ? "animate-spin" : ""} />Reindex</button>
+                    <button type="button" onClick={() => void deleteDocument(document)} className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-red-700 hover:bg-zinc-50"><Trash2 size={14} />Delete</button>
+                  </Popover>
                 </div>
-              )}
-            </div>
-          </section>
-        </div>
+                {reindexingId === document.id ? <p role="status" className="mt-2 text-xs text-zinc-500">Updating index…</p> : null}
+                {document.problem ? <PhotoProblemViewer document={{ ...document, problem: document.problem }} /> : null}
+                <details className="mt-2 text-xs text-zinc-500">
+                  <summary className="w-fit cursor-pointer py-1">File details</summary>
+                  <div className="mt-2 space-y-1 leading-5"><p>{document.fileName} · {formatBytes(document.size)} · {document.chunkCount} chunks</p><p>{new Date(document.createdAt).toLocaleDateString("en-US")}</p>{document.description ? <p>{document.description}</p> : null}<p>{document.statusMessage}</p></div>
+                </details>
+              </article>
+            )) : <div className="py-16 text-center">
+              <Database className="mx-auto text-zinc-400" size={24} />
+              <h2 className="mt-4 text-sm font-medium text-zinc-950">{libraryFilter === "all" ? "No materials yet" : `No ${libraryFilter} photos yet`}</h2>
+              <p className="mt-2 text-sm text-zinc-500">Use Add material to save notes or photographed questions.</p>
+            </div>}
+          </div>
+          {addingMaterial ? <SidePanel title="Add material" onClose={() => setAddingMaterial(false)}>
+            <fieldset className="mb-5"><legend className="sr-only">Material type</legend><div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1">
+              {([['photo', 'Photo problems'], ['document', 'Document']] as const).map(([value, label]) => <label key={value} className="cursor-pointer"><input type="radio" name="material-type" value={value} checked={materialType === value} onChange={() => setMaterialType(value)} disabled={isUploading} className="peer sr-only" /><span className="block rounded-lg px-3 py-2 text-center text-sm text-zinc-500 peer-checked:bg-white peer-checked:font-medium peer-checked:text-zinc-950 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-zinc-500">{label}</span></label>)}
+            </div></fieldset>
+            {materialType === "photo" ? <PhotoProblemCapture embedded onSaved={loadDocuments} onComplete={() => { setAddingMaterial(false); setNotice("Photo problem saved to your library."); }} /> : <DocumentUploadForm inputRef={fileInputRef} onSubmit={uploadDocument} busy={isUploading} course={course} onCourseChange={setCourse} topic={topic} onTopicChange={setTopic} description={description} onDescriptionChange={setDescription} />}
+            {error && materialType === "document" ? <p role="alert" className="mt-4 text-sm leading-6 text-red-700">{error}</p> : null}
+          </SidePanel> : null}
+        </section>
       )}
     </div>
   );

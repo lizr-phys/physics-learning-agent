@@ -22,7 +22,7 @@ function loadDraft(): PhotoProblemDraft {
   } catch { return emptyDraft; }
 }
 
-export function PhotoProblemCapture({ onSaved }: { onSaved: () => Promise<void> }) {
+export function PhotoProblemCapture({ onSaved, onComplete, embedded = false }: { onSaved: () => Promise<void>; onComplete?: () => void; embedded?: boolean }) {
   const [draft, setDraft] = useState(loadDraft);
   const [reviewed, setReviewed] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -80,12 +80,13 @@ export function PhotoProblemCapture({ onSaved }: { onSaved: () => Promise<void> 
       checkpoint.current?.discard(); workspaceStorage().removeItem(draftKey);
       setDraft(emptyDraft); setReviewed(false); setInputEpoch(value => value + 1);
       setNotice(body.document.indexStatus === "indexed" ? "Saved to your library with source images and searchable text." : "Saved with source images. Text indexing needs attention; use Reindex in the library.");
+      onComplete?.();
     } catch (error) { if (isWorkspaceCurrent(identity) && !abort.signal.aborted) setError(error instanceof Error ? error.message : "Save failed. Your draft is retained."); }
     finally { if (isWorkspaceCurrent(identity) && controller.current === abort) { controller.current = null; setBusy(null); } }
   }
 
-  return <section className="border-t border-zinc-200 pt-4" data-testid="photo-problem-capture">
-    <h2 className="text-sm font-semibold text-zinc-950">Photo problems</h2>
+  return <section className={embedded ? "" : "border-t border-zinc-200 pt-4"} data-testid="photo-problem-capture">
+    {!embedded ? <h2 className="text-sm font-semibold text-zinc-950">Photo problems</h2> : null}
     <p className="mt-2 text-xs leading-5 text-zinc-500">Photograph an exam or homework question, check the recognized text, then save it.</p>
     <div className="mt-3 space-y-3">
       <ImageAttachmentInput key={inputEpoch} images={draft.images} onChange={images => change({ images })} onBusyChange={setUploading} disabled={Boolean(busy)} pasteTargetId="photo-problem-text" />

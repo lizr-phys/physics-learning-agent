@@ -1089,7 +1089,6 @@ export function ChatWorkspace() {
         {toolContext ? (
           <ContextBanner context={toolContext} onClear={clearToolContext} />
         ) : null}
-        {!messages.length ? <FirstUseGuide /> : null}
         <ChatWindow
           messages={messages}
           onPickPrompt={setInput}
@@ -1141,9 +1140,13 @@ export function ChatWorkspace() {
         </button>
       ) : null}
 
-      <footer ref={footerRef} className="z-20 shrink-0 border-t border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <footer ref={footerRef} className="z-20 shrink-0 bg-white pb-[env(safe-area-inset-bottom)]">
         <form onSubmit={handleSubmit} className="mx-auto w-full max-w-3xl px-4 py-3">
           <ChatInput
+            optionsContent={<>
+              {knowledgeMode !== "never" ? <KnowledgeScopeControl documentIds={knowledgeDocumentIds} courseOnly={knowledgeCourseOnly} onChange={(ids, only) => { setKnowledgeDocumentIds(ids); setKnowledgeCourseOnly(only); }} /> : null}
+              <FirstUseGuide />
+            </>}
             attachmentControls={<ImageAttachmentInput key={`${sessionId}-${imageDraftEpoch}`} images={draftImages} onChange={setDraftImages} onBusyChange={setImagesBusy} disabled={isCurrentSessionGenerating} pasteTargetId="chat-message-input"/>}
             hasImages={draftImages.length>0}
             attachmentsBusy={imagesBusy}
@@ -1163,8 +1166,7 @@ export function ChatWorkspace() {
               saveStoredKnowledgeMode(nextMode);
             }}
           />
-          {knowledgeMode !== "never" ? <KnowledgeScopeControl documentIds={knowledgeDocumentIds} courseOnly={knowledgeCourseOnly} onChange={(ids, only) => { setKnowledgeDocumentIds(ids); setKnowledgeCourseOnly(only); }} /> : null}
-          <p className="mt-2 pb-4 text-center text-xs text-zinc-500">
+          <p className="mt-2 pb-2 text-center text-[11px] text-zinc-500">
             Check important results against your course materials.
           </p>
         </form>

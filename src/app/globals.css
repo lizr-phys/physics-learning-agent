@@ -32,6 +32,28 @@ input {
   font: inherit;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #71717a;
+  opacity: 1;
+}
+
+:where(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid #71717a;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog[open].material-panel {
+    animation: material-panel-enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes material-panel-enter {
+  from { transform: translateX(12px); opacity: 0.9; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
 .markdown {
   min-width: 0;
   max-width: 100%;
