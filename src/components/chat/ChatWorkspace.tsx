@@ -1147,7 +1147,7 @@ export function ChatWorkspace() {
               {knowledgeMode !== "never" ? <KnowledgeScopeControl documentIds={knowledgeDocumentIds} courseOnly={knowledgeCourseOnly} onChange={(ids, only) => { setKnowledgeDocumentIds(ids); setKnowledgeCourseOnly(only); }} /> : null}
               <FirstUseGuide />
             </>}
-            attachmentControls={<ImageAttachmentInput key={`${sessionId}-${imageDraftEpoch}`} images={draftImages} onChange={setDraftImages} onBusyChange={setImagesBusy} disabled={isCurrentSessionGenerating} pasteTargetId="chat-message-input"/>}
+            renderAttachmentControls={actions => <ImageAttachmentInput key={`${sessionId}-${imageDraftEpoch}`} images={draftImages} onChange={setDraftImages} onBusyChange={setImagesBusy} disabled={isCurrentSessionGenerating} pasteTargetId="chat-message-input" toolbarActions={actions} />}
             hasImages={draftImages.length>0}
             attachmentsBusy={imagesBusy}
             value={input}
@@ -1166,7 +1166,7 @@ export function ChatWorkspace() {
               saveStoredKnowledgeMode(nextMode);
             }}
           />
-          <p className="mt-2 pb-2 text-center text-[11px] text-zinc-500">
+          <p className="mt-2 pb-1 text-center text-xs leading-5 text-zinc-500">
             Check important results against your course materials.
           </p>
         </form>

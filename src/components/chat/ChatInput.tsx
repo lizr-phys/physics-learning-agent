@@ -21,7 +21,7 @@ type ChatInputProps = {
   onKnowledgeModeChange: (value: KnowledgeMode) => void;
   onSubmit: () => void;
   onStop: () => void;
-  attachmentControls?: ReactNode;
+  renderAttachmentControls?: (actions: ReactNode) => ReactNode;
   hasImages?: boolean;
   attachmentsBusy?: boolean;
   optionsContent?: ReactNode;
@@ -37,7 +37,7 @@ export const ChatInput = memo(function ChatInput({
   onKnowledgeModeChange,
   onSubmit,
   onStop,
-  attachmentControls,
+  renderAttachmentControls,
   hasImages=false,
   attachmentsBusy=false,
   optionsContent,
@@ -78,26 +78,9 @@ export const ChatInput = memo(function ChatInput({
     }
   }
 
-  return (
-    <div className="relative rounded-2xl border border-zinc-300 bg-white px-4 py-3 focus-within:border-zinc-500">
-      <textarea
-        id="chat-message-input"
-        ref={textareaRef}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        onCompositionStart={() => { composingRef.current = true; }}
-        onCompositionEnd={() => { composingRef.current = false; }}
-        aria-label="Message"
-        placeholder="Ask a question or paste an image…"
-        rows={1}
-        className="max-h-36 min-h-14 w-full resize-none overflow-y-auto bg-transparent px-1 pb-2 text-sm leading-6 text-zinc-950 outline-none md:max-h-[180px]"
-        data-testid="chat-input"
-      />
-      <div className="flex items-end justify-between gap-2">
-      <div className="flex min-w-0 flex-wrap items-end gap-1">
-        {attachmentControls}
-      <Popover label="Chat options" trigger={<><SlidersHorizontal size={15} /><span>Options</span></>} side="top" anchorToParent triggerClassName="flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs text-zinc-600 hover:bg-zinc-100" panelClassName="w-80">
+  const actions = (
+    <>
+      <Popover label="Chat options" trigger={<><SlidersHorizontal size={16} /><span className="composer-options-label">Options</span></>} side="top" anchorToParent triggerClassName="flex h-11 items-center gap-1.5 rounded-lg px-2 text-sm leading-5 text-zinc-600 hover:bg-zinc-100" panelClassName="w-80">
         <div className="space-y-4">
         <label className="block space-y-1.5 text-xs text-zinc-600">
           <span>Answer depth</span>
@@ -136,12 +119,12 @@ export const ChatInput = memo(function ChatInput({
         {optionsContent}
         </div>
       </Popover>
-      </div>
+      <span className="min-w-0 flex-1" aria-hidden="true" />
       <button
         type="button"
         disabled={!isLoading && ((!value.trim() && !hasImages) || attachmentsBusy)}
         onClick={isLoading ? onStop : onSubmit}
-        className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white disabled:bg-zinc-300"
+        className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800 disabled:bg-zinc-300"
         aria-label={isLoading ? "Stop generation" : "Send"}
         data-testid={isLoading ? "stop-generation" : "send-message"}
       >
@@ -154,7 +137,26 @@ export const ChatInput = memo(function ChatInput({
           <Send size={16} />
         )}
       </button>
-      </div>
+    </>
+  );
+
+  return (
+    <div className="chat-composer relative space-y-2 rounded-2xl border border-zinc-300 bg-white p-3 focus-within:border-zinc-500">
+      <textarea
+        id="chat-message-input"
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionEnd={() => { composingRef.current = false; }}
+        aria-label="Message"
+        placeholder="Ask a question or paste an image…"
+        rows={1}
+        className="block max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-2 pb-2 text-base leading-7 text-zinc-950 outline-none md:max-h-[180px]"
+        data-testid="chat-input"
+      />
+      {renderAttachmentControls ? renderAttachmentControls(actions) : <div className="relative flex min-h-11 items-center gap-1">{actions}</div>}
     </div>
   );
 });

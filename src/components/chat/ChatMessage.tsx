@@ -28,7 +28,7 @@ export const ChatMessage = memo(function ChatMessage({
   if (message.role === "user") {
     return (
       <div className="flex justify-end" data-testid="user-message">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-[18px] bg-[#f4f4f5] px-4 py-2.5 text-sm leading-6 text-zinc-950 sm:max-w-[70%]">
+        <div className="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-zinc-100 px-4 py-3 text-base leading-7 text-zinc-950 sm:max-w-[75%]">
           <ImageGallery images={message.images} />
           {message.content}
         </div>
@@ -37,8 +37,8 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   return (
-    <div className="flex gap-3" data-testid="assistant-message">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white">
+    <div className="flex items-start gap-3" data-testid="assistant-message">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white">
         <Image src="/logo.png" alt="Physics Learning Agent" width={20} height={20} className="object-contain" />
       </div>
       <div className="min-w-0 flex-1">
@@ -62,7 +62,7 @@ export const ChatMessage = memo(function ChatMessage({
             ) : null}
           </div>
         ) : (
-          <div className="text-sm text-zinc-500">{message.status === "error" || message.status === "interrupted" ? "No answer was received. You can retry this request." : "Waiting for the model…"}</div>
+          <div className="flex min-h-8 items-center text-sm leading-6 text-zinc-500">{message.status === "error" || message.status === "interrupted" ? "No answer was received. You can retry this request." : "Waiting for the model…"}</div>
         )}
       </div>
     </div>

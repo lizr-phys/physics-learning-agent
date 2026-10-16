@@ -25,6 +25,8 @@ The included Compose stack provides:
 - application and upstream health checks;
 - graceful shutdown for in-flight requests.
 
+Chat responses use `text/event-stream`, which Caddy flushes immediately. The proxy keeps normal client-disconnect propagation; an explicit negative `flush_interval` is avoided because Caddy documents that it detaches the upstream request from an early client disconnect. Verify stop/cancellation through the actual proxy during host acceptance. See [Caddy streaming behavior](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#streaming).
+
 ## Host requirements
 
 Use one Linux host with enough memory and disk for the selected document workload and backups. Measure parsing, provider latency, and concurrent generation before choosing capacity. Keep one application replica: JSON locks, rate limits, generation concurrency, and daily output pools are process-local.

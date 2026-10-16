@@ -49,11 +49,11 @@ export function AppShell({ children }: AppShellProps) {
         <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-40 md:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/20"
+            className="navigation-backdrop absolute inset-0 bg-black/20"
             aria-label="Close sidebar overlay"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="relative h-full">
+          <div className="navigation-drawer relative h-full">
             <button
               type="button"
               className="absolute right-3 top-3 z-10 rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm"
@@ -74,14 +74,14 @@ export function AppShell({ children }: AppShellProps) {
             ref={openButtonRef}
             aria-label="Open sidebar"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-lg border border-zinc-200 p-2 text-zinc-700"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700"
           >
             <Menu size={18} />
           </button>
           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
             <Image src="/logo.png" alt="Physics Learning Agent logo" width={20} height={20} className="object-contain" />
           </span>
-          <span className="text-sm font-semibold">Physics Learning Agent</span>
+          <span className="min-w-0 truncate text-sm font-semibold">Physics Learning Agent</span>
         </header>
 
         <main

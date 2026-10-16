@@ -38,6 +38,8 @@ Physics Learning Agent is a study workspace for undergraduate physics, with text
 
 The sidebar opens Chat, Practice Problems, Knowledge Map and Personal Knowledge; API Settings sits at the bottom. Conversation history appears in Chat. In the composer, **Options** groups answer depth, personal retrieval and material scope. Practice results use a full reading column, with **Edit request** to reopen their settings. The map uses course and topic selectors, while the personal library keeps saved materials visible and opens uploads through **Add material**.
 
+Self-hosted Geist type, local Chinese font fallbacks and consistent control sizing keep navigation and reading distinct. Short CSS feedback acknowledges clicks and panel opening without delaying actions; reduced-motion preferences are respected.
+
 The project is built around two primary workflows:
 
 1. Learn through conversation: ask conceptual questions, follow derivations, debug mistakes, and continue from previous context.
@@ -473,7 +475,7 @@ The repository includes a single-host deployment baseline for controlled user te
 - a readiness endpoint at `/api/health`;
 - backup, restore, upgrade, rollback, and tester-runbook guidance.
 
-See the [Pilot Deployment Guide](docs/pilot-deployment.md). The included stack is intentionally limited to one application replica because the current account, workspace, and document stores use local files and in-process coordination.
+See the [Pilot Deployment Guide](docs/pilot-deployment.md) or the [Chinese deployment walkthrough](docs/deployment.zh-CN.md). The included stack is intentionally limited to one application replica because the current account, workspace, and document stores use local files and in-process coordination.
 
 ## Deployment Boundary
 

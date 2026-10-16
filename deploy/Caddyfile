@@ -16,7 +16,8 @@
   }
 
   reverse_proxy app:3000 {
-    flush_interval -1
+    # SSE is flushed immediately by Caddy. Keep normal client-disconnect
+    # propagation so cancelling generation can cancel the upstream request.
     health_uri /api/health
     health_interval 30s
     health_timeout 5s

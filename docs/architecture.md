@@ -28,6 +28,8 @@ Practice uses one reading column. Its request editor collapses after generation 
 
 Shared popovers mount their contents only while open and support outside dismissal, Escape and keyboard focus restoration. The material dialog uses native modal focus containment. Save state has a reserved footer, so it cannot cover the composer or page text; sync details and explicit import choices expand within that area. API Settings renders only the chosen connection form, keeps server and BYOK test results separate, and places diagnostics and workspace data tools under Advanced. Saving a BYOK configuration does not itself call the provider. These controls change presentation without changing the account, generation or persistence contracts below. Design decisions and local browser evidence are recorded in [Interface Simplification](ui-simplification.md).
 
+Typography uses the existing `next/font` Geist assets with local CJK fallbacks. Base-layer form inheritance permits explicit text roles; reading/input text is 16 px and primary controls are 14 px, with a 16 px coarse-pointer field floor. The attachment picker accepts toolbar actions so previews and status text can use full-width rows while image, camera, options and send buttons share one alignment. Interaction feedback is CSS-only and bounded to 120–180 ms, disabled where nonessential under reduced motion. Streamed content does not acquire per-chunk animations or animation timers.
+
 ## Request lifecycle
 
 1. The browser captures the workspace owner and authentication epoch, then assigns a conversation ID, assistant-message ID, and request ID. Account changes, session changes, deletion, and unmounting invalidate the active generation.

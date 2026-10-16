@@ -8,6 +8,8 @@ The subsequent image-input and compact-interface implementation, verification an
 
 The 2026-10-15 interface refinement is tracked separately in [ui-simplification.md](ui-simplification.md), including navigation, focused page layouts and regression evidence. Earlier stage results below remain historical records.
 
+The 2026-10-16 follow-up in that record covers rendered toolbar misalignment, the font cascade, text scaling and reduced-motion feedback under F11. Acceptance passed: lint, 477 unit/integration tests (including 158 offline quality cases), production build, 80 desktop/mobile browser cases, a production audit with no findings and one combined screenshot inspection. The [Chinese deployment walkthrough](deployment.zh-CN.md) documents the existing single-host stack without claiming a live deployment.
+
 | Finding | Status | Scope / evidence | Remaining |
 | --- | --- | --- | --- |
 | F01 | Implemented; local acceptance passed | Scoped caches, auth epoch, abort/stale guards, explicit imports; desktop/mobile account, tab, delayed GET and draft cases | Actual shared-device pilot observation |

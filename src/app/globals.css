@@ -10,6 +10,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
 }
 
 body {
@@ -17,7 +19,9 @@ body {
   overflow: hidden;
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.625;
 }
 
 html,
@@ -25,11 +29,43 @@ body {
   height: 100%;
 }
 
-button,
-select,
-textarea,
-input {
-  font: inherit;
+@layer base {
+  button,
+  select,
+  textarea,
+  input {
+    font: inherit;
+  }
+
+  :where(button:enabled, a, summary) {
+    cursor: pointer;
+  }
+
+  :where(button, a) svg {
+    flex-shrink: 0;
+  }
+}
+
+.chat-composer {
+  container: composer / inline-size;
+}
+
+@container composer (max-width: 20rem) {
+  .composer-options-label {
+    display: none;
+  }
+}
+
+.conversation-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+  scrollbar-gutter: stable;
+}
+
+@media (pointer: coarse) {
+  :where(input:not([type="checkbox"], [type="radio"]), select, textarea) {
+    font-size: max(1rem, 1em);
+  }
 }
 
 input::placeholder,
@@ -44,9 +80,57 @@ textarea::placeholder {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  :where(button, a, summary, input, select, textarea) {
+    transition-property: color, background-color, border-color, opacity, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
+  }
+
+  button:enabled:not(.navigation-backdrop):active {
+    transform: translateY(1px);
+  }
+
+  .ui-popover {
+    --popover-offset: -4px;
+    animation: popover-enter 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ui-popover[data-side="top"] {
+    --popover-offset: 4px;
+  }
+
+  .navigation-drawer {
+    animation: navigation-enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .navigation-backdrop {
+    animation: backdrop-enter 120ms ease-out;
+  }
+
   dialog[open].material-panel {
     animation: material-panel-enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: none;
+  }
+}
+
+@keyframes popover-enter {
+  from { transform: translateY(var(--popover-offset)); opacity: 0.94; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes navigation-enter {
+  from { transform: translateX(-12px); opacity: 0.94; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes material-panel-enter {
@@ -59,7 +143,7 @@ textarea::placeholder {
   max-width: 100%;
   overflow-wrap: anywhere;
   color: #18181b;
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.8;
 }
 
@@ -71,7 +155,7 @@ textarea::placeholder {
 .markdown h2,
 .markdown h3 {
   color: #09090b;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -87,6 +171,10 @@ textarea::placeholder {
 .markdown h3 {
   margin-top: 1rem;
   font-size: 1rem;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
 }
 
 .markdown ul,

@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { useEffect,useEffectEvent,useRef,useState } from "react";
+import { useEffect,useEffectEvent,useRef,useState,type ReactNode } from "react";
 import { Camera,Paperclip,X } from "lucide-react";
 import { IMAGE_LIMITS,imageUrl } from "@/lib/image-attachments";
 import { uploadImage } from "@/lib/image-client";
@@ -12,7 +12,7 @@ export function ImageGallery({images,compact=false}:{images?:ImageAttachment[];c
     <Image unoptimized src={imageUrl(image)} {...(compact ? {fill:true,sizes:"80px"} : {width:image.width,height:image.height})} alt={image.name} className={compact ? "object-contain" : "max-h-48 h-auto w-auto max-w-64 object-contain"} />
   </a>)}</div> : null;
 }
-export function ImageAttachmentInput({images,onChange,onBusyChange,disabled=false,pasteTargetId}:{images:ImageAttachment[];onChange:(images:ImageAttachment[])=>void;onBusyChange:(busy:boolean)=>void;disabled?:boolean;pasteTargetId?:string}) {
+export function ImageAttachmentInput({images,onChange,onBusyChange,disabled=false,pasteTargetId,toolbarActions}:{images:ImageAttachment[];onChange:(images:ImageAttachment[])=>void;onBusyChange:(busy:boolean)=>void;disabled?:boolean;pasteTargetId?:string;toolbarActions?:ReactNode}) {
   const inputRef=useRef<HTMLInputElement>(null),cameraRef=useRef<HTMLInputElement>(null),controllerRef=useRef<AbortController>(null);
   const aliveRef=useRef(true),busyRef=useRef(false),imagesRef=useRef(images);
   const [busy,setBusy]=useState(false),[error,setError]=useState("");
@@ -44,15 +44,16 @@ export function ImageAttachmentInput({images,onChange,onBusyChange,disabled=fals
     document.addEventListener("paste",paste);window.addEventListener("pla:workspace-will-change",abort);
     return()=>{aliveRef.current=false;abort();document.removeEventListener("paste",paste);window.removeEventListener("pla:workspace-will-change",abort);};
   },[pasteTargetId]);
-  return <div className="space-y-2">
+  return <div className="flex min-w-0 flex-col gap-2">
     {images.length ? <div className="flex flex-wrap gap-2">{images.map(image=><div key={image.id} className="relative">
       <ImageGallery images={[image]} compact />
       <button type="button" disabled={disabled || busy} onClick={()=>onChange(images.filter(current=>current.id!==image.id))} aria-label={`Remove image: ${image.name}`} className="absolute -right-1 -top-1 rounded-full bg-white p-1 text-zinc-600 shadow-sm"><X size={12}/></button>
     </div>)}</div> : null}
-    <div className="flex items-center gap-2 text-xs text-zinc-500">
-      <button type="button" disabled={disabled || busy || images.length>=IMAGE_LIMITS.perMessage} onClick={()=>inputRef.current?.click()} aria-label="Attach images" className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 hover:bg-zinc-100 disabled:opacity-40"><Paperclip size={16}/>{busy ? "Uploading…" : "Image"}</button>
-      <button type="button" disabled={disabled || busy || images.length>=IMAGE_LIMITS.perMessage} onClick={()=>cameraRef.current?.click()} aria-label="Take photo" className="rounded-md p-2 hover:bg-zinc-100 disabled:opacity-40"><Camera size={16}/></button>
-      {images.length ? <span>Sent to your selected model.</span> : null}
+    {images.length ? <p className="text-xs text-zinc-500">Sent to your selected model.</p> : null}
+    <div className="relative flex min-h-11 items-center gap-1 text-sm text-zinc-600">
+      <button type="button" disabled={disabled || busy || images.length>=IMAGE_LIMITS.perMessage} onClick={()=>inputRef.current?.click()} aria-label="Attach images" className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm leading-5 hover:bg-zinc-100 disabled:opacity-40"><Paperclip size={16}/>{busy ? "Uploading…" : "Image"}</button>
+      <button type="button" disabled={disabled || busy || images.length>=IMAGE_LIMITS.perMessage} onClick={()=>cameraRef.current?.click()} aria-label="Take photo" className="flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-zinc-100 disabled:opacity-40"><Camera size={16}/></button>
+      {toolbarActions}
     </div>
     <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden data-testid="image-upload" onChange={event=>{void add(Array.from(event.target.files ?? []));event.target.value="";}}/>
     <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden data-testid="camera-upload" onChange={event=>{void add(Array.from(event.target.files ?? []));event.target.value="";}}/>

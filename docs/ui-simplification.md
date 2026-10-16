@@ -45,3 +45,32 @@ New browser coverage checks contextual history with conversation restoration, dr
 Successful screenshots are local ignored artifacts under `test-results/` and can be replaced by later runs. Browser emulation does not establish physical keyboard/iOS behavior. No paid model calls, human physics review, user-data migration or deployment are part of these checks.
 
 Local review is available at `http://127.0.0.1:3218/chat` in the running development process. Health and all five pages returned HTTP 200; the status-only provider check confirmed that its server key is absent. The process uses a fresh temporary data directory and a separate browser origin, leaving existing account files, notes, conversations and `.env.local` intact. Supply a test provider through API Settings to try generation. This is a local preview, not a deployment.
+
+## Typography, alignment and feedback — 2026-10-16
+
+The screenshot review identified two rendered defects that the static detector did not flag: an unlayered `font: inherit` overrode utility font sizes, and the attachment picker used a different row height with trailing hidden-input spacing. Four desktop/mobile regression cases failed before changes: button centers differed by 6 px without an image and by 46 px on mobile after attaching one; Image used 12 px while Options used 16 px. Geist was loaded but the body still selected the system face.
+
+The existing Geist family now supplies interface and reading type with local Chinese fallbacks; no additional family or animation dependency is installed. Body/answer/input text uses 16 px, controls use 14 px, supporting metadata uses 13 px, and headings retain the established semibold hierarchy. Form inheritance lives in the base cascade layer so role-specific styles can work. Coarse-pointer form fields retain a 16 px floor. User text scaling and browser zoom remain available.
+
+The composer gives image, camera, options and send controls one shared 44 px row. Image previews and privacy/error text sit above or below that row, rather than changing its alignment. Narrow containers retain the Options icon with its accessible name. Navigation labels, history indentation, thin history scrollbars and the empty-answer avatar row use consistent alignment. Mobile branding can truncate when text is enlarged.
+
+Feedback uses 120 ms control transitions, a 140 ms popover reveal and a 180 ms mobile drawer reveal. No page-load sequences, animation timers, per-token effects or animation libraries are introduced. Nonessential motion follows the reduced-motion preference; keyboard focus and existing cancellation remain immediate.
+
+Changed implementation: `globals.css`, `layout.tsx`, `ChatInput.tsx`, `ChatWorkspace.tsx`, `ChatMessage.tsx`, `ImageAttachments.tsx`, `Popover.tsx`, `Sidebar.tsx`, `AppShell.tsx`. New regressions are in `e2e/typography-and-motion.spec.ts`; they cover font roles, bilingual reading, same-origin font delivery, row alignment with images, reduced motion, keyboard dismissal and enlarged text at 320–1280 px.
+
+Acceptance for this follow-up:
+
+- `npm run lint`: passed after the final browser harness edit.
+- `npm run test:run`: 52 files / 477 tests passed (37.78 s).
+- `npm run test:quality`: 158 tests passed (3.05 s), included in the 477 total.
+- `npm run build`: passed on Next.js 16.3.8, including TypeScript and all 20 page-generation entries, after the final style changes.
+- `npm audit --omit=dev --json`: 0 findings, exit 0 on October 16. No dependency versions changed; the earlier full-tree development exception is recorded separately in the dependency review.
+- `npm run test:e2e`: 80 passed (4.6 min), desktop/mobile Chromium. The eight new cases also passed independently (32.9 s).
+
+An earlier complete browser run returned 74 passed / 6 failed because the development server served stale generated CSS: production output already contained Geist, motion and container rules, while the served development stylesheet did not. With the server stopped, only the generated `.next/dev` directory was moved into an ignored `.next/cache/pla-ui-dev-backup-*` directory. Fresh development output passed all eight targeted cases and the complete 80-case suite; application assertions were retained. A separate text-scaling fixture was corrected to insert a style tag after the input appeared, avoiding a test-induced hydration mismatch.
+
+One combined screenshot inspection covered all five pages on desktop/mobile, bilingual reading, attached-image controls, enlarged text, chat options, document upload, BYOK settings, long formulas and a table. The accepted images showed consistent control centers, readable type and no document-wide horizontal overflow. No further visual edits were needed. The README workspace image now comes from this accepted desktop run; the original logo remains untouched.
+
+The [Chinese deployment walkthrough](deployment.zh-CN.md) describes the existing single-host stack. `deploy/Caddyfile` now relies on Caddy's immediate SSE flushing instead of a negative `flush_interval`, preserving its documented propagation of client disconnects. Actual proxy cancellation, container startup, real-model behavior, physical mobile keyboards and human physics review remain untested locally. No live deployment or paid model call was performed.
+
+The local preview was restarted at `http://127.0.0.1:3218/chat`, reusing the earlier isolated preview data directory rather than replacing its records. Health and all five pages returned HTTP 200. Its status-only provider check confirmed that the server key is absent; use API Settings with a test key for interactive generation. Original application data and `.env.local` were not changed.

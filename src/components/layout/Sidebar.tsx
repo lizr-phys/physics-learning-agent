@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Database,
-  FileText,
   MoreHorizontal,
   PenLine,
   Plus,
@@ -90,7 +89,7 @@ function SessionGroup({
 
   return (
     <div className="space-y-1">
-      <p className="px-2 pt-3 text-xs font-medium text-zinc-400">{title}</p>
+      <p className="px-3 pt-3 text-xs font-medium text-zinc-500">{title}</p>
       {sessions.map((session) => {
         const active = session.id === activeId;
         const editing = session.id === editingId;
@@ -101,8 +100,8 @@ function SessionGroup({
             <div
               className={
                 active
-                  ? "flex items-center gap-1 rounded-lg bg-zinc-200 px-2 py-1.5 text-zinc-950"
-                  : "flex items-center gap-1 rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+                  ? "flex items-center gap-1 rounded-lg bg-zinc-200 px-3 py-1.5 text-zinc-950"
+                  : "flex items-center gap-1 rounded-lg px-3 py-1.5 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
               }
             >
               {editing ? (
@@ -134,7 +133,7 @@ function SessionGroup({
                   className={
                     menuOpen
                       ? "flex size-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-700"
-                      : "flex size-7 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-0 hover:bg-zinc-100 group-hover:opacity-100"
+                      : "flex size-7 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-0 hover:bg-zinc-100 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
                   }
                 >
                   <MoreHorizontal size={16} />
@@ -143,7 +142,7 @@ function SessionGroup({
             </div>
 
             {menuOpen ? (
-              <div className="absolute right-1 top-9 z-50 w-32 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
+              <div className="absolute right-1 top-9 z-50 w-32 rounded-xl bg-white p-1 shadow-lg">
                 <button
                   type="button"
                   onClick={() => onStartRename(session)}
@@ -320,16 +319,15 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <button
           type="button"
           onClick={newSession}
-          className="mx-3 mb-4 mt-2 flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm text-zinc-700 hover:bg-zinc-200/70"
+          className="mx-3 mb-4 mt-2 flex min-h-10 items-center gap-2.5 rounded-lg px-3 text-sm text-zinc-700 hover:bg-zinc-200/70"
           data-testid="new-session"
         >
           <Plus size={16} />
           New conversation
         </button>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="mb-2 flex items-center gap-2 px-2 text-xs font-medium text-zinc-500">
-          <FileText size={14} />
+      <div className="conversation-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div className="mb-1 px-3 text-xs font-medium text-zinc-500">
           Conversations
         </div>
         {sessions.length ? (
@@ -381,7 +379,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             />
           </>
         ) : (
-          <p className="px-2 py-3 text-sm leading-6 text-zinc-500">
+          <p className="px-3 py-3 text-sm leading-6 text-zinc-500">
             Your conversations will appear here.
           </p>
         )}
