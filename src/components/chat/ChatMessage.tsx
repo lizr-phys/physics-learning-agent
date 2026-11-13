@@ -28,7 +28,7 @@ export const ChatMessage = memo(function ChatMessage({
   if (message.role === "user") {
     return (
       <div className="flex justify-end" data-testid="user-message">
-        <div className="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-zinc-100 px-4 py-3 text-base leading-7 text-zinc-950 sm:max-w-[75%]">
+        <div className="min-w-0 max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-study-50 px-4 py-3 text-base leading-7 text-zinc-950 sm:max-w-[75%]">
           <ImageGallery images={message.images} />
           {message.content}
         </div>
@@ -62,7 +62,7 @@ export const ChatMessage = memo(function ChatMessage({
             ) : null}
           </div>
         ) : (
-          <div className="flex min-h-8 items-center text-sm leading-6 text-zinc-500">{message.status === "error" || message.status === "interrupted" ? "No answer was received. You can retry this request." : "Waiting for the model…"}</div>
+          <div className="flex min-h-8 items-center text-sm leading-6 text-zinc-500">{message.status === "streaming" ? "Waiting for the model…" : "No answer was received."}</div>
         )}
       </div>
     </div>

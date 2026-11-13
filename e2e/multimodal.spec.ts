@@ -20,6 +20,10 @@ test("images survive refresh and stay in the context of follow-up questions", as
     requests.push(route.request().postDataJSON());
     await route.fulfill({ contentType: "text/plain", body: "Mock image explanation.\n[[PLA_STREAM_EVENT:done]]\n" });
   });
+  await page.goto("/settings/api");
+  await page.getByRole("combobox", { name: "Server model preference" }).selectOption("deepseek-flash");
+  await page.getByRole("button", { name: "Use server connection" }).click();
+  await expect(page.getByText("Server connection selected.", { exact: true })).toBeVisible();
   await page.goto("/chat");
   await page.getByTestId("image-upload").setInputFiles(await photo());
   await expect(page.getByRole("button", { name: "Remove image: synthetic-diagram.png" })).toBeVisible();

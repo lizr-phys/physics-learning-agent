@@ -14,6 +14,20 @@
   --text-xs--line-height: 1.5;
 }
 
+@theme {
+  --color-study-50: #eef5f7;
+  --color-study-100: #e1edf1;
+  --color-study-700: #2b5766;
+  --color-study-800: #224653;
+  --color-study-900: #193643;
+}
+
+@layer components {
+  .study-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-study-800 px-4 py-2 text-sm font-medium text-white hover:bg-study-900 disabled:bg-zinc-300 disabled:text-zinc-600;
+  }
+}
+
 body {
   margin: 0;
   overflow: hidden;

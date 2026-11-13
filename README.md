@@ -36,7 +36,7 @@
 
 Physics Learning Agent is a study workspace for undergraduate physics, with text and image conversations, structured course knowledge, original practice problems, personal document retrieval, and multi-provider model access. Compact pages keep the main task visible and place optional controls in expandable sections.
 
-The sidebar opens Chat, Practice Problems, Knowledge Map and Personal Knowledge; API Settings sits at the bottom. Conversation history appears in Chat. In the composer, **Options** groups answer depth, personal retrieval and material scope. Practice results use a full reading column, with **Edit request** to reopen their settings. The map uses course and topic selectors, while the personal library keeps saved materials visible and opens uploads through **Add material**.
+The sidebar opens Chat, Practice Problems, Knowledge Map and Personal Knowledge, with API Settings at the bottom. Chat includes searchable history and examples that fill the composer for editing. **Options** groups answer depth, personal retrieval and material scope. Practice results use a full reading column, with **Edit request** to reopen their settings. The map uses course and topic selectors. The personal library supports search and category filters, with uploads under **Add material**.
 
 Self-hosted Geist type, local Chinese font fallbacks and consistent control sizing keep navigation and reading distinct. Short CSS feedback acknowledges clicks and panel opening without delaying actions; reduced-motion preferences are respected.
 
@@ -92,6 +92,7 @@ flowchart LR
 - Personal knowledge modes for chat: automatic retrieval, always-on retrieval, or retrieval disabled
 - A compact useful / needs-improvement signal attached to each completed answer
 - Explicit complete, truncated, interrupted, and cancelled states with partial output retained for continuation or retry
+- Retry or continue the last interrupted turn after reopening its conversation, with the original question and attached images
 
 ### Physics-aware answer generation
 
@@ -180,7 +181,7 @@ Limits are four images per message and eight unique images per request, includin
 - Conditional revisions, operation IDs, and deletion markers protect against stale writes and deleted-record replay. Independent edits are merged; divergent content is kept in conflict copies
 - The workspace holds up to 80 conversations and 80 practice sets, with 240 messages per conversation. Quota or browser-storage failures are visible instead of trimming old records
 - Concurrent browser edits use per-tab journals and conditional acknowledgements. A record supports up to 16 unacknowledged writers; synchronization or explicit export/removal is required when that limit is reached
-- `Saved`, `Saving`, `Offline`, `Sync failed`, and `Local only` show persistence state. Offline browser caches require successful synchronization when connectivity returns
+- `Saved`, `Saving`, `Offline`, `Sync failed`, and `Local only` show persistence state. Retrying a failed save keeps the current view and draft. Offline browser caches synchronize once the account can be verified again
 - Provider API keys are intentionally excluded from persistent workspace data
 
 ### Pilot quality loop
@@ -197,8 +198,8 @@ Exports are initiated by the user; no analytics are sent automatically. Stored f
 
 ### Bring Your Own Key model access
 
-- Choose `Server default` or `My API key` in API Settings; each choice shows its relevant fields and connection result
-- `Save for this browser` stores provider preferences and the tab's temporary key without making a model request; `Test provider` explicitly checks the connection
+- API Settings shows the connection **In use**. Edit and test either connection, then use **Use server connection** or **Save for this browser** to apply it to future requests, including existing conversations
+- The Server model option follows the deployment's configured `DEEPSEEK_MODEL`. Selecting a named model explicitly sets a browser preference
 - Supported provider routes:
   - OpenAI-compatible APIs
   - DeepSeek
@@ -209,7 +210,7 @@ Exports are initiated by the user; no analytics are sent automatically. Stored f
   - Anthropic Claude
   - Google Gemini
   - custom compatible endpoint
-- User-provided API keys are kept in `sessionStorage`; they are not written to project files or local persistent storage by default
+- User-provided API keys stay in tab `sessionStorage` and are bound to the selected provider and endpoint. A tab missing its selected key asks you to enter it in API Settings before generation
 - Selected personal excerpts are sent to the chosen model provider when retrieval is used; the knowledge-base interface explains that data flow
 
 ## Learning Workflows
@@ -462,7 +463,7 @@ npm run build
 - Do not upload copyrighted textbooks or private course materials to a public deployment unless you have the right to do so.
 - The built-in local account system is intended for personal or small-group deployments, not as a hardened enterprise identity system.
 
-Dependency decisions and the remaining development-only `braces` exception are documented in [Dependency Review](docs/dependency-audit.md). Production and full-tree audits are tracked separately.
+Production dependency checks and development-only audit findings are documented in [Dependency Review](docs/dependency-audit.md).
 
 ## Pilot Deployment
 

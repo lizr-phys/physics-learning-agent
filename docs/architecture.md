@@ -22,11 +22,11 @@ The browser keeps English product navigation and independently selects the answe
 
 ## Interface structure
 
-The sidebar has four learning destinations, with API Settings in its footer. Conversation history and its storage listeners are active only on Chat. The composer groups depth, personal retrieval and document scope in one Options popover; opening it preserves the draft and does not resize the reading area. Material scope mounts when those options open, avoiding an unused library request on the initial Chat view.
+The sidebar has four learning destinations, with API Settings in its footer. Searchable conversation history and its storage listeners are active only on Chat. An example fills the composer for editing. The Options popover groups depth, personal retrieval and document scope. Material scope mounts when those options open, avoiding an unused library request on the initial Chat view.
 
-Practice uses one reading column. Its request editor collapses after generation and remains mounted so Edit request restores the selected values. Knowledge Map uses course/topic selectors and expandable supporting notes. Personal Knowledge Base starts with saved materials; Add material opens a native modal side panel with either the photo capture workflow or a separate document form. Photo draft checkpoints survive panel closure, and a successful save returns focus to Add material.
+Practice uses one reading column. Its request editor collapses after generation and remains mounted so Edit request restores the selected values. Knowledge Map renders supporting notes on expansion. Personal Knowledge Base shares the workspace's verified account state, filters saved materials by search and category, and reports load errors with a retry action. Add material opens a native modal side panel with either a lazily loaded photo workflow or a document form. Photo draft checkpoints survive panel closure, and a successful save returns focus to Add material.
 
-Shared popovers mount their contents only while open and support outside dismissal, Escape and keyboard focus restoration. The material dialog uses native modal focus containment. Save state has a reserved footer, so it cannot cover the composer or page text; sync details and explicit import choices expand within that area. API Settings renders only the chosen connection form, keeps server and BYOK test results separate, and places diagnostics and workspace data tools under Advanced. Saving a BYOK configuration does not itself call the provider. These controls change presentation without changing the account, generation or persistence contracts below. Design decisions and local browser evidence are recorded in [Interface Simplification](ui-simplification.md).
+Shared popovers mount their contents only while open, fit the viewport, and support outside dismissal, Escape and keyboard focus restoration. The mobile navigation uses its own scrim and returns focus to the menu button. The material dialog uses native modal focus containment. Save state, sync details, and explicit import choices use a reserved footer. API Settings shows the active connection separately from the draft, keeps server and BYOK test results independent, and loads workspace data tools when Advanced opens. Browser evidence is recorded in [Interface Simplification](ui-simplification.md).
 
 Typography uses the existing `next/font` Geist assets with local CJK fallbacks. Base-layer form inheritance permits explicit text roles; reading/input text is 16 px and primary controls are 14 px, with a 16 px coarse-pointer field floor. The attachment picker accepts toolbar actions so previews and status text can use full-width rows while image, camera, options and send buttons share one alignment. Interaction feedback is CSS-only and bounded to 120–180 ms, disabled where nonessential under reduced motion. Streamed content does not acquire per-chunk animations or animation timers.
 
@@ -40,13 +40,13 @@ Typography uses the existing `next/font` Geist assets with local CJK fallbacks. 
 5. A generation lease reserves the task's output upper bound and an active slot. Default-key daily pools and all-provider concurrency limits are checked before a model call.
 6. The task graph generates one ordinary answer or small practice batches. Deterministic structure checks decide whether to finish, preserve partial work, generate another batch, or use the single practice format-repair allowance.
 7. Typed SSE carries model text separately from stages, source excerpts, normalized context, practice progress, committed memory, and the terminal state. Every event has the full generation binding.
-8. Completed-answer memory is committed only after successful task completion. Interrupted content and validated practice progress are retained for continuation; they are not recorded as completed knowledge.
+8. Completed-answer memory is committed only after successful task completion. The last incomplete chat turn can reconstruct its request from the saved conversation, including the original question and owned image references. Retry and continuation read the active connection when submitted. Validated practice progress supports generation of missing problems.
 
 ## LangGraph workflows
 
 ### Request preparation
 
-`src/agent/workflow.ts` contains deterministic nodes for understanding input, resolving context, preparing candidate memory, planning retrieval, retrieving evidence, and preparing generation. Candidate memory helps build this request; it becomes persisted answer memory only after the task succeeds. Cancellation checks surround retrieval and graph execution.
+`src/agent/workflow.ts` contains deterministic nodes for understanding input, resolving context, preparing candidate memory, planning retrieval, retrieving evidence, and preparing generation. Candidate memory helps build this request and becomes persisted answer memory after the task succeeds. The graph loads the personal index when requested by an authenticated workspace and the sample index when explicitly enabled. Cancellation checks surround retrieval and graph execution.
 
 Context provenance records whether a value came from the current input, current selection, history, or a default. A deliberate course switch also removes an incompatible inherited topic. Short follow-ups can inherit the active task, including language, problem style, and requested count.
 
@@ -156,7 +156,7 @@ Account snapshots under `PLA_DATA_DIR` use atomic writes, keyed locks, revisions
 
 Deletion markers also prevent cleared feedback and problem assessments from returning. Normal conversation and practice history is not silently trimmed: explicit limits are 80 conversations, 80 sets, and 240 messages per conversation. Quota and browser-storage failures are visible. Generation diagnostics retain at most 100 distinct attempts per message; old operational diagnostics can therefore fall outside an exported report. API Settings exposes conflict details and a private workspace export.
 
-Save state is visible as `Saved`, `Saving`, `Offline`, `Sync failed`, or `Local only`. Debounced synchronization and visibility-change saving supplement local checkpoints. Successful storage and synchronization should be verified before treating a workspace as backed up.
+Save state is visible as `Saved`, `Saving`, `Offline`, `Sync failed`, or `Local only`. Debounced synchronization and visibility-change saving supplement local checkpoints. A failed save can retry in place, preserving the mounted workspace and input for the verified owner.
 
 ## Admission controls and deployment boundary
 
@@ -164,7 +164,7 @@ The default limits are two active generations per user and eight globally, inclu
 
 Locks, rate limits, concurrency counts, and daily pools belong to one process. Restarting the process resets admission counters; multiple replicas would each have separate counters and unsafe shared-file coordination. Provider spending controls and a transactional shared store are required before expanding that deployment model.
 
-The server default reads keys from environment variables. Temporary BYOK values stay in browser session storage and are sent only for the chosen provider request. Personal excerpts are sent to that provider when retrieval is used. Custom compatible endpoints retain server URL/DNS restrictions; trusted private endpoints require explicit configuration. Dependency and parser compatibility decisions, including the remaining development-only exception, are recorded in [Dependency Review](dependency-audit.md).
+The server default reads keys and the default model from environment variables. A browser can explicitly select a named server model. Connection tests use the draft setting and the exact requested model, while generation uses the active saved setting. Temporary BYOK values stay in tab session storage and are bound to the selected provider and endpoint. A missing key stops submission with a settings link. Personal excerpts are sent to the active provider when retrieval is used. Custom compatible endpoints retain server URL/DNS restrictions, with explicit configuration for trusted private endpoints. Parser compatibility and current dependency findings are recorded in [Dependency Review](dependency-audit.md).
 
 ## Quality evidence
 

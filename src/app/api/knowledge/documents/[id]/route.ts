@@ -7,6 +7,12 @@ import { ImageInputError } from "@/lib/image-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+const noStore = { "Cache-Control": "private, no-store" };
+
+function ownerChanged(request: NextRequest, userId?: string) {
+  const expected = request.headers.get("X-PLA-Workspace-Owner");
+  return Boolean(expected && expected !== (userId ?? "guest"));
+}
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -22,6 +28,7 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ) {
   const user = await getUserFromRequest(request);
+  if (ownerChanged(request, user?.id)) return NextResponse.json({ error: "The account changed. Open the library again." }, { status: 409, headers: noStore });
 
   if (!user) {
     return NextResponse.json({ error: "Sign in to reindex documents." }, { status: 401 });
@@ -34,7 +41,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Document not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ document });
+  return NextResponse.json({ document }, { headers: noStore });
 }
 
 export async function DELETE(
@@ -42,6 +49,7 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ) {
   const user = await getUserFromRequest(request);
+  if (ownerChanged(request, user?.id)) return NextResponse.json({ error: "The account changed. Open the library again." }, { status: 409, headers: noStore });
 
   if (!user) {
     return NextResponse.json({ error: "Sign in to delete documents." }, { status: 401 });
@@ -54,5 +62,5 @@ export async function DELETE(
     return NextResponse.json({ error: "Document not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: noStore });
 }

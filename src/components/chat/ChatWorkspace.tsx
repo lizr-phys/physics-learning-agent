@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceStorage, getWorkspaceIdentity, isWorkspaceCurrent, type WorkspaceIdentity } from "@/lib/workspace-storage";
+import { getWorkspaceIdentity, isWorkspaceCurrent, type WorkspaceIdentity } from "@/lib/workspace-storage";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown } from "lucide-react";
@@ -25,10 +25,10 @@ import {
 import { courseOptions } from "@/data/courses";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
-import { buildContinuationMessage, withAssistantMessage, isAbortLikeError } from "@/lib/chat-generation";
+import { buildContinuationMessage, withAssistantMessage, isAbortLikeError, recoverChatRequest, type PendingContinuation } from "@/lib/chat-generation";
 import { createDraftCheckpoint } from "@/lib/draft-checkpoint";
 import { WorkspaceQuotaError } from "@/lib/workspace-sync";
-import { getClientProviderOverride } from "@/lib/client-provider";
+import { getGenerationConnection } from "@/lib/client-provider";
 import { detectLanguage } from "@/lib/language";
 import {
   getStoredAnswerDepth,
@@ -76,14 +76,6 @@ function getInitialTaskType(value: string | null): TaskTypeId {
   return taskTypeOptions.some((task) => task.id === value) ? (value as TaskTypeId) : "qa";
 }
 
-function getStoredModel() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return workspaceStorage().getItem("pla.deepseek.model") || "deepseek-flash";
-}
-
 function createMessageId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -102,15 +94,6 @@ type ActiveGeneration = ActiveGenerationDescriptor & {
   workspace: WorkspaceIdentity;
   abortController: AbortController;
   startedAt: number;
-};
-
-type PendingContinuation = {
-  sessionId: string;
-  assistantMessageId: string;
-  request: AgentRequest;
-  messagesBeforeAssistant: ChatMessage[];
-  firstMessage: string;
-  partialContent: string;
 };
 
 type SessionContextSnapshot = StoredChatSession["context"];
@@ -136,7 +119,6 @@ export function ChatWorkspace() {
   const [useRag, setUseRag] = useState(false);
   const [knowledgeDocumentIds, setKnowledgeDocumentIds] = useState<string[]>([]);
   const [knowledgeCourseOnly, setKnowledgeCourseOnly] = useState(false);
-  const [model, setModel] = useState(() => getStoredModel());
   const [draftImages,setDraftImages]=useState<ImageAttachment[]>([]);
   const [imagesBusy,setImagesBusy]=useState(false);
   const [imageDraftEpoch,setImageDraftEpoch]=useState(0);
@@ -349,11 +331,14 @@ export function ChatWorkspace() {
       setKnowledgeCourseOnly(Boolean(session.context.knowledgeCourseOnly));
       setToolContext(session.toolContext);
       setMemory(session.memory ?? createLearningMemory());
-      setModel(session.context.model ?? getStoredModel());
       setAnswerDepth(session.context.answerDepth ?? getStoredAnswerDepth());
       setKnowledgeMode(session.context.knowledgeMode ?? getStoredKnowledgeMode());
       if (switchingConversation) { setInput(""); setError(""); }
-      setPendingContinuation((current) => (current?.sessionId === session.id ? current : null));
+      setPendingContinuation(current => {
+        const recovered = recoverChatRequest(session);
+        return current?.sessionId === session.id && current.assistantMessageId === recovered?.assistantMessageId
+          ? current : recovered;
+      });
     },
     [cancelActiveGeneration, markShouldFollowOutput, setSessionIdSafe],
   );
@@ -686,10 +671,11 @@ export function ChatWorkspace() {
             setMessages(partialMessages);
           }
 
+          const originalRequest = options.originalRequest ?? options.request;
           setPendingContinuation({
             sessionId: options.targetSessionId,
             assistantMessageId: options.assistantMessageId,
-            request: options.originalRequest ?? options.request,
+            request: { ...originalRequest, clientProvider: undefined },
             messagesBeforeAssistant: options.messagesBeforeAssistant,
             firstMessage: options.firstMessage,
             partialContent,
@@ -699,7 +685,7 @@ export function ChatWorkspace() {
         if (currentSessionIdRef.current === options.targetSessionId) {
           const message = !partialSaved ? "The current response is on screen but could not be saved. Copy it before leaving, then free storage and retry."
             : isAbortLikeError(streamError)
-            ? "Generation stopped. The current content has been preserved and can be continued."
+            ? (partialContent ? "Generation stopped. The current content was kept; you can continue below." : "Generation stopped before an answer was received. You can retry.")
             : streamError.message || "Request failed.";
           setError(message);
           try { saveLastApiError({ message, status: streamError.reason, occurredAt: Date.now() }); }
@@ -748,6 +734,13 @@ export function ChatWorkspace() {
     if (!message || isCurrentSessionGenerating || imagesBusy) {
       return;
     }
+    if (message.length > 16_000) {
+      setError("The question is longer than 16,000 characters. Shorten it before sending; your draft is still here.");
+      return;
+    }
+    const connection = getGenerationConnection();
+    if (connection.error) { setError(connection.error); return; }
+    const { model, clientProvider } = connection;
 
     if (activeGenerationRef.current) {
       cancelActiveGeneration("new-submit");
@@ -813,7 +806,7 @@ export function ChatWorkspace() {
       knowledgeMode,
       knowledgeDocumentIds,
       knowledgeCourseOnly,
-      clientProvider: getClientProviderOverride(),
+      clientProvider,
       conversationId: targetSessionId,
       assistantMessageId,
       requestId,
@@ -861,7 +854,6 @@ export function ChatWorkspace() {
     knowledgeCourseOnly,
     messages,
     memory,
-    model,
     persistTargetSession,
     runAssistantRequest,
     sessionId,
@@ -881,6 +873,9 @@ export function ChatWorkspace() {
     }
 
     const originalMessage = currentPendingContinuation.request.message;
+    const connection = getGenerationConnection();
+    if (connection.error) { setError(connection.error); return; }
+    const { model, clientProvider } = connection;
     const assistantHistoryMessage: ChatMessage = {
       id: currentPendingContinuation.assistantMessageId,
       role: "assistant",
@@ -894,6 +889,7 @@ export function ChatWorkspace() {
     ];
     const continuationRequest: AgentRequest = {
       ...currentPendingContinuation.request,
+      model,
       message: buildContinuationMessage(originalMessage),
       history: continuationHistory,
       conversationId: currentPendingContinuation.sessionId,
@@ -907,7 +903,7 @@ export function ChatWorkspace() {
       knowledgeMode,
       knowledgeDocumentIds,
       knowledgeCourseOnly,
-      clientProvider: getClientProviderOverride(),
+      clientProvider,
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,
@@ -949,7 +945,6 @@ export function ChatWorkspace() {
     knowledgeDocumentIds,
     knowledgeCourseOnly,
     memory,
-    model,
     runAssistantRequest,
     taskType,
     toolContext,
@@ -966,8 +961,12 @@ export function ChatWorkspace() {
     }
 
     const retryRequestId = createMessageId("request");
+    const connection = getGenerationConnection();
+    if (connection.error) { setError(connection.error); return; }
+    const { model, clientProvider } = connection;
     const retryRequest: AgentRequest = {
       ...currentPendingContinuation.request,
+      model,
       history: currentPendingContinuation.request.history ?? [],
       conversationId: currentPendingContinuation.sessionId,
       assistantMessageId: currentPendingContinuation.assistantMessageId,
@@ -977,7 +976,7 @@ export function ChatWorkspace() {
       knowledgeMode,
       knowledgeDocumentIds,
       knowledgeCourseOnly,
-      clientProvider: getClientProviderOverride(),
+      clientProvider,
     };
     const contextSnapshot: SessionContextSnapshot = {
       course,
@@ -1014,7 +1013,6 @@ export function ChatWorkspace() {
     knowledgeDocumentIds,
     knowledgeCourseOnly,
     memory,
-    model,
     runAssistantRequest,
     taskType,
     toolContext,
@@ -1078,12 +1076,18 @@ export function ChatWorkspace() {
     void submitMessage();
   }
 
+  const pickPrompt = useCallback((prompt: string) => {
+    setInput(prompt);
+    window.dispatchEvent(new Event("pla:focus-chat-input"));
+  }, []);
+
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <section
         ref={scrollRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-white"
+        aria-label="Conversation"
+        className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain bg-white"
         data-testid="chat-scroll-area"
       >
         {toolContext ? (
@@ -1091,10 +1095,11 @@ export function ChatWorkspace() {
         ) : null}
         <ChatWindow
           messages={messages}
-          onPickPrompt={setInput}
+          onPickPrompt={pickPrompt}
           onFeedback={handleAnswerFeedback}
         />
-        <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pb-6">
+        {isCurrentSessionGenerating || error || currentPendingContinuation ? (
+        <div className="mx-auto w-full max-w-3xl shrink-0 space-y-3 px-4 pb-6">
           {isCurrentSessionGenerating ? (
             <GenerationStatus stage={generationStage}
               module="chat"
@@ -1123,7 +1128,7 @@ export function ChatWorkspace() {
               </button>
             </div>
           ) : null}
-        </div>
+        </div>) : null}
       </section>
 
       {showScrollButton ? (

@@ -1,5 +1,43 @@
 import { AgentStreamError } from "@/lib/read-agent-stream";
-import type { ChatMessage } from "@/types/learning";
+import type { StoredChatSession } from "@/lib/storage";
+import type { AgentRequest, ChatMessage } from "@/types/learning";
+
+export type PendingContinuation = {
+  sessionId: string;
+  assistantMessageId: string;
+  request: AgentRequest;
+  messagesBeforeAssistant: ChatMessage[];
+  firstMessage: string;
+  partialContent: string;
+};
+
+export function recoverChatRequest(session: StoredChatSession): PendingContinuation | null {
+  const assistant = session.messages.at(-1);
+  const user = session.messages.at(-2);
+  if (assistant?.role !== "assistant" || !assistant.id ||
+    !["streaming", "error", "interrupted"].includes(assistant.status ?? "") ||
+    user?.role !== "user" || (!user.content.trim() && !user.images?.length)) return null;
+
+  const history = session.messages.slice(0, -2);
+  return {
+    sessionId: session.id,
+    assistantMessageId: assistant.id,
+    messagesBeforeAssistant: session.messages.slice(0, -1),
+    firstMessage: session.messages[0]?.content || user.content,
+    partialContent: assistant.content,
+    request: {
+      ...session.context,
+      module: "chat",
+      message: user.content,
+      images: user.images,
+      history,
+      memory: session.memory,
+      toolContext: session.toolContext,
+      conversationId: session.id,
+      assistantMessageId: assistant.id,
+    },
+  };
+}
 
 export function buildContinuationMessage(originalMessage: string) {
   return `The previous answer stopped at the following point. Do not repeat existing content. Continue from the interruption point while preserving the structure, numbering, notation, language, and LaTeX format.

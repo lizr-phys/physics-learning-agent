@@ -23,7 +23,7 @@ const stageLabels: Record<string, string> = {
   commit: "Saving completed task…",
 };
 export function GenerationStatus({ hasContent = false, stage, completedProblems, totalProblems }: GenerationStatusProps) {
-  return <div role="status" className={`flex min-h-6 items-center gap-2 text-xs text-zinc-500 ${hasContent ? "opacity-70" : ""}`} aria-live="polite">
+  return <div role="status" className={`flex min-h-6 items-center gap-2 text-xs ${hasContent ? "text-zinc-600" : "text-study-700"}`} aria-live="polite">
     <Loader2 size={13} className="shrink-0 animate-spin" />
     <span>{typeof completedProblems === "number" && totalProblems ? `${completedProblems} of ${totalProblems} problems ready` : stageLabels[stage ?? ""] ?? "Generating…"}</span>
   </div>;

@@ -18,8 +18,9 @@ import type { RecommendationItem } from "@/data/recommendations";
 import { getCourseLabel } from "@/data/courses";
 import { getKnowledgeByCourse, getKnowledgeTitle } from "@/data/knowledge";
 import { clearLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
-import { getClientProviderOverride } from "@/lib/client-provider";
-import { getWorkspaceIdentity, isWorkspaceCurrent, workspaceStorage } from "@/lib/workspace-storage";
+import { getGenerationConnection } from "@/lib/client-provider";
+import { WorkspaceHeading } from "@/components/layout/WorkspaceHeading";
+import { getWorkspaceIdentity, isWorkspaceCurrent } from "@/lib/workspace-storage";
 import {
   getStoredAnswerDepth,
   saveStoredAnswerDepth,
@@ -344,6 +345,8 @@ export function AgentGenerator() {
       setError("Please select a topic, or enter a clear practice request.");
       return;
     }
+    const connection = getGenerationConnection();
+    if (connection.error) { setError(connection.error); return; }
 
     setCourse(resolvedCourse);
     setEditingRequest(false);
@@ -388,8 +391,6 @@ export function AgentGenerator() {
       practiceStyle: resolvedPracticeStyle,
       detectedLanguage: resolvedLanguage,
       answerDepth,
-      clientProvider: getClientProviderOverride(),
-      model: workspaceStorage().getItem("pla.deepseek.model") ?? "deepseek-flash",
       images: images.length ? images : undefined,
     };
 
@@ -397,6 +398,8 @@ export function AgentGenerator() {
   }
 
   async function runPracticeGeneration(baseRequest: AgentRequest, recordId: string, title?: string, resumeContent?: string) {
+    const connection = getGenerationConnection();
+    if (connection.error) { setIsLoading(false); setError(connection.error); return; }
     const identity = getWorkspaceIdentity();
     const abortController = new AbortController();
     abortControllerRef.current?.abort();
@@ -405,7 +408,8 @@ export function AgentGenerator() {
     let effectiveRequest: AgentRequest = {
       ...baseRequest,
       intent: classifyAgentIntent(baseRequest),
-      clientProvider: getClientProviderOverride(),
+      clientProvider: connection.clientProvider,
+      model: connection.model,
       conversationId: recordId,
       assistantMessageId: `${recordId}:answer`,
       requestId: crypto.randomUUID(),
@@ -626,10 +630,7 @@ export function AgentGenerator() {
     <div className="mx-auto max-w-4xl space-y-6 px-5 py-8 md:px-8">
       <section className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{config.title}</h1>
-          <p className="text-sm leading-6 text-zinc-600">{config.description}</p>
-        </div>
+        <WorkspaceHeading title={config.title} description={config.description} />
         {content && !isLoading ? <button type="button" onClick={() => setEditingRequest(value => !value)} aria-expanded={editingRequest} aria-controls="practice-request-editor" className="rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50">{editingRequest ? "Close editor" : "Edit request"}</button> : null}
         </div>
 
@@ -646,7 +647,6 @@ export function AgentGenerator() {
             onChange={(nextCourse) => {
               setCourse(nextCourse);
               setKnowledgePoint("");
-              setExtraInput("");
             }}
           />
 
@@ -656,7 +656,7 @@ export function AgentGenerator() {
                 {[3,5,10,...(![3,5,10].includes(exerciseCount) ? [exerciseCount] : [])].map(value => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
-          <button type={isLoading ? "button" : "submit"} disabled={imagesBusy && !isLoading} onClick={isLoading ? stopGeneration : undefined} className="flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-medium text-white hover:bg-zinc-800 disabled:bg-zinc-400" data-testid="generator-submit">
+          <button type={isLoading ? "button" : "submit"} disabled={imagesBusy && !isLoading} onClick={isLoading ? stopGeneration : undefined} className="study-primary" data-testid="generator-submit">
             <Send size={16} />{isLoading ? "Stop generation" : config.submitLabel}
           </button>
           </div>

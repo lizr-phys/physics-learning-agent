@@ -27,7 +27,7 @@ export const ChatWindow = memo(function ChatWindow({
   const lastAssistantIndex = messages.findLastIndex((message) => message.role === "assistant");
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-6 md:py-8">
+    <div className="mx-auto w-full max-w-3xl shrink-0 space-y-8 px-4 py-6 md:py-8">
       {messages.map((message, index) => (
         <ChatMessage
           key={message.id ?? `${message.role}-${index}`}

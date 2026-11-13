@@ -6,6 +6,7 @@ import { buildUserPrompt, PHYSICS_TUTOR_SYSTEM_PROMPT } from "@/lib/prompt-build
 import { encodeGenerationEvent, type GenerationBinding, type GenerationPayload } from "@/lib/generation-stream";
 import { readProviderEvents, type ProviderEvent } from "@/lib/provider-sse";
 import { mergeImageAttachments } from "@/lib/image-attachments";
+import { isServerModelId } from "@/lib/server-models";
 import {
   assertSafeProviderBaseUrl,
   validateProviderBaseUrl,
@@ -51,15 +52,6 @@ type RequestProviderConfig = {
   label: string;
   clientProvided: boolean;
 };
-
-const allowedModels = new Set([
-  "deepseek-flash",
-  "deepseek-v4-flash-vision-exp",
-  "deepseek-v4-flash",
-  "deepseek-v4-pro",
-  "deepseek-chat",
-  "deepseek-reasoner",
-]);
 
 export class DeepSeekError extends Error {
   constructor(
@@ -189,7 +181,7 @@ export function getDeepSeekPublicConfig() {
 }
 
 function resolveModel(requestedModel?: string) {
-  if (requestedModel && allowedModels.has(requestedModel)) {
+  if (isServerModelId(requestedModel)) {
     return requestedModel;
   }
 
@@ -526,9 +518,9 @@ export async function streamDeepSeek(input: AgentRequest, parentSignal?: AbortSi
   });
 }
 
-export async function askDeepSeek(input: AgentRequest) {
+export async function askDeepSeek(input: AgentRequest, signal?: AbortSignal) {
   const { timeoutMs } = resolveRequestConfig(input);
-  const abort = createAbortController(timeoutMs);
+  const abort = createAbortController(timeoutMs, signal);
 
   try {
     const response = await requestDeepSeek(input, false, abort.signal);

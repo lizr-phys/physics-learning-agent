@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { askDeepSeek, DeepSeekError, getDeepSeekPublicConfig } from "@/lib/deepseek";
 import { consumeRateLimit, getRequestClientKey } from "@/lib/rate-limit";
 import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
+import { isServerModelId } from "@/lib/server-models";
 import type { ClientProviderConfig } from "@/types/learning";
 
 export const runtime = "nodejs";
@@ -51,23 +52,28 @@ function sanitizeClientProvider(value: unknown): ClientProviderConfig | undefine
 }
 
 export async function GET(request: NextRequest) {
-  const config = getDeepSeekPublicConfig();
-  const url = new URL(request.url);
+  const serverConfig = getDeepSeekPublicConfig();
+  const { searchParams } = request.nextUrl;
 
-  if (url.searchParams.get("mode") === "status") {
+  if (searchParams.get("mode") === "status") {
     return NextResponse.json({
-      ok: config.configured,
-      status: config.configured ? "configured" : "missing-key",
-      message: config.configured ? "DeepSeek API is configured." : "DeepSeek API key is not configured.",
-      config,
-    });
+      ok: serverConfig.configured,
+      status: serverConfig.configured ? "configured" : "missing-key",
+      message: serverConfig.configured ? "DeepSeek API is configured." : "DeepSeek API key is not configured.",
+      config: serverConfig,
+    }, { headers: { "Cache-Control": "no-store" } });
   }
 
+  const requestedModel = searchParams.get("model");
+  if (requestedModel && !isServerModelId(requestedModel)) {
+    return NextResponse.json({ ok: false, status: "invalid-provider", message: "Choose a supported server model.", config: serverConfig }, { status: 400 });
+  }
+  const config = { ...serverConfig, model: requestedModel || serverConfig.model };
   if (!config.configured) {
     return NextResponse.json({
       ok: false,
       status: "missing-key",
-      message: "DeepSeek API key is not configured. Set DEEPSEEK_API_KEY in .env.local.",
+      message: "DeepSeek API key is not configured. Use your own API key or ask the server administrator to configure one.",
       config,
     });
   }
@@ -97,7 +103,7 @@ export async function GET(request: NextRequest) {
       taskType: "qa",
       model: config.model,
       detectedLanguage: "en",
-    });
+    }, request.signal);
 
     return NextResponse.json({
       ok: true,
@@ -146,9 +152,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await readJsonRequest<Record<string, unknown>>(request, 32 * 1024);
-    const clientProvider = sanitizeClientProvider(body.clientProvider);
+    const clientProvider = sanitizeClientProvider(body?.clientProvider);
 
-    if (!clientProvider) {
+    if (!clientProvider?.apiKey || !clientProvider.model) {
       return NextResponse.json(
         {
           ok: false,
@@ -167,7 +173,7 @@ export async function POST(request: NextRequest) {
       model: clientProvider.model,
       detectedLanguage: "en",
       clientProvider,
-    });
+    }, request.signal);
 
     return NextResponse.json({
       ok: true,

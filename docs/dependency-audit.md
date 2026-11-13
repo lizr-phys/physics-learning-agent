@@ -1,5 +1,13 @@
 # Dependency review
 
+## 2026-11-13 checkpoint
+
+The initial production audit reported two package entries, Next.js and transitive Zod. The initial full tree reported 11. The lockfile now resolves Next.js and its matching ESLint config at **16.4.6**, Zod at **4.6.7**, and Vitest at **4.1.12**. Next.js's patched image optimization code applies to the project's framework version. The repository does not enable Server Actions or Cache Components. [Next.js release](https://github.com/vercel/next.js/releases/tag/v16.4.6), [image optimization advisory](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw), [Server Actions advisory](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r), [Cache Components advisory](https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr), [Zod advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), [Vitest release](https://github.com/vitest-dev/vitest/releases/tag/v4.1.12).
+
+`npm audit --omit=dev --json` now exits 0 with **0 findings**. `npm audit --json` exits 1 with **7 moderate entries** stemming from `minimatch@10.2.5` in the TypeScript ESLint toolchain. The older `braces` finding is absent from this lockfile. The latest verified TypeScript ESLint release uses `^10.2.2`; the advisory's patched version is `11.0.1`. Review the next compatible upstream release before changing that major version. Lint and build passed with the current tree. [Minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+
+## October 2026 review
+
 Review dates: 2026-10-07 and 2026-10-08 (Asia/Shanghai). This review covers the local npm lockfile, advisory conditions, and compatibility checks. An audit entry is a dependency finding, not a confirmed exploit in this application.
 
 The October 8 vision implementation declares Sharp **0.35.5** directly, matching the patched native version already resolved by Next.js. Upload signatures reject SVG/AVIF and unsupported formats before decoding; pixel and byte limits bound accepted raster input. The production audit remains **0 findings** and the full audit remains the same **5 development high entries** after this addition.

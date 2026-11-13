@@ -7,9 +7,8 @@ import { detectExerciseCount } from "@/agent/exercise-parser";
 import { classifyAgentIntent, isPhysicsIntent } from "@/agent/intent-classifier";
 import { decidePersonalKnowledgeUse, resolveKnowledgeMode } from "@/agent/knowledge-mode";
 import { commitLearningMemory, createLearningMemory, updateLearningMemory } from "@/agent/memory-manager";
-import { retrievePersonalKnowledge } from "@/lib/personal-knowledge";
 import { classifyQuery } from "@/lib/query-classifier";
-import { retrieveRagSnippets } from "@/rag/retrieve";
+import type { RagSearchResult } from "@/rag/types";
 import type {
   AgentIntent,
   AgentRequest,
@@ -153,9 +152,11 @@ function planRetrieval(state: WorkflowState) {
 async function retrieveKnowledge(state: WorkflowState) {
   state.options.signal?.throwIfAborted();
   let retrievalStatus: RetrievalStatus = state.personalKnowledgeDecision.shouldUse ? state.options.userId ? "no_match" : "unauthenticated" : state.personalKnowledgeDecision.status ?? "disabled";
-  let personalRagResults: Awaited<ReturnType<typeof retrievePersonalKnowledge>> = [];
+  let personalRagResults: RagSearchResult[] = [];
   if (state.options.userId && state.personalKnowledgeDecision.shouldUse) {
     try {
+      const { retrievePersonalKnowledge } = await import("@/lib/personal-knowledge");
+      state.options.signal?.throwIfAborted();
       personalRagResults = await retrievePersonalKnowledge(
           state.options.userId,
           state.personalKnowledgeDecision.retrievalQuery ?? state.contextInput.message,
@@ -178,7 +179,7 @@ async function retrieveKnowledge(state: WorkflowState) {
   state.options.signal?.throwIfAborted();
   const sampleRagResults =
     state.contextInput.useRag && isPhysicsIntent(state.intent)
-      ? await retrieveRagSnippets(state.contextInput.message, {
+      ? await (await import("@/rag/retrieve")).retrieveRagSnippets(state.contextInput.message, {
           limit: 4,
           course: state.course,
           topic: state.knowledgePoint,

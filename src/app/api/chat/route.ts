@@ -12,6 +12,7 @@ import { getUserFromRequest } from "@/lib/auth-server";
 import { DeepSeekError } from "@/lib/deepseek";
 import { consumeRateLimit, getRequestClientKey } from "@/lib/rate-limit";
 import { readJsonRequest, RequestBodyError } from "@/lib/request-body";
+import { isServerModelId } from "@/lib/server-models";
 import {
   difficultyOptions,
   taskTypeOptions,
@@ -65,7 +66,6 @@ const practiceStyles = new Set<PracticeStyleId>(practiceStyleOptions.map((item) 
 const detectedLanguages = new Set<DetectedLanguage>(["zh", "en"]);
 const referenceProfiles = new Set<ReferenceProfileId>(["auto", "chinese", "english"]);
 const knowledgeModes = new Set<KnowledgeMode>(["auto", "always", "never"]);
-const modelIds = new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]);
 const clientProviderIds = new Set([
   "openai",
   "deepseek",
@@ -291,7 +291,7 @@ function sanitizeRequest(body: unknown): AgentRequest {
     includeSolution: asBoolean(record.includeSolution),
     useRag: asBoolean(record.useRag),
     toolContext: sanitizeToolContext(record.toolContext),
-    model: modelIds.has(model) ? model : undefined,
+    model: isServerModelId(model) ? model : undefined,
     history: sanitizeHistory(record.history),
     memory: sanitizeLearningMemory(record.memory),
     answerDepth: answerDepths.has(answerDepth as AnswerDepth)

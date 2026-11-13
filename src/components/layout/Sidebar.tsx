@@ -15,6 +15,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { Popover } from "@/components/common/Popover";
 
 import {
   compactEmptyManualSessions,
@@ -46,14 +47,12 @@ type SessionGroupProps = {
   activeId: string;
   editingId: string;
   editingTitle: string;
-  menuSessionId: string;
   onSelect: (session: StoredChatSession) => void;
   onStartRename: (session: StoredChatSession) => void;
   onRenameTitleChange: (value: string) => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
   onDelete: (session: StoredChatSession) => void;
-  onToggleMenu: (sessionId: string) => void;
 };
 
 function SessionGroup({
@@ -62,20 +61,19 @@ function SessionGroup({
   activeId,
   editingId,
   editingTitle,
-  menuSessionId,
   onSelect,
   onStartRename,
   onRenameTitleChange,
   onCommitRename,
   onCancelRename,
   onDelete,
-  onToggleMenu,
 }: SessionGroupProps) {
   if (!sessions.length) {
     return null;
   }
 
   function handleRenameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     if (event.key === "Enter") {
       event.preventDefault();
       onCommitRename();
@@ -93,20 +91,21 @@ function SessionGroup({
       {sessions.map((session) => {
         const active = session.id === activeId;
         const editing = session.id === editingId;
-        const menuOpen = session.id === menuSessionId;
 
         return (
           <div key={session.id} className="group relative">
             <div
               className={
                 active
-                  ? "flex items-center gap-1 rounded-lg bg-zinc-200 px-3 py-1.5 text-zinc-950"
-                  : "flex items-center gap-1 rounded-lg px-3 py-1.5 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+                  ? "flex items-center gap-1 rounded-lg bg-study-100 px-3 text-study-900"
+                  : "flex items-center gap-1 rounded-lg px-3 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
               }
             >
               {editing ? (
                 <input
                   autoFocus
+                  aria-label="Conversation title"
+                  maxLength={160}
                   value={editingTitle}
                   onChange={(event) => onRenameTitleChange(event.target.value)}
                   onBlur={onCommitRename}
@@ -118,7 +117,8 @@ function SessionGroup({
                   type="button"
                   onClick={() => onSelect(session)}
                   title={session.title}
-                  className="min-w-0 flex-1 truncate py-1 text-left text-sm"
+                  aria-current={active ? "true" : undefined}
+                  className="min-h-10 min-w-0 flex-1 truncate text-left text-sm"
                   data-testid={`session-${session.id}`}
                 >
                   {session.title}
@@ -126,41 +126,18 @@ function SessionGroup({
               )}
 
               {!editing ? (
-                <button
-                  type="button"
-                  aria-label="Conversation menu"
-                  onClick={() => onToggleMenu(session.id)}
-                  className={
-                    menuOpen
-                      ? "flex size-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-700"
-                      : "flex size-7 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-0 hover:bg-zinc-100 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
-                  }
-                >
-                  <MoreHorizontal size={16} />
-                </button>
+                <Popover label="Conversation menu" trigger={<MoreHorizontal size={16} />} side="top" align="end" closeOnAction
+                  triggerClassName="flex size-10 shrink-0 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200/70 aria-expanded:bg-zinc-200/70 md:size-8"
+                  panelClassName="w-36 !p-1.5">
+                  <button type="button" onClick={() => onStartRename(session)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-zinc-100">
+                    <Pencil size={14} />Rename
+                  </button>
+                  <button type="button" onClick={() => onDelete(session)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-red-800 hover:bg-red-50">
+                    <Trash2 size={14} />Delete
+                  </button>
+                </Popover>
               ) : null}
             </div>
-
-            {menuOpen ? (
-              <div className="absolute right-1 top-9 z-50 w-32 rounded-xl bg-white p-1 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => onStartRename(session)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-100"
-                >
-                  <Pencil size={14} />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(session)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-100"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </div>
-            ) : null}
           </div>
         );
       })}
@@ -175,8 +152,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const [activeId, setActiveIdState] = useState("");
   const [editingId, setEditingId] = useState("");
   const [editingTitle, setEditingTitle] = useState("");
-  const [menuSessionId, setMenuSessionId] = useState("");
-  const grouped = useMemo(() => groupSessionsByTime(sessions), [sessions]);
+  const [query, setQuery] = useState("");
+  const grouped = useMemo(() => {
+    const text = query.trim().toLocaleLowerCase();
+    return groupSessionsByTime(text ? sessions.filter(session => session.title.toLocaleLowerCase().includes(text)) : sessions);
+  }, [sessions, query]);
   const isChat = pathname === "/chat" || pathname === "/";
 
   useEffect(() => {
@@ -205,7 +185,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     if (pathname !== "/chat" && pathname !== "/") {
       router.push("/chat");
     }
-    setMenuSessionId("");
     onNavigate?.();
   }
 
@@ -216,6 +195,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   }
 
   function newSession() {
+    setQuery("");
     const currentSessions = compactEmptyManualSessions(activeId);
     const currentSession = currentSessions.find((session) => session.id === activeId);
 
@@ -245,7 +225,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   function startRename(session: StoredChatSession) {
     setEditingId(session.id);
     setEditingTitle(session.title);
-    setMenuSessionId("");
   }
 
   function commitRename() {
@@ -270,8 +249,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   }
 
   function deleteSession(session: StoredChatSession) {
-    setMenuSessionId("");
-
     if (!window.confirm("Delete this conversation? This action cannot be undone.")) {
       return;
     }
@@ -292,14 +269,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     openSession(nextSession);
   }
 
-  function toggleMenu(sessionId: string) {
-    setEditingId("");
-    setMenuSessionId((current) => (current === sessionId ? "" : sessionId));
-  }
-
   return (
-    <aside className="flex h-full w-[224px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50" aria-label="Workspace navigation">
-      <div className="px-4 pb-3 pt-5">
+    <aside className="flex h-full w-[min(17rem,calc(100vw-3rem))] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 md:w-56" aria-label="Workspace navigation">
+      <div className={`px-4 pb-3 pt-5 ${onNavigate ? "pr-14" : ""}`}>
         <Link href="/chat" onClick={onNavigate} className="flex items-center gap-2 text-sm font-semibold text-zinc-950">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white">
             <Image src="/logo.png" alt="Physics Learning Agent logo" width={24} height={24} className="object-contain" />
@@ -312,25 +284,30 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href || (item.href === "/chat" && isChat);
-          return <Link key={item.href} href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm ${active ? "bg-zinc-200/70 font-medium text-zinc-950" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"}`}><Icon size={16} /><span>{item.label}</span></Link>;
+          return <Link key={item.href} href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={`flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2 text-sm ${active ? "bg-study-100 font-medium text-study-900" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"}`}><Icon size={16} /><span>{item.label}</span></Link>;
         })}
       </nav>
       {isChat ? <>
         <button
           type="button"
           onClick={newSession}
-          className="mx-3 mb-4 mt-2 flex min-h-10 items-center gap-2.5 rounded-lg px-3 text-sm text-zinc-700 hover:bg-zinc-200/70"
+          className="mx-3 mb-4 mt-2 flex min-h-11 items-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-study-800 hover:bg-study-50"
           data-testid="new-session"
         >
           <Plus size={16} />
           New conversation
         </button>
 
+      <div className="mb-2 space-y-2 px-3">
+        <p className="px-3 text-xs font-medium text-zinc-600">Conversations</p>
+        {sessions.length > 1 ? <label className="block">
+          <span className="sr-only">Search conversations</span>
+          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search conversations"
+            className="min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs text-zinc-800" />
+        </label> : null}
+      </div>
       <div className="conversation-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <div className="mb-1 px-3 text-xs font-medium text-zinc-500">
-          Conversations
-        </div>
-        {sessions.length ? (
+        {grouped.today.length || grouped.recent.length || grouped.older.length ? (
           <>
             <SessionGroup
               title="Today"
@@ -338,14 +315,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               activeId={activeId}
               editingId={editingId}
               editingTitle={editingTitle}
-              menuSessionId={menuSessionId}
               onSelect={openSession}
               onStartRename={startRename}
               onRenameTitleChange={setEditingTitle}
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
               onDelete={deleteSession}
-              onToggleMenu={toggleMenu}
             />
             <SessionGroup
               title="Last 7 days"
@@ -353,14 +328,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               activeId={activeId}
               editingId={editingId}
               editingTitle={editingTitle}
-              menuSessionId={menuSessionId}
               onSelect={openSession}
               onStartRename={startRename}
               onRenameTitleChange={setEditingTitle}
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
               onDelete={deleteSession}
-              onToggleMenu={toggleMenu}
             />
             <SessionGroup
               title="Older"
@@ -368,19 +341,17 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               activeId={activeId}
               editingId={editingId}
               editingTitle={editingTitle}
-              menuSessionId={menuSessionId}
               onSelect={openSession}
               onStartRename={startRename}
               onRenameTitleChange={setEditingTitle}
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
               onDelete={deleteSession}
-              onToggleMenu={toggleMenu}
             />
           </>
         ) : (
           <p className="px-3 py-3 text-sm leading-6 text-zinc-500">
-            Your conversations will appear here.
+            {sessions.length ? "No matching conversations." : "Your conversations will appear here."}
           </p>
         )}
       </div>

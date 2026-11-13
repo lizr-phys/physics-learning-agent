@@ -74,3 +74,24 @@ One combined screenshot inspection covered all five pages on desktop/mobile, bil
 The [Chinese deployment walkthrough](deployment.zh-CN.md) describes the existing single-host stack. `deploy/Caddyfile` now relies on Caddy's immediate SSE flushing instead of a negative `flush_interval`, preserving its documented propagation of client disconnects. Actual proxy cancellation, container startup, real-model behavior, physical mobile keyboards and human physics review remain untested locally. No live deployment or paid model call was performed.
 
 The local preview was restarted at `http://127.0.0.1:3218/chat`, reusing the earlier isolated preview data directory rather than replacing its records. Health and all five pages returned HTTP 200. Its status-only provider check confirmed that the server key is absent; use API Settings with a test key for interactive generation. Original application data and `.env.local` were not changed.
+
+## Workspace recovery and navigation — 2026-11-13
+
+| Finding | Changes and verification |
+| --- | --- |
+| F01 account isolation | The library shares the sync layer's verified account state. Account changes cancel library operations, and document and sign-out endpoints check the expected owner. Browser coverage verifies delayed responses, explicit imports, and account changes. |
+| F02 dependency review | Next.js and compatible dependency updates clear the production audit. See the [current dependency checkpoint](dependency-audit.md#2026-11-13-checkpoint) for the development finding. |
+| F03 save recovery | A failed account save retries in place instead of remounting the workspace. A browser regression verifies that the draft survives the retry. |
+| F04 request recovery | Chat can rebuild the last incomplete request from saved messages after refresh. A retry or continuation uses the active connection. Tests cover the actual selected model, an unsaved connection test, endpoint-bound keys, and a missing key in a new tab. |
+| F06 library | Search and category filtering work on saved materials. A failed list request shows a retry action, and a rejected sign-out preserves the signed-in view. The standalone build verifies bundled sample excerpts in a real response. |
+| F09 practice | Selecting a course after the request requires one preserves the input. Tests also cover refresh recovery, stable problem IDs, folded answers, and image carryover. |
+| F11 interface | Shared headings and primary action styles give the pages consistent hierarchy. Chat examples fill and focus the composer, history can be searched, and mobile navigation and menus support dismissal and focus return. Optional content and retrieval code load on demand. |
+
+The new browser cases are in `e2e/workspace-refinement.spec.ts`. The interface changes are in `src/components/layout/`, `src/components/common/`, the Chat and practice components, and the library and settings pages. Data and transport changes are in `src/lib/client-provider.ts`, `src/lib/chat-generation.ts`, `src/lib/request-body.ts`, the corresponding route handlers, and `src/agent/workflow.ts`. Tests for bounded uploads and the selected-model connection check run in the unit suite.
+
+- Six desktop regressions reproduced issues on the baseline. The same scenarios passed on both browser profiles after the fixes.
+- `npm run lint` and `npm run build` passed with Next.js 16.4.6. `npm run test:run` passed 483 tests across 53 files. `npm run test:quality` passed 158 offline cases included in that total.
+- `npm run test:e2e` passed all 102 cases on desktop and mobile Chromium. The multimodal test now explicitly picks Flash before asserting the model ID. A separate case verifies that an untouched setting leaves model selection to the server.
+- One combined visual review covered all five pages, document upload, BYOK settings, and a narrow chat with wide math and a table. The standalone Node.js build returned HTTP 200 for all five pages and health. With a loopback model stub, it emitted the first SSE content delta before upstream completion and supplied the bundled sample excerpt.
+
+Verification used isolated data, synthetic accounts and simulated providers. Physical devices, paid provider generation, physics-answer review and a deployed proxy remain outside the evidence. The local Windows environment did not run Docker.

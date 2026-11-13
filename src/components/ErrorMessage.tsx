@@ -1,4 +1,5 @@
 import { AlertCircle } from "lucide-react";
+import Link from "next/link";
 
 type ErrorMessageProps = {
   message: string;
@@ -10,9 +11,12 @@ export function ErrorMessage({ message }: ErrorMessageProps) {
   }
 
   return (
-    <div className="flex gap-2 rounded-md border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-800">
-      <AlertCircle className="mt-0.5 shrink-0" size={16} />
-      <span>{message}</span>
+    <div role="alert" className="flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-900">
+      <AlertCircle aria-hidden="true" className="mt-1 shrink-0" size={16} />
+      <div className="min-w-0 break-words">
+        <p>{message}</p>
+        {message.includes("API Settings") ? <Link href="/settings/api" className="mt-1 inline-block font-medium underline underline-offset-2">Open API Settings</Link> : null}
+      </div>
     </div>
   );
 }

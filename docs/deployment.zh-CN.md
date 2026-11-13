@@ -2,7 +2,7 @@
 
 本项目适合先部署为单台 Linux 服务器上的个人或小组学习服务。现有 `compose.yaml` 已包含 Next.js、Caddy HTTPS、访问口令和持久化数据卷，无需另外搭建数据库。
 
-以下命令在 **Linux 服务器**执行。本轮只提供部署方法，没有操作你的服务器或发布应用。
+以下命令在 **Linux 服务器**执行。完整应用需要持续运行的 Node.js 服务处理模型流式请求、登录和知识库，并为账号、笔记和图片保留数据卷。GitHub Pages 可托管项目介绍或截图等静态内容。相关能力见 [GitHub Pages 官方说明](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)和 [Next.js 静态导出指南](https://nextjs.org/docs/app/guides/static-exports)。
 
 ## 1. 准备服务器和域名
 

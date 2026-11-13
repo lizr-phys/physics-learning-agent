@@ -5,7 +5,8 @@ import { ImageAttachmentInput } from "@/components/common/ImageAttachments";
 import { courseOptions } from "@/data/courses";
 import { buildPhotoProblemPrompt, type PhotoProblemDraft } from "@/lib/photo-problem";
 import { sanitizeImageAttachments } from "@/lib/image-attachments";
-import { getClientProviderOverride } from "@/lib/client-provider";
+import { getGenerationConnection } from "@/lib/client-provider";
+import { ErrorMessage } from "@/components/ErrorMessage";
 import { getWorkspaceIdentity, isWorkspaceCurrent, workspaceStorage } from "@/lib/workspace-storage";
 import { AgentStreamError, requestAgentStream } from "@/lib/read-agent-stream";
 import { createDraftCheckpoint } from "@/lib/draft-checkpoint";
@@ -51,10 +52,12 @@ export function PhotoProblemCapture({ onSaved, onComplete, embedded = false }: {
   }
   async function recognize() {
     if (!draft.images.length || uploading || controller.current) return;
+    const connection = getGenerationConnection();
+    if (connection.error) { setError(connection.error); return; }
     const identity = getWorkspaceIdentity(), abort = new AbortController(); controller.current = abort;
     setBusy("recognize"); setError(""); setNotice(""); setReviewed(false);
     try {
-      const result = await requestAgentStream({ message: buildPhotoProblemPrompt(draft), images: draft.images, module: "chat", taskType: "qa", course: draft.course, knowledgeMode: "never", answerDepth: "concise", model: workspaceStorage().getItem("pla.deepseek.model") ?? "deepseek-flash", clientProvider: getClientProviderOverride(), conversationId: `capture-${crypto.randomUUID()}`, assistantMessageId: "transcript", requestId: crypto.randomUUID() }, content => {
+      const result = await requestAgentStream({ message: buildPhotoProblemPrompt(draft), images: draft.images, module: "chat", taskType: "qa", course: draft.course, knowledgeMode: "never", answerDepth: "concise", model: connection.model, clientProvider: connection.clientProvider, conversationId: `capture-${crypto.randomUUID()}`, assistantMessageId: "transcript", requestId: crypto.randomUUID() }, content => {
         if (isWorkspaceCurrent(identity) && controller.current === abort) setDraft(current => ({ ...current, content }));
       }, { signal: abort.signal });
       if (isWorkspaceCurrent(identity) && controller.current === abort) { setDraft(current => ({ ...current, content: result })); setNotice("Check the text, especially numbers, units and diagram labels, before saving."); }
@@ -103,9 +106,9 @@ export function PhotoProblemCapture({ onSaved, onComplete, embedded = false }: {
       {draft.images.length || draft.content || busy === "recognize" ? <>
         <label className="block text-xs text-zinc-600">Review and edit text<textarea id="photo-problem-text" value={draft.content} onChange={event => change({ content: event.target.value })} disabled={Boolean(busy)} placeholder="Recognize the image, or enter your own checked transcription…" rows={8} className="mt-1 w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm leading-6" data-testid="photo-problem-text" /></label>
         <label className="flex items-start gap-2 text-xs leading-5 text-zinc-600"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} disabled={Boolean(busy)} className="mt-1" />I checked the question, conditions, symbols and unclear details.</label>
-        <button type="button" disabled={!reviewed || Boolean(busy) || uploading || !draft.images.length} onClick={() => void save()} className="w-full rounded-lg bg-zinc-950 px-3 py-2 text-sm text-white disabled:bg-zinc-300" data-testid="save-photo-problem">{busy === "save" ? "Saving…" : "Save to library"}</button>
+        <button type="button" disabled={!reviewed || Boolean(busy) || uploading || !draft.images.length} onClick={() => void save()} className="study-primary w-full" data-testid="save-photo-problem">{busy === "save" ? "Saving…" : "Save to library"}</button>
       </> : null}
-      {error ? <p role="alert" className="text-xs leading-5 text-red-700">{error}</p> : null}
+      <ErrorMessage message={error} />
       {notice ? <p role="status" className="text-xs leading-5 text-zinc-600">{notice}</p> : null}
     </div>
   </section>;

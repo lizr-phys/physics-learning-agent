@@ -23,19 +23,25 @@ export function AppShell({ children }: AppShellProps) {
     if (!sidebarOpen) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const opener = openButtonRef.current;
-    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [tabindex="0"]') ?? []).filter(item => item.getClientRects().length > 0);
+    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex="0"]') ?? [])
+      .filter(item => item.tabIndex >= 0 && !item.matches(":disabled") && item.getClientRects().length > 0);
     focusable()[0]?.focus();
     function keydown(event: KeyboardEvent) {
-      if (event.key === "Escape") { event.preventDefault(); setSidebarOpen(false); }
+      if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setSidebarOpen(false); }
       if (event.key !== "Tab") return;
       const items = focusable(); const first = items[0]; const last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }
+    const desktop = window.matchMedia("(min-width: 48rem)");
+    const closeAtDesktop = () => { if (desktop.matches) setSidebarOpen(false); };
     document.addEventListener("keydown", keydown);
+    desktop.addEventListener("change", closeAtDesktop);
     return () => {
       document.removeEventListener("keydown", keydown);
-      (previousFocus?.isConnected ? previousFocus : opener)?.focus();
+      desktop.removeEventListener("change", closeAtDesktop);
+      if (opener?.getClientRects().length) opener.focus();
+      else if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [sidebarOpen]);
 
@@ -47,16 +53,15 @@ export function AppShell({ children }: AppShellProps) {
 
       {sidebarOpen ? (
         <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-40 md:hidden">
-          <button
-            type="button"
+          <div
             className="navigation-backdrop absolute inset-0 bg-black/20"
-            aria-label="Close sidebar overlay"
+            aria-hidden="true"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="navigation-drawer relative h-full">
+          <div className="navigation-drawer relative h-full w-fit max-w-full">
             <button
               type="button"
-              className="absolute right-3 top-3 z-10 rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm"
+              className="absolute right-2 top-2 z-10 flex size-10 items-center justify-center rounded-lg text-zinc-700 hover:bg-zinc-100"
               aria-label="Close sidebar"
               onClick={() => setSidebarOpen(false)}
             >
@@ -67,14 +72,15 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col" inert={sidebarOpen}>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-200 px-4 md:hidden">
           <button
             type="button"
             ref={openButtonRef}
             aria-label="Open sidebar"
+            aria-expanded={sidebarOpen}
             onClick={() => setSidebarOpen(true)}
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-study-800 hover:bg-study-50"
           >
             <Menu size={18} />
           </button>

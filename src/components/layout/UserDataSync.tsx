@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { applyClientUserDataSnapshot, collectClientUserDataSnapshot, getWorkspaceAcknowledgement, type ClientUserDataSnapshot } from "@/lib/user-data-client";
 import { getWorkspaceIdentity, isWorkspaceCurrent, switchWorkspace, workspaceIdentityKey, workspaceKey, workspaceStorage, workspaceMutationRequiresSync } from "@/lib/workspace-storage";
 import { getWorkspaceMetadata, saveWorkspaceMetadata } from "@/lib/workspace-metadata";
 import { importGuestImages,restoreGuestImageSession } from "@/lib/image-client";
 import { getStoredSessions } from "@/lib/storage";
 import { getStoredPracticeGenerations } from "@/lib/practice-history";
+import type { SafeUser } from "@/lib/auth-server";
+import { bindLegacyProviderSessionKey } from "@/lib/client-provider";
 
 type SaveStatus = "Saved" | "Saving" | "Offline" | "Sync failed" | "Local only";
+const WorkspaceAccount = createContext<SafeUser | null | undefined>(undefined);
+
+export function useWorkspaceAccount() {
+  return useContext(WorkspaceAccount);
+}
 
 function importableData(legacy = false): Partial<ClientUserDataSnapshot> {
   if (!legacy) return { sessions: getStoredSessions(null), practiceHistory: getStoredPracticeGenerations(null) };
@@ -21,13 +28,16 @@ function importableData(legacy = false): Partial<ClientUserDataSnapshot> {
 
 export function UserDataSync({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [account, setAccount] = useState<SafeUser | null>();
   const [epoch, setEpoch] = useState("initial");
   const [status, setStatus] = useState<SaveStatus>("Local only");
   const [detail, setDetail] = useState("");
+  const [canRetry, setCanRetry] = useState(false);
   const [offerImport, setOfferImport] = useState(false);
   const [offerLegacy, setOfferLegacy] = useState(false);
   const [importing, setImporting] = useState(false);
   const importController = useRef<AbortController | null>(null);
+  const retrySync = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const cancelImport = () => { importController.current?.abort(); importController.current = null; setImporting(false); };
@@ -41,6 +51,8 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
     let suppress = false;
     let saving = false;
     let pending = false;
+    let loadingAccount = false;
+    let recovery: "load" | "save" | null = null;
     let acknowledged: Partial<ClientUserDataSnapshot> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -49,7 +61,7 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
       serial++;
       clearTimeout(timer); clearTimeout(retry);
       controllers.forEach(controller => controller.abort()); controllers.clear();
-      saving = false; pending = false; acknowledged = undefined;
+      saving = false; pending = false; loadingAccount = false; acknowledged = undefined;
     }
     async function fetchScoped(url: string, init?: RequestInit) {
       const controller = new AbortController(); controllers.add(controller);
@@ -77,23 +89,29 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
       timer = setTimeout(() => void save(), 900);
     }
     async function save() {
-      if (saving || suppress || !getWorkspaceIdentity().ownerId) return;
+      if (!pending || saving || loadingAccount || suppress || !getWorkspaceIdentity().ownerId) return;
       const identity = getWorkspaceIdentity(); const run = serial;
+      clearTimeout(timer); clearTimeout(retry);
       saving = true; pending = false; setStatus("Saving");
+      setCanRetry(false);
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           const snapshot = { ...collectClientUserDataSnapshot(), operationId: crypto.randomUUID() };
           const { response, body } = await fetchScoped("/api/user-data", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(snapshot) });
           if (run !== serial || !isWorkspaceCurrent(identity)) return;
+          if (response.status === 409 && body.code === "WORKSPACE_OWNER_CHANGED") { void bootstrap(); return; }
           if (response.status === 409 && body.code === "WORKSPACE_CONFLICT" && body.data) { apply(body.data); continue; }
           if (!response.ok) throw new Error(body.error || "Unable to save workspace.");
           if (body.data) apply(body.data, snapshot);
           else saveWorkspaceMetadata({ ...getWorkspaceMetadata(), revision: body.revision });
+          recovery = null;
           setStatus("Saved"); setDetail(body.data?.conflicts?.length ? "Conflicting versions are preserved in the workspace. Review conflict copies before editing." : ""); return;
         }
         throw new Error("Concurrent edits are still arriving. Local changes are preserved; retry saving.");
       } catch (error) {
         if (run !== serial || !isWorkspaceCurrent(identity) || disposed) return;
+        recovery = "save";
+        setCanRetry(true);
         setStatus(navigator.onLine ? "Sync failed" : "Offline");
         setDetail(error instanceof Error ? error.message : "Local changes are preserved.");
         retry = setTimeout(scheduleSave, 5000);
@@ -101,10 +119,17 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
         if (run === serial && !disposed) { saving = false; if (pending) scheduleSave(); }
       }
     }
-    async function bootstrap() {
+    async function bootstrap(preserveWorkspace = false) {
       cancel(); const run = serial;
-      // Unmount stale account forms immediately while the cookie/identity is revalidated.
-      setReady(false); setEpoch(getWorkspaceIdentity().authEpoch);
+      loadingAccount = true;
+      setCanRetry(false);
+      // Actual account changes retire the old view. Recovering a connection does
+      // not reset the current view unless the server returns a different owner.
+      if (!preserveWorkspace) {
+        setReady(false); setEpoch(getWorkspaceIdentity().authEpoch);
+        setAccount(undefined);
+        setOfferImport(false); setOfferLegacy(false); setDetail("");
+      }
       try {
         const { response, body } = await fetchScoped("/api/auth/me");
         if (run !== serial) return;
@@ -112,9 +137,11 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
         const owner = body.user?.id ?? null;
         const identity = switchWorkspace(owner);
         if (run !== serial) return;
+        setAccount(body.user ?? null);
         setEpoch(identity.authEpoch); setDetail("");
+        bindLegacyProviderSessionKey();
         acknowledged = getWorkspaceAcknowledgement();
-        if (!owner) { await restoreGuestImageSession(); if(run!==serial)return; setStatus("Local only"); setOfferImport(false); setOfferLegacy(false); return; }
+        if (!owner) { await restoreGuestImageSession(); if(run!==serial)return; recovery = null; setStatus("Local only"); setOfferImport(false); setOfferLegacy(false); return; }
         const remote = await fetchScoped("/api/user-data");
         if (run !== serial) return;
         if (!remote.response.ok) throw new Error(remote.body.error || "Unable to load workspace.");
@@ -122,16 +149,29 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
         const guest = importableData(); const legacy = importableData(true);
         setOfferImport(Boolean((guest.sessions?.length || guest.practiceHistory?.length) && !workspaceStorage().getItem("guest-import-choice")));
         setOfferLegacy(Boolean((legacy.sessions?.length || legacy.practiceHistory?.length) && !workspaceStorage().getItem("legacy-import-choice")));
+        recovery = null;
         setStatus("Saved"); scheduleSave();
       } catch (error) {
         if (run !== serial || disposed) return;
+        recovery = "load";
+        setCanRetry(true);
         setStatus(navigator.onLine ? "Sync failed" : "Offline");
         setDetail(error instanceof Error ? error.message : "Unable to load workspace.");
-        retry = setTimeout(() => void bootstrap(), 5000);
+        retry = setTimeout(() => void bootstrap(true), 5000);
       } finally {
-        if (run === serial && !disposed) { setReady(true); setEpoch(getWorkspaceIdentity().authEpoch); }
+        if (run === serial && !disposed) {
+          loadingAccount = false;
+          setReady(true); setEpoch(getWorkspaceIdentity().authEpoch);
+        }
       }
     }
+    function recover() {
+      if (loadingAccount || saving) return;
+      clearTimeout(retry);
+      if (recovery === "load") void bootstrap(true);
+      else if (recovery === "save" || pending) { pending = true; void save(); }
+    }
+    retrySync.current = recover;
     function authChanged() { void bootstrap(); }
     function storageChanged(event: StorageEvent) {
       if (event.key === workspaceIdentityKey) {
@@ -152,15 +192,16 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
     window.addEventListener("pla:user-data-changed", scheduleSave);
     window.addEventListener("pla:storage-failed", storageFailed);
     window.addEventListener("storage", storageChanged);
-    window.addEventListener("online", authChanged);
+    window.addEventListener("online", recover);
     document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
       disposed = true; cancel();
+      retrySync.current = null;
       window.removeEventListener("pla:auth-changed", authChanged);
       window.removeEventListener("pla:user-data-changed", scheduleSave);
       window.removeEventListener("pla:storage-failed", storageFailed);
       window.removeEventListener("storage", storageChanged);
-      window.removeEventListener("online", authChanged);
+      window.removeEventListener("online", recover);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, []);
@@ -188,11 +229,11 @@ export function UserDataSync({ children }: { children: React.ReactNode }) {
   const needsAttention = Boolean(detail || offerImport || offerLegacy);
 
   return <div className="flex h-dvh flex-col overflow-hidden bg-white">
-    {ready ? <div className="min-h-0 flex-1" key={epoch}>{children}</div> : <p role="status" className="min-h-0 flex-1 p-6 text-sm">Loading workspace…</p>}
+    {ready ? <div className="min-h-0 flex-1" key={epoch}><WorkspaceAccount.Provider value={account}>{children}</WorkspaceAccount.Provider></div> : <p role="status" className="min-h-0 flex-1 p-6 text-sm">Loading workspace…</p>}
     <div data-testid="workspace-save-state" className={`shrink-0 border-t border-zinc-100 bg-white px-4 text-xs text-zinc-500 ${needsAttention ? "max-h-[40dvh] overflow-y-auto py-3" : "py-1 text-right"}`}>
       <div className={needsAttention ? "mx-auto max-w-2xl space-y-1" : ""}>
       <span role="status" aria-live="polite" title={detail}>{status}</span>
-      {detail ? <p>{detail} <button className="underline" onClick={() => window.dispatchEvent(new Event("pla:auth-changed"))}>Retry save</button></p> : null}
+      {detail ? <p>{detail}{canRetry ? <> <button type="button" className="underline underline-offset-2" onClick={() => retrySync.current?.()}>Retry save</button></> : null}</p> : null}
       {offerImport || offerLegacy ? <div className="mt-2 space-y-2">
         <p>{offerImport ? "Anonymous records are separate from this account." : "Legacy browser records have no verified owner. Import only records that belong to you."}</p>
         <button disabled={importing} className="mr-3 underline disabled:opacity-50" onClick={() => chooseImport(true, !offerImport)}>{importing ? "Importing…" : "Import into this account"}</button>

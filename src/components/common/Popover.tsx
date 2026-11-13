@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 export function Popover({ label, trigger, children, align = "start", side = "bottom", anchorToParent = false, closeOnAction = false, triggerClassName = "", panelClassName = "" }: {
   label: string;
@@ -16,7 +16,25 @@ export function Popover({ label, trigger, children, align = "start", side = "bot
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const id = useId();
+
+  useLayoutEffect(() => {
+    if (!open || !panel.current) return;
+    const element = panel.current;
+    function keepInViewport() {
+      element.style.marginInline = "";
+      const rect = element.getBoundingClientRect();
+      const width = document.documentElement.clientWidth;
+      const shift = rect.left < 12 ? 12 - rect.left : Math.min(0, width - 12 - rect.right);
+      // An end-anchored panel moves left when its right margin grows.
+      if (align === "end") element.style.marginRight = `${-shift}px`;
+      else element.style.marginLeft = `${shift}px`;
+    }
+    keepInViewport();
+    window.addEventListener("resize", keepInViewport);
+    return () => window.removeEventListener("resize", keepInViewport);
+  }, [align, open, panelClassName]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,7 +57,7 @@ export function Popover({ label, trigger, children, align = "start", side = "bot
     if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
   }}>
     <button ref={button} type="button" aria-label={label} aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)} className={triggerClassName}>{trigger}</button>
-    {open ? <div id={id} role="group" aria-label={label} data-side={side} className={`ui-popover absolute z-40 max-h-[60dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-white p-4 text-sm text-zinc-700 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.2)] ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"} ${align === "end" ? "right-0" : "left-0"} ${panelClassName}`} onClick={event => {
+    {open ? <div ref={panel} id={id} role="group" aria-label={label} data-side={side} className={`ui-popover absolute z-40 max-h-[60dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-white p-4 text-sm text-zinc-700 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.2)] ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"} ${align === "end" ? "right-0" : "left-0"} ${panelClassName}`} onClick={event => {
       if (closeOnAction && event.target instanceof Element && event.target.closest("button")) { setOpen(false); button.current?.focus(); }
     }}>{children}</div> : null}
   </div>;

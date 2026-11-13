@@ -124,7 +124,7 @@ export const ChatInput = memo(function ChatInput({
         type="button"
         disabled={!isLoading && ((!value.trim() && !hasImages) || attachmentsBusy)}
         onClick={isLoading ? onStop : onSubmit}
-        className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800 disabled:bg-zinc-300"
+        className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-study-800 text-white hover:bg-study-900 disabled:bg-zinc-300"
         aria-label={isLoading ? "Stop generation" : "Send"}
         data-testid={isLoading ? "stop-generation" : "send-message"}
       >
@@ -141,7 +141,7 @@ export const ChatInput = memo(function ChatInput({
   );
 
   return (
-    <div className="chat-composer relative space-y-2 rounded-2xl border border-zinc-300 bg-white p-3 focus-within:border-zinc-500">
+    <div className="chat-composer relative space-y-2 rounded-2xl border border-zinc-300 bg-white p-3 focus-within:border-study-700">
       <textarea
         id="chat-message-input"
         ref={textareaRef}

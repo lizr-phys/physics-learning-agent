@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  ...(process.env.PLA_TEST_MODE === "true" ? { experimental: { turbopackFileSystemCacheForDev: false } } : {}),
+  outputFileTracingIncludes: { "/api/chat": ["./src/rag/sample-docs/*.md"] },
   outputFileTracingExcludes: {
     "/*": ["./.pla-data/**", "./.env*", "./test-results/**", "./playwright-report/**"],
   },

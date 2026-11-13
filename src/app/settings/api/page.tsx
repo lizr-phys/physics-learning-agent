@@ -1,296 +1,286 @@
 "use client";
 
-import { workspaceStorage } from "@/lib/workspace-storage";
-
-import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WorkspaceDataTools } from "@/components/layout/WorkspaceDataTools";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 
+import { WorkspaceHeading } from "@/components/layout/WorkspaceHeading";
+import { clearLastApiError, getLastApiError, saveLastApiError } from "@/lib/api-diagnostics";
 import {
-  clearLastApiError,
-  getLastApiError,
-  saveLastApiError,
-  type StoredApiError,
-} from "@/lib/api-diagnostics";
-import {
+  buildClientProviderDraft,
   clearClientProviderSessionKey,
   clientProviderPresets,
-  getClientProviderOverride,
   getClientProviderPreset,
   getClientProviderPublicConfig,
+  getClientProviderSessionKey,
+  getStoredServerModel,
   saveClientProviderPublicConfig,
   saveClientProviderSessionKey,
 } from "@/lib/client-provider";
 import { resetOnboarding } from "@/lib/preferences";
+import { serverModelOptions } from "@/lib/server-models";
+import { workspaceStorage } from "@/lib/workspace-storage";
 import type { ClientProviderId } from "@/types/learning";
+
+const WorkspaceDataTools = dynamic(() => import("@/components/layout/WorkspaceDataTools").then(module => module.WorkspaceDataTools), {
+  loading: () => <p role="status">Loading workspace tools…</p>,
+});
 
 type ApiStatus = {
   ok: boolean;
   status: string;
   message: string;
-  config: {
-    configured: boolean;
-    baseUrl: string;
-    model: string;
-    thinkingMode: string;
-    timeoutMs: number;
-    streaming: boolean;
-  };
+  config?: { configured: boolean; baseUrl: string; model: string; timeoutMs: number };
 };
 
-const modelOptions = [
-  {id:"deepseek-flash",label:"DeepSeek V4.1 Flash · Images"},
-  { id: "deepseek-v4-flash", label: "deepseek-v4-flash" },
-  { id: "deepseek-v4-pro", label: "deepseek-v4-pro" },
-  { id: "deepseek-chat", label: "deepseek-chat (compatible alias)" },
-  { id: "deepseek-reasoner", label: "deepseek-reasoner (compatible alias)" },
-];
+type Connection = "server" | "personal";
+type ProviderFields = { provider: ClientProviderId; baseUrl: string; model: string; apiKey: string };
+const fieldClass = "h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950";
+const secondaryAction = "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-zinc-300 px-4 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50";
+const invalidDraft = "Enter a model, an API key for this endpoint, and a valid Base URL if required.";
 
-async function fetchApiStatus(mode: "status" | "test") {
-  const response = await fetch(`/api/deepseek/test${mode === "status" ? "?mode=status" : ""}`, {
-    cache: "no-store",
-  });
-  return (await response.json()) as ApiStatus;
-}
-
-async function testClientProviderConnection() {
-  const provider = getClientProviderOverride();
-
-  if (!provider) {
-    throw new Error("Enable BYOK and enter a provider API key before testing.");
+async function readStatus(url: string, init?: RequestInit): Promise<ApiStatus> {
+  const response = await fetch(url, { ...init, cache: "no-store" });
+  const status = await response.json().catch(() => null) as ApiStatus | null;
+  if (!status || typeof status.ok !== "boolean" || typeof status.message !== "string") {
+    throw new Error(`Could not read the connection status (HTTP ${response.status}). Try again.`);
   }
-
-  const response = await fetch("/api/deepseek/test", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clientProvider: provider }),
-  });
-  return (await response.json()) as ApiStatus;
+  return status;
 }
 
 export default function ApiSettingsPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<ApiStatus | null>(null);
-  const [byokStatus, setByokStatus] = useState<ApiStatus | null>(null);
-  const [saveNotice, setSaveNotice] = useState("");
-  const [selectedModel, setSelectedModel] = useState("deepseek-flash");
-  const [byokEnabled, setByokEnabled] = useState(false);
-  const [byokProvider, setByokProvider] = useState<ClientProviderId>("deepseek");
-  const [byokBaseUrl, setByokBaseUrl] = useState("");
-  const [byokModel, setByokModel] = useState("");
-  const [byokApiKey, setByokApiKey] = useState("");
-  const [byokHasSessionKey, setByokHasSessionKey] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isTestingByok, setIsTestingByok] = useState(false);
-  const [lastError, setLastError] = useState<StoredApiError | null>(null);
+  const [saved, setSaved] = useState(getClientProviderPublicConfig);
+  const [connection, setConnection] = useState<Connection>(() => saved.enabled ? "personal" : "server");
+  const [savedServerModel, setSavedServerModel] = useState(() => getStoredServerModel() ?? "");
+  const [serverModel, setServerModel] = useState(savedServerModel);
+  const [fields, setFields] = useState<ProviderFields>(() => ({
+    provider: saved.provider, baseUrl: saved.baseUrl, model: saved.model, apiKey: "",
+  }));
+  const [serverStatus, setServerStatus] = useState<ApiStatus>();
+  const [testStatus, setTestStatus] = useState<Partial<Record<Connection, ApiStatus>>>({});
+  const [testing, setTesting] = useState<Connection>();
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [lastError, setLastError] = useState(getLastApiError);
+  const testController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSelectedModel(workspaceStorage().getItem("pla.deepseek.model") ?? "deepseek-flash");
-      setLastError(getLastApiError());
-      const providerConfig = getClientProviderPublicConfig();
-      setByokEnabled(providerConfig.enabled);
-      setByokProvider(providerConfig.provider);
-      setByokBaseUrl(providerConfig.baseUrl);
-      setByokModel(providerConfig.model);
-      setByokHasSessionKey(providerConfig.hasSessionKey);
-    }, 0);
-
-    fetchApiStatus("status").then(setStatus).catch(() => {
-      setStatus({
-        ok: false,
-        status: "request-failed",
-        message: "Unable to read API configuration status.",
-        config: {
-          configured: false,
-          baseUrl: "https://api.deepseek.com",
-          model: "deepseek-flash",
-          thinkingMode: "disabled",
-          timeoutMs: 120000,
-          streaming: true,
-        },
-      });
-    });
-
-    return () => window.clearTimeout(timer);
+    const controller = new AbortController();
+    void readStatus("/api/deepseek/test?mode=status", { signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted) setServerStatus(result); })
+      .catch(() => { if (!controller.signal.aborted) setServerStatus({ ok: false, status: "request-failed", message: "Unable to read server configuration. You can still test the connection." }); });
+    const abortTests = () => testController.current?.abort();
+    window.addEventListener("pla:workspace-will-change", abortTests);
+    return () => {
+      controller.abort();
+      abortTests();
+      window.removeEventListener("pla:workspace-will-change", abortTests);
+    };
   }, []);
 
-  function handleModelChange(model: string) {
-    setSelectedModel(model);
-    workspaceStorage().setItem("pla.deepseek.model", model);
-    window.dispatchEvent(new Event("pla:user-data-changed"));
+  const preset = getClientProviderPreset(fields.provider);
+  const testResult = testStatus[connection];
+  const savedKeyAvailable = Boolean(getClientProviderSessionKey(fields));
+  const serverDisplayModel = serverModel || serverStatus?.config?.model || "Configured server model";
+
+  function cancelTest() {
+    testController.current?.abort();
+    testController.current = null;
+    setTesting(undefined);
   }
 
-  function handleByokProviderChange(provider: ClientProviderId) {
-    const preset = getClientProviderPreset(provider);
-    if (provider !== byokProvider) {
-      clearClientProviderSessionKey(); setByokHasSessionKey(false); setByokApiKey("");
-    }
-    setByokStatus(null); setSaveNotice("");
-
-    setByokProvider(preset.id);
-    setByokBaseUrl(preset.defaultBaseUrl ?? "");
-    setByokModel(preset.defaultModel);
+  function changeFields(values: Partial<ProviderFields>) {
+    cancelTest();
+    setFields(current => ({ ...current, ...values }));
+    setTestStatus(current => ({ ...current, personal: undefined }));
+    setNotice("");
+    setError("");
   }
 
-  function saveByokConfig(enabled = byokEnabled) {
-    const preset = getClientProviderPreset(byokProvider);
+  function changeProvider(provider: ClientProviderId) {
+    const next = getClientProviderPreset(provider);
+    changeFields({ provider, baseUrl: next.defaultBaseUrl ?? "", model: next.defaultModel, apiKey: "" });
+  }
 
-    saveClientProviderPublicConfig({
-      enabled,
-      provider: byokProvider,
-      label: preset.label,
-      baseUrl: byokBaseUrl,
-      model: byokModel,
-    });
+  function selectConnection(next: Connection) {
+    cancelTest();
+    setConnection(next);
+    setNotice("");
+    setError("");
+  }
 
-    if (byokApiKey.trim()) {
-      saveClientProviderSessionKey(byokApiKey);
-      setByokHasSessionKey(true);
-      setByokApiKey("");
-    } else {
-      setByokHasSessionKey(getClientProviderPublicConfig().hasSessionKey);
+  function saveConnection() {
+    setError("");
+    setNotice("");
+    try {
+      if (connection === "server") {
+        if (serverModel) workspaceStorage().setItem("pla.deepseek.model", serverModel);
+        else workspaceStorage().removeItem("pla.deepseek.model");
+        saveClientProviderPublicConfig({ ...saved, enabled: false });
+        setSavedServerModel(serverModel);
+        setNotice("Server connection selected.");
+      } else {
+        const config = buildClientProviderDraft(fields);
+        if (!config) { setError(invalidDraft); return; }
+        saveClientProviderPublicConfig({ ...config, enabled: true });
+        saveClientProviderSessionKey(config.apiKey, fields);
+        setFields(current => ({ ...current, apiKey: "" }));
+        setNotice("Connection saved for this browser.");
+      }
+      setSaved(getClientProviderPublicConfig());
+    } catch {
+      setError("The browser could not save the connection. Check available storage and try again.");
     }
   }
 
   async function testConnection() {
-    setIsTesting(true);
+    if (testController.current) return;
+    setError("");
+    setNotice("");
+    const draft = connection === "personal" ? buildClientProviderDraft(fields) : undefined;
+    if (connection === "personal" && !draft) { setError(invalidDraft); return; }
 
+    const controller = new AbortController();
+    testController.current = controller;
+    setTesting(connection);
+    setTestStatus(current => ({ ...current, [connection]: undefined }));
     try {
-      const nextStatus = await fetchApiStatus("test");
-      setStatus(nextStatus);
-
-      if (nextStatus.ok) {
+      const params = new URLSearchParams(serverModel ? { model: serverModel } : {});
+      const result = draft
+        ? await readStatus("/api/deepseek/test", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+          body: JSON.stringify({ clientProvider: draft }),
+        })
+        : await readStatus(serverModel ? `/api/deepseek/test?${params}` : "/api/deepseek/test", { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setTestStatus(current => ({ ...current, [connection]: result }));
+      if (!result.ok) {
+        const diagnostic = { message: result.message, status: result.status, source: "settings" as const, occurredAt: Date.now() };
+        try { saveLastApiError(diagnostic); } catch { /* The test result remains visible. */ }
+        setLastError(diagnostic);
+      } else if (lastError?.source === "settings") {
         clearLastApiError();
         setLastError(null);
-      } else {
-        const nextError = {
-          message: nextStatus.message,
-          status: nextStatus.status,
-          occurredAt: Date.now(),
-        };
-        saveLastApiError(nextError);
-        setLastError(nextError);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Connection test failed.";
-      const nextError = {
-        message,
-        status: "request-failed",
-        occurredAt: Date.now(),
-      };
-      saveLastApiError(nextError);
-      setLastError(nextError);
-      setStatus((current) => ({
-        ok: false,
-        status: "request-failed",
-        message,
-        config:
-          current?.config ?? {
-            configured: false,
-            baseUrl: "https://api.deepseek.com",
-            model: "deepseek-flash",
-            thinkingMode: "disabled",
-            timeoutMs: 120000,
-            streaming: true,
-          },
-      }));
+    } catch {
+      if (!controller.signal.aborted) setError("Connection test could not be completed. Check your network and try again.");
     } finally {
-      setIsTesting(false);
+      if (testController.current === controller) { testController.current = null; setTesting(undefined); }
     }
-  }
-
-  async function testByokConnection() {
-    setIsTestingByok(true);
-
-    try {
-      saveByokConfig(true);
-      setByokEnabled(true);
-      const nextStatus = await testClientProviderConnection();
-      setByokStatus(nextStatus);
-
-      if (nextStatus.ok) {
-        clearLastApiError();
-        setLastError(null);
-      } else {
-        const nextError = {
-          message: nextStatus.message,
-          status: nextStatus.status,
-          occurredAt: Date.now(),
-        };
-        saveLastApiError(nextError);
-        setLastError(nextError);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Custom provider test failed.";
-      setByokStatus({ ok: false, status: "custom-provider-failed", message, config: { configured: byokHasSessionKey, baseUrl: byokBaseUrl, model: byokModel, thinkingMode: "disabled", timeoutMs: 120000, streaming: true } });
-      const nextError = {
-        message,
-        status: "custom-provider-failed",
-        occurredAt: Date.now(),
-      };
-      saveLastApiError(nextError);
-      setLastError(nextError);
-    } finally {
-      setIsTestingByok(false);
-    }
-  }
-
-  const selectedProviderPreset = getClientProviderPreset(byokProvider);
-  const activeStatus = byokEnabled ? byokStatus : status;
-
-  function selectConnection(enabled: boolean) {
-    setByokEnabled(enabled); setSaveNotice("");
-    const saved = getClientProviderPublicConfig();
-    saveClientProviderPublicConfig({ ...saved, enabled });
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 px-5 py-8 md:px-8">
-      <header><h1 className="text-2xl font-semibold tracking-tight text-zinc-950">API Settings</h1><p className="mt-2 text-sm leading-6 text-zinc-500">Choose how to connect your model.</p></header>
+    <div className="mx-auto max-w-2xl space-y-7 px-5 py-8 md:px-8">
+      <WorkspaceHeading title="API Settings" description="Connect the model you use for chat, practice and photo recognition." />
+      <p className="flex items-start gap-2 text-sm text-zinc-600">
+        <span className="font-medium text-zinc-950">In use:</span>
+        <span className="min-w-0 break-words">{saved.enabled
+          ? `${saved.label} · ${saved.model}${saved.hasSessionKey ? "" : " · key needed in this tab"}`
+          : savedServerModel || serverStatus?.config?.model || "Server default"}</span>
+      </p>
       <fieldset>
         <legend className="mb-3 text-sm font-medium text-zinc-800">Connection</legend>
         <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1">
-          {([{value:false,label:'Server default'}, {value:true,label:'My API key'}]).map(option => <label key={option.label} className="cursor-pointer"><input type="radio" name="connection-source" checked={byokEnabled === option.value} onChange={() => selectConnection(option.value)} className="peer sr-only" /><span className="block rounded-lg px-3 py-2.5 text-center text-sm text-zinc-500 peer-checked:bg-white peer-checked:font-medium peer-checked:text-zinc-950 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-zinc-500">{option.label}</span></label>)}
+          {([{ value: "server", label: "Server default" }, { value: "personal", label: "My API key" }] as const).map(option => (
+            <label key={option.value} className="cursor-pointer">
+              <input type="radio" name="connection-source" checked={connection === option.value} onChange={() => selectConnection(option.value)} className="peer sr-only" />
+              <span className="block rounded-lg px-3 py-2.5 text-center text-sm text-zinc-600 peer-checked:bg-white peer-checked:font-medium peer-checked:text-study-800 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-study-700">{option.label}</span>
+            </label>
+          ))}
         </div>
       </fieldset>
-      {byokEnabled ? <section className="space-y-5" aria-label="Bring Your Own Key">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block space-y-2 text-xs text-zinc-600">Provider<select aria-label="Provider" value={byokProvider} onChange={event => handleByokProviderChange(event.target.value as ClientProviderId)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950">{clientProviderPresets.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
-          <label className="block space-y-2 text-xs text-zinc-600">Model<input value={byokModel} onChange={event => { setByokModel(event.target.value); setByokStatus(null); setSaveNotice(""); }} placeholder={selectedProviderPreset.defaultModel || 'model-name'} className="h-10 w-full rounded-lg border border-zinc-300 px-3 text-sm text-zinc-950" /></label>
-        </div>
-        <label className="block space-y-2 text-xs text-zinc-600">API Key<input type="password" autoComplete="off" value={byokApiKey} onChange={event => { setByokApiKey(event.target.value); setByokStatus(null); setSaveNotice(""); }} placeholder={byokHasSessionKey ? 'A key is saved for this tab' : 'Paste your provider key'} className="h-10 w-full rounded-lg border border-zinc-300 px-3 text-sm text-zinc-950" /></label>
-        <p className="text-xs leading-5 text-zinc-500">Your key stays in this browser tab and is excluded from account sync. Choose a model with image support for photos.</p>
-        <details className="text-xs text-zinc-600"><summary className="cursor-pointer py-1">Connection details</summary><div className="mt-3 space-y-3">
-          <p className="leading-5">{selectedProviderPreset.description}</p>
-          {selectedProviderPreset.baseUrlEditable ? <label className="block space-y-2">Base URL<input value={byokBaseUrl} onChange={event => { setByokBaseUrl(event.target.value); setByokStatus(null); }} placeholder="https://api.example.com/v1" className="h-10 w-full rounded-lg border border-zinc-300 px-3 text-sm" /></label> : <p>This provider uses its native API endpoint.</p>}
-          {byokHasSessionKey ? <button type="button" onClick={() => { clearClientProviderSessionKey(); setByokHasSessionKey(false); setByokApiKey(''); setByokStatus(null); setSaveNotice('Session key cleared.'); }} className="min-h-9 underline">Clear session key</button> : null}
-        </div></details>
+      {connection === "personal" ? (
+        <section className="space-y-4" aria-label="Bring Your Own Key">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block min-w-0 space-y-2 text-sm text-zinc-700">Provider
+              <select value={fields.provider} onChange={event => changeProvider(event.target.value as ClientProviderId)} className={fieldClass}>
+                {clientProviderPresets.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+              </select>
+            </label>
+            <label className="block min-w-0 space-y-2 text-sm text-zinc-700">Model
+              <input value={fields.model} onChange={event => changeFields({ model: event.target.value })} placeholder={preset.defaultModel || "model-name"} maxLength={160} className={fieldClass} />
+            </label>
+          </div>
+          <label className="block space-y-2 text-sm text-zinc-700">API Key
+            <input type="password" autoComplete="off" value={fields.apiKey} onChange={event => changeFields({ apiKey: event.target.value })} placeholder={savedKeyAvailable ? "A key is saved for this tab" : "Paste your provider key"} maxLength={600} className={fieldClass} />
+          </label>
+          <p className="text-xs leading-5 text-zinc-600">Your key stays in this tab. Use a model that supports images for photo questions.</p>
+          <details className="text-sm text-zinc-600">
+            <summary className="cursor-pointer py-1">Connection details</summary>
+            <div className="mt-3 space-y-3">
+              <p className="text-xs leading-5">{preset.description}</p>
+              {preset.baseUrlEditable ? (
+                <label className="block space-y-2">Base URL
+                  <input type="url" value={fields.baseUrl} onChange={event => changeFields({ baseUrl: event.target.value })} placeholder="https://api.example.com/v1" maxLength={400} className={fieldClass} />
+                </label>
+              ) : <p>This provider uses its native API endpoint.</p>}
+              {saved.hasSessionKey ? <button type="button" onClick={() => {
+                clearClientProviderSessionKey();
+                changeFields({ apiKey: "" });
+                setSaved(getClientProviderPublicConfig());
+                setNotice("Session key cleared.");
+              }} className="min-h-11 underline underline-offset-2">Clear session key</button> : null}
+            </div>
+          </details>
+        </section>
+      ) : (
+        <section className="space-y-3" aria-label="Server Default Provider">
+          <label className="block space-y-2 text-sm text-zinc-700">Model
+            <select aria-label="Server model preference" value={serverModel} onChange={event => {
+              cancelTest();
+              setServerModel(event.target.value);
+              setTestStatus(current => ({ ...current, server: undefined }));
+              setError("");
+              setNotice("");
+            }} className={fieldClass}>
+              <option value="">Server model{serverStatus?.config?.model ? ` · ${serverStatus.config.model}` : ""}</option>
+              {serverModelOptions.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>
+          </label>
+          {serverStatus && !testResult ? <p role="status" className="text-sm leading-6 text-zinc-600">{serverStatus.message}</p> : null}
+        </section>
+      )}
+      <div className="space-y-3">
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => { saveByokConfig(true); setSaveNotice('Connection saved for this browser.'); }} className="rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white">Save for this browser</button>
-          <button type="button" onClick={() => void testByokConnection()} disabled={isTestingByok} className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-4 py-2.5 text-sm text-zinc-700 disabled:opacity-40">{isTestingByok ? <Loader2 size={14} className="animate-spin" /> : null}{isTestingByok ? 'Testing…' : 'Test provider'}</button>
+          <button type="button" onClick={saveConnection} className="study-primary">
+            {connection === "personal" ? "Save for this browser" : "Use server connection"}
+          </button>
+          <button type="button" onClick={() => void testConnection()} disabled={Boolean(testing)} className={secondaryAction}>
+            {testing ? <Loader2 size={14} className="animate-spin" /> : null}
+            {testing ? "Testing…" : connection === "personal" ? "Test provider" : "Test connection"}
+          </button>
         </div>
-        {saveNotice ? <p role="status" className="text-xs text-zinc-600">{saveNotice}</p> : null}
-      </section> : <section className="space-y-5" aria-label="Server Default Provider">
-        <label className="block space-y-2 text-xs text-zinc-600">Model<select aria-label="Server model preference" value={selectedModel} onChange={event => handleModelChange(event.target.value)} className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950">{modelOptions.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
-        <button type="button" onClick={() => void testConnection()} disabled={isTesting} className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-4 py-2.5 text-sm text-zinc-700 disabled:opacity-40">{isTesting ? <Loader2 size={14} className="animate-spin" /> : null}{isTesting ? 'Testing…' : 'Test connection'}</button>
-      </section>}
-      {activeStatus ? <p role="status" className="text-sm leading-6 text-zinc-600">{activeStatus.message}</p> : null}
-      <details className="border-t border-zinc-200 pt-5 text-sm text-zinc-600">
+        {error ? <p role="alert" className="break-words text-sm text-red-800">{error}</p> : null}
+        {notice ? <p role="status" className="flex items-center gap-2 text-sm text-study-800"><Check size={16} />{notice}</p> : null}
+        {testResult ? <p role={testResult.ok ? "status" : "alert"} className={`break-words text-sm leading-6 ${testResult.ok ? "text-study-800" : "text-red-800"}`}>{testResult.message}</p> : null}
+      </div>
+      <details onToggle={event => setAdvancedOpen(event.currentTarget.open)} className="border-t border-zinc-200 pt-5 text-sm text-zinc-600">
         <summary className="cursor-pointer font-medium">Advanced</summary>
-        <div className="mt-5 space-y-5">
-          <details className="text-xs"><summary className="cursor-pointer py-1">Diagnostics</summary><div className="mt-3 space-y-2 break-words leading-5">
-            <p>Status: {activeStatus?.status ?? 'Not tested'}</p><p>Model: {activeStatus?.config.model ?? (byokEnabled ? byokModel : selectedModel)}</p><p>Endpoint: {activeStatus?.config.baseUrl ?? (byokEnabled ? byokBaseUrl : status?.config.baseUrl)}</p><p>Timeout: {activeStatus?.config.timeoutMs ?? 120000} ms</p>
-            {lastError ? <p>Last error: {lastError.message} · {new Date(lastError.occurredAt).toLocaleString('en-US')}</p> : <p>No stored API errors.</p>}
-          </div></details>
+        {advancedOpen ? <div className="mt-5 space-y-5">
+          <details className="text-xs">
+            <summary className="cursor-pointer py-1">Diagnostics</summary>
+            <div className="mt-3 space-y-2 break-words leading-5">
+              <p>Status: {testResult?.status ?? "Not tested"}</p>
+              <p>Model: {testResult?.config?.model ?? (connection === "personal" ? fields.model : serverDisplayModel)}</p>
+              <p>Endpoint: {testResult?.config?.baseUrl ?? (connection === "personal" ? fields.baseUrl : serverStatus?.config?.baseUrl)}</p>
+              {lastError ? <p>Last error: {lastError.message} · {new Date(lastError.occurredAt).toLocaleString("en-US")}</p> : <p>No stored API errors.</p>}
+            </div>
+          </details>
           <WorkspaceDataTools />
-          <details className="text-xs"><summary className="cursor-pointer py-1">Server setup</summary><pre className="mt-3 overflow-x-auto rounded-xl bg-zinc-50 p-3 leading-6">{`DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-flash
-DEEPSEEK_TIMEOUT_MS=120000`}</pre><p className="mt-2 leading-5">Set these values in .env.local and restart the development server.</p></details>
-          <div className="flex flex-wrap gap-4 text-xs"><button type="button" onClick={() => { resetOnboarding(); router.push('/chat'); }} className="min-h-9 underline">Show guide again</button><a href="/knowledge-base" className="inline-flex min-h-9 items-center underline">Open knowledge base</a></div>
-        </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer py-1">Server setup</summary>
+            <pre className="mt-3 overflow-x-auto rounded-xl bg-zinc-50 p-3 leading-6">{"DEEPSEEK_API_KEY=your_deepseek_api_key\nDEEPSEEK_BASE_URL=https://api.deepseek.com\nDEEPSEEK_MODEL=deepseek-flash\nDEEPSEEK_TIMEOUT_MS=120000"}</pre>
+            <p className="mt-2 leading-5">For development, set these values in .env.local and restart. For Docker, set them in .env.production and recreate the app container.</p>
+          </details>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <button type="button" onClick={() => { resetOnboarding(); router.push("/chat"); }} className="min-h-11 underline underline-offset-2">Show guide again</button>
+            <Link href="/knowledge-base" className="inline-flex min-h-11 items-center underline underline-offset-2">Open knowledge base</Link>
+          </div>
+        </div> : null}
       </details>
     </div>
   );

@@ -82,7 +82,7 @@ Concurrency applies to default-key and BYOK requests. Daily output pools apply t
 
 `PLA_GENERATION_ENABLED=false` rejects new generation requests. Existing requests still need to finish or be stopped. Process restart resets these counters; they are an admission control for this single instance, not a billing ledger or a monetary spending cap. Set provider-side spending limits as well. Multi-instance or durable accounting requires shared storage.
 
-Before inviting users, run the production dependency audit and review the full-tree exceptions in [Dependency Review](dependency-audit.md). The development `braces` exception must stay limited to repository-controlled tooling; keep development/lint services off public interfaces. Do not use `npm audit fix --force` as an upgrade plan.
+Before inviting users, run `npm audit --omit=dev` and review the full-tree audit in [Dependency Review](dependency-audit.md). Use compatible dependency updates and rerun the acceptance checks after changing the lockfile.
 
 ## 3. Start and verify
 

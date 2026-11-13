@@ -1,12 +1,6 @@
 import path from "path";
 import { createHash } from "crypto";
 
-import {
-  LatexTextSplitter,
-  MarkdownTextSplitter,
-  RecursiveCharacterTextSplitter,
-  type TextSplitter,
-} from "@langchain/textsplitters";
 
 import type { RagChunk, RagDocument } from "@/rag/types";
 import { expandPhysicsTerms } from "@/rag/terms";
@@ -18,7 +12,7 @@ export function hashContent(content: string | Buffer) {
 }
 
 /** Content-addressed IDs remain stable when an unchanged document is reindexed. */
-export function withStableChunkIdentity(chunks: RagChunk[], options: {
+export function withStableChunkIdentity(chunks: Omit<RagChunk, "tokens">[], options: {
   documentId: string; version?: number; documentHash?: string;
 }): RagChunk[] {
   const occurrences = new Map<string, number>();
@@ -118,7 +112,8 @@ export function tokenize(text: string) {
   return tokens.filter((token) => !ignoredTokens.has(token));
 }
 
-function createSplitter(source: string, maxChars: number): TextSplitter {
+async function createSplitter(source: string, maxChars: number) {
+  const { LatexTextSplitter, MarkdownTextSplitter, RecursiveCharacterTextSplitter } = await import("@langchain/textsplitters");
   const extension = path.extname(source).toLowerCase();
   const chunkOverlap = Math.min(160, Math.max(40, Math.floor(maxChars * 0.15)));
   const config = {
@@ -151,7 +146,7 @@ export async function chunkMarkdownDocument(
   document: RagDocument,
   maxChars = 900,
 ): Promise<RagChunk[]> {
-  const splitter = createSplitter(document.source, maxChars);
+  const splitter = await createSplitter(document.source, maxChars);
   const langChainDocuments = await splitter.createDocuments([document.content], [
     { source: document.source },
   ]);
@@ -166,7 +161,6 @@ export async function chunkMarkdownDocument(
         source: document.source,
         heading,
         content,
-        tokens: tokenize(expandPhysicsTerms(`${heading}\n${content}`)),
         metadata: {
           ...document.metadata,
           chunkIndex: index,
@@ -175,7 +169,7 @@ export async function chunkMarkdownDocument(
           splitterVersion: chunkSplitterVersion,
           sectionPath: [heading],
         },
-      } satisfies RagChunk;
+      } satisfies Omit<RagChunk, "tokens">;
     })
     .filter((chunk) => chunk.content.length > 0);
 
